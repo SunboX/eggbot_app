@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>EggBot Sorbische Eier</title>
+        <link rel="icon" type="image/svg+xml" href="./assets/eggbot-icon.svg" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="./style.css" />
+    </head>
+    <body>
+        <div class="page-shell">
+            <header class="topbar">
+                <div class="brand">
+                    <img src="./assets/eggbot-icon.svg" alt="Egg icon" class="brand-icon" />
+                    <div>
+                        <h1>Sorbische Eier Werkstatt</h1>
+                        <p>EggBot pattern generator and drawing studio</p>
+                    </div>
+                </div>
+                <div class="topbar-actions">
+                    <button class="ghost" data-regenerate>Re-generate</button>
+                    <button class="ghost" data-save-project>Save</button>
+                    <button class="ghost" data-load-project>Load</button>
+                    <button class="ghost" data-share-project>Share</button>
+                    <button class="ghost" data-store-local>Store local</button>
+                    <button class="primary" data-draw>Draw</button>
+                    <input type="file" accept="application/json" data-load-input hidden />
+                </div>
+            </header>
+
+            <main class="layout-grid">
+                <aside class="panel controls-panel">
+                    <section class="section">
+                        <h2>Project</h2>
+                        <label>
+                            Name
+                            <input type="text" data-project-name value="Sorbische Komposition" />
+                        </label>
+                        <label>
+                            Preset
+                            <select data-preset>
+                                <option value="traditional-mix">Traditional mix</option>
+                                <option value="punkte">Punkte</option>
+                                <option value="strahlen">Strahlen / Sonnenstrahlen</option>
+                                <option value="wabe">Wabenmuster</option>
+                                <option value="wolfszaehne">Wolfszähne</option>
+                                <option value="kiefernzweig">Kiefernzweig</option>
+                                <option value="feder-raute">Feder / Raute</option>
+                            </select>
+                        </label>
+                        <div class="inline-row">
+                            <label>
+                                Seed
+                                <input type="number" data-seed />
+                            </label>
+                            <button class="ghost" type="button" data-reroll-seed>Reroll</button>
+                        </div>
+                    </section>
+
+                    <section class="section">
+                        <h2>Pattern controls</h2>
+                        <label>
+                            Symmetry
+                            <div class="range-row">
+                                <input type="range" min="2" max="24" step="1" data-symmetry />
+                                <span data-symmetry-label>8</span>
+                            </div>
+                        </label>
+                        <label>
+                            Density
+                            <div class="range-row">
+                                <input type="range" min="0.05" max="1" step="0.01" data-density />
+                                <span data-density-label>0.58</span>
+                            </div>
+                        </label>
+                        <label>
+                            Ornament bands
+                            <div class="range-row">
+                                <input type="range" min="1" max="16" step="1" data-bands />
+                                <span data-bands-label>6</span>
+                            </div>
+                        </label>
+                        <label>
+                            Line width
+                            <div class="range-row">
+                                <input type="range" min="0.5" max="4" step="0.1" data-line-width />
+                                <span data-line-width-label>1.8</span>
+                            </div>
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-show-horizontal-lines />
+                            Show horizontal lines/rings
+                        </label>
+
+                        <div class="motif-grid">
+                            <label><input type="checkbox" data-motif-dots /> Punkte</label>
+                            <label><input type="checkbox" data-motif-rays /> Strahlen</label>
+                            <label><input type="checkbox" data-motif-honeycomb /> Wabe</label>
+                            <label><input type="checkbox" data-motif-wolf-teeth /> Wolfszähne</label>
+                            <label><input type="checkbox" data-motif-pine /> Kiefernzweig</label>
+                            <label><input type="checkbox" data-motif-diamond /> Feder/Raute</label>
+                        </div>
+                    </section>
+
+                    <section class="section">
+                        <h2>Colors</h2>
+                        <label>
+                            Egg base color
+                            <input type="color" data-base-color />
+                        </label>
+                        <label>
+                            Number of drawing colors
+                            <select data-color-count>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                            </select>
+                        </label>
+                        <div class="palette-list" data-palette-list></div>
+                    </section>
+
+                    <section class="section">
+                        <h2>Local patterns</h2>
+                        <label>
+                            Stored project
+                            <select data-local-patterns></select>
+                        </label>
+                        <div class="inline-row compact">
+                            <button class="ghost" type="button" data-load-local>Load local</button>
+                            <button class="ghost" type="button" data-delete-local>Delete</button>
+                        </div>
+                    </section>
+                </aside>
+
+                <section class="panel viewport-panel">
+                    <h2>3D Egg Preview</h2>
+                    <p class="hint">Rotate with mouse or touch. Scroll/pinch to zoom.</p>
+                    <canvas data-egg-canvas class="egg-canvas" aria-label="Rotatable 3D egg preview"></canvas>
+                    <details>
+                        <summary>Texture map</summary>
+                        <canvas data-texture-canvas width="2048" height="1024" class="texture-canvas"></canvas>
+                    </details>
+                </section>
+
+                <aside class="panel machine-panel">
+                    <section class="section">
+                        <h2>EggBot connection</h2>
+                        <div class="inline-row compact">
+                            <button class="ghost" type="button" data-serial-connect>Connect USB serial</button>
+                            <button class="ghost" type="button" data-serial-disconnect>Disconnect</button>
+                        </div>
+                    </section>
+
+                    <section class="section">
+                        <h2>Drawing mapping</h2>
+                        <label>
+                            Motor-1 steps / egg turn
+                            <input type="number" min="100" step="1" data-steps-per-turn />
+                        </label>
+                        <label>
+                            Motor-2 steps full pen travel
+                            <input type="number" min="100" step="1" data-pen-range-steps />
+                        </label>
+                        <label>
+                            Motion timing (ms per step)
+                            <input type="number" min="0.2" max="20" step="0.1" data-ms-per-step />
+                        </label>
+                        <label>
+                            Servo up value (`SC,4`)
+                            <input type="number" min="0" step="1" data-servo-up />
+                        </label>
+                        <label>
+                            Servo down value (`SC,5`)
+                            <input type="number" min="0" step="1" data-servo-down />
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-invert-pen />
+                            Invert pen up/down (`SP`) logic
+                        </label>
+                        <button class="warn" type="button" data-stop>Stop draw</button>
+                    </section>
+
+                    <section class="section">
+                        <h2>Status</h2>
+                        <div class="status" data-status>Ready. Generate a pattern and connect EggBot when you are ready to draw.</div>
+                    </section>
+                </aside>
+            </main>
+        </div>
+
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "/node_modules/three/build/three.module.js",
+                    "three/addons/": "/node_modules/three/examples/jsm/"
+                }
+            }
+        </script>
+        <script type="module" src="./main.mjs"></script>
+    </body>
+</html>

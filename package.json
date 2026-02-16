@@ -1,0 +1,15 @@
+{
+    "name": "eggbot-app",
+    "version": "1.0.0",
+    "description": "Sorbian egg decoration generator with 3D preview and EggBot drawing",
+    "type": "module",
+    "scripts": {
+        "start": "node src/server.mjs",
+        "test": "node --test"
+    },
+    "dependencies": {
+        "dotenv": "^16.4.7",
+        "express": "^4.19.2",
+        "three": "^0.181.1"
+    }
+}
