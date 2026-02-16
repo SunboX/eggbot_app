@@ -1,0 +1,150 @@
+{
+    "app": {
+        "title": "EggBot Sorbische Eier",
+        "heading": "Sorbische Eier Werkstatt",
+        "subtitle": "EggBot Mustergenerator und Zeichenstudio",
+        "languageLabel": "Sprache"
+    },
+    "locale": {
+        "en": "English",
+        "de": "Deutsch"
+    },
+    "toolbar": {
+        "regenerate": "Neu generieren",
+        "loadPattern": "Muster laden",
+        "save": "Speichern",
+        "load": "Laden",
+        "share": "Teilen",
+        "storeLocal": "Lokal speichern",
+        "draw": "Zeichnen"
+    },
+    "project": {
+        "title": "Projekt",
+        "name": "Name",
+        "preset": "Voreinstellung",
+        "seed": "Seed",
+        "reroll": "Neu würfeln",
+        "defaultName": "Sorbische Komposition",
+        "defaultFileStem": "eggbot-muster",
+        "defaultPatternName": "Neues Muster",
+        "presets": {
+            "traditionalMix": "Traditioneller Mix",
+            "punkte": "Punkte",
+            "strahlen": "Strahlen / Sonnenstrahlen",
+            "wabe": "Wabenmuster",
+            "wolfszaehne": "Wolfszähne",
+            "kiefernzweig": "Kiefernzweig",
+            "federRaute": "Feder / Raute"
+        }
+    },
+    "pattern": {
+        "title": "Mustersteuerung",
+        "symmetry": "Symmetrie",
+        "density": "Dichte",
+        "bands": "Ornament-Bänder",
+        "lineWidth": "Linienbreite",
+        "showHorizontalLines": "Horizontale Linien/Ringe anzeigen",
+        "motifs": {
+            "dots": "Punkte",
+            "rays": "Strahlen",
+            "honeycomb": "Wabe",
+            "wolfTeeth": "Wolfszähne",
+            "pine": "Kiefernzweig",
+            "diamond": "Feder/Raute"
+        }
+    },
+    "colors": {
+        "title": "Farben",
+        "baseColor": "Ei-Grundfarbe",
+        "colorCount": "Anzahl Zeichenfarben",
+        "colorLabel": "Farbe {{index}}"
+    },
+    "local": {
+        "title": "Lokale Muster",
+        "storedProject": "Gespeichertes Projekt",
+        "loadLocal": "Lokal laden",
+        "delete": "Löschen",
+        "choosePlaceholder": "Lokales Projekt wählen",
+        "nonePlaceholder": "Keine lokalen Projekte gespeichert",
+        "entryLabel": "{{name}} ({{updatedAt}})"
+    },
+    "preview": {
+        "title": "3D-Ei-Vorschau",
+        "hint": "Mit Maus oder Touch drehen. Mit Scrollen/Pinch zoomen.",
+        "canvasAria": "Drehbare 3D-Ei-Vorschau",
+        "textureMap": "Texturkarte"
+    },
+    "machine": {
+        "connectionTitle": "EggBot-Verbindung",
+        "connectSerial": "USB-Seriell verbinden",
+        "disconnect": "Trennen",
+        "mappingTitle": "Zeichen-Mapping",
+        "stepsPerTurn": "Motor-1 Schritte pro Ei-Umdrehung",
+        "penRangeSteps": "Motor-2 Schritte für vollen Stiftweg",
+        "msPerStep": "Bewegungs-Timing (ms pro Schritt)",
+        "servoUp": "Servo-Oben-Wert (`SC,4`)",
+        "servoDown": "Servo-Unten-Wert (`SC,5`)",
+        "invertPen": "Stiftlogik für Hoch/Runter (`SP`) invertieren",
+        "stopDraw": "Zeichnen stoppen"
+    },
+    "status": {
+        "title": "Status",
+        "ready": "Bereit. Generiere ein Muster und verbinde den EggBot, wenn du zeichnen willst."
+    },
+    "footer": {
+        "title": "Impressum",
+        "responsible": "Verantwortlich für diese Website",
+        "contact": "Kontakt",
+        "githubAria": "GitHub-Repository",
+        "githubTitle": "GitHub",
+        "mastodonAria": "Mastodon-Profil",
+        "mastodonTitle": "Mastodon"
+    },
+    "messages": {
+        "loadedFromSharedUrl": "Projekt aus geteilter URL geladen.",
+        "loadSharedFailed": "Geteiltes Projekt konnte nicht geladen werden: {{message}}",
+        "stopRequested": "Stopp angefordert. Aktueller Zug wird beendet und der Stift angehoben.",
+        "patternGenerated": "Muster erzeugt ({{count}} Linienzüge, Seed {{seed}}).",
+        "eggbotConnected": "EggBot verbunden: {{version}}",
+        "serialConnectFailed": "Serielle Verbindung fehlgeschlagen: {{message}}",
+        "eggbotDisconnected": "EggBot getrennt.",
+        "disconnectFailed": "Trennen fehlgeschlagen: {{message}}",
+        "noPatternToDraw": "Noch kein Muster zum Zeichnen vorhanden. Bitte zuerst generieren.",
+        "connectBeforeDraw": "Bitte EggBot vor dem Zeichnen verbinden.",
+        "drawingProgress": "Zeichnung läuft: Linienzug {{done}}/{{total}}",
+        "drawCompleted": "EggBot-Zeichenbefehl wurde vollständig übertragen.",
+        "drawFailed": "Zeichnen fehlgeschlagen: {{message}}",
+        "projectJsonDescription": "Projekt-JSON",
+        "projectSaved": "Projekt gespeichert: {{name}}",
+        "projectDownloaded": "Projekt heruntergeladen: {{name}}",
+        "saveCanceled": "Speichern abgebrochen.",
+        "saveFailed": "Speichern fehlgeschlagen: {{message}}",
+        "loadCanceled": "Laden abgebrochen.",
+        "loadedProject": "Projekt geladen: {{name}}",
+        "loadFailed": "Laden fehlgeschlagen: {{message}}",
+        "projectUrlShared": "Projekt-URL geteilt.",
+        "projectUrlCopied": "Projekt-URL in die Zwischenablage kopiert.",
+        "copyProjectUrlPrompt": "Diese Projekt-URL kopieren:",
+        "projectUrlReady": "Projekt-URL ist zum Kopieren bereit.",
+        "shareCanceled": "Teilen abgebrochen.",
+        "shareFailed": "Teilen fehlgeschlagen: {{message}}",
+        "storeProjectPrompt": "Projekt speichern unter:",
+        "storeCanceled": "Speichern abgebrochen.",
+        "storedLocalProject": "Lokales Projekt gespeichert: {{name}}",
+        "noLocalProjectSelected": "Kein lokales Projekt ausgewählt.",
+        "localProjectNotFound": "Ausgewähltes lokales Projekt wurde nicht gefunden.",
+        "loadedLocalProject": "Lokales Projekt geladen: {{name}}",
+        "localLoadFailed": "Lokales Laden fehlgeschlagen: {{message}}",
+        "noLocalProjectSelectedForDelete": "Kein lokales Projekt zum Löschen ausgewählt.",
+        "deleteLocalProjectConfirm": "Lokales Projekt \"{{name}}\" löschen?",
+        "deleteCanceled": "Löschen abgebrochen.",
+        "deletedLocalProject": "Lokales Projekt gelöscht: {{name}}",
+        "appInitFailed": "App-Initialisierung fehlgeschlagen: {{message}}",
+        "patternFileDescription": "SVG-Muster",
+        "patternImportCanceled": "Muster-Import abgebrochen.",
+        "patternImported": "Muster importiert: {{name}} ({{count}} Linienzüge).",
+        "patternImportFailed": "Muster-Import fehlgeschlagen: {{message}}",
+        "noDrawableGeometry": "Die SVG enthält keine zeichnbaren Pfade.",
+        "invalidSvgFile": "Ungültige SVG-Datei."
+    }
+}

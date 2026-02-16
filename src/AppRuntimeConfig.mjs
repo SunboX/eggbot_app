@@ -2,7 +2,7 @@
  * Runtime defaults and preset mappings.
  */
 export class AppRuntimeConfig {
-    static #palette = ['#8b1f1a', '#1f3f8b', '#c78916', '#f3f0e7', '#4c7f3b', '#2f2f2f']
+    static #palette = ['#8b1f1a', '#1f3f8b', '#c78916', '#4c7f3b', '#2f2f2f', '#7a1f4f']
 
     /**
      * Creates a default app state object.

@@ -1,0 +1,150 @@
+{
+    "app": {
+        "title": "EggBot Sorbian Eggs",
+        "heading": "Sorbian Egg Workshop",
+        "subtitle": "EggBot pattern generator and drawing studio",
+        "languageLabel": "Language"
+    },
+    "locale": {
+        "en": "English",
+        "de": "Deutsch"
+    },
+    "toolbar": {
+        "regenerate": "Re-generate",
+        "loadPattern": "Load pattern",
+        "save": "Save",
+        "load": "Load",
+        "share": "Share",
+        "storeLocal": "Store local",
+        "draw": "Draw"
+    },
+    "project": {
+        "title": "Project",
+        "name": "Name",
+        "preset": "Preset",
+        "seed": "Seed",
+        "reroll": "Reroll",
+        "defaultName": "Sorbian Composition",
+        "defaultFileStem": "eggbot-pattern",
+        "defaultPatternName": "New pattern",
+        "presets": {
+            "traditionalMix": "Traditional mix",
+            "punkte": "Dots (Punkte)",
+            "strahlen": "Rays / Sun rays",
+            "wabe": "Honeycomb",
+            "wolfszaehne": "Wolf teeth",
+            "kiefernzweig": "Pine branch",
+            "federRaute": "Feather / Diamond"
+        }
+    },
+    "pattern": {
+        "title": "Pattern controls",
+        "symmetry": "Symmetry",
+        "density": "Density",
+        "bands": "Ornament bands",
+        "lineWidth": "Line width",
+        "showHorizontalLines": "Show horizontal lines/rings",
+        "motifs": {
+            "dots": "Punkte",
+            "rays": "Strahlen",
+            "honeycomb": "Wabe",
+            "wolfTeeth": "Wolfszähne",
+            "pine": "Kiefernzweig",
+            "diamond": "Feder/Raute"
+        }
+    },
+    "colors": {
+        "title": "Colors",
+        "baseColor": "Egg base color",
+        "colorCount": "Number of drawing colors",
+        "colorLabel": "Color {{index}}"
+    },
+    "local": {
+        "title": "Local patterns",
+        "storedProject": "Stored project",
+        "loadLocal": "Load local",
+        "delete": "Delete",
+        "choosePlaceholder": "Choose local project",
+        "nonePlaceholder": "No local projects stored",
+        "entryLabel": "{{name}} ({{updatedAt}})"
+    },
+    "preview": {
+        "title": "3D Egg Preview",
+        "hint": "Rotate with mouse or touch. Scroll/pinch to zoom.",
+        "canvasAria": "Rotatable 3D egg preview",
+        "textureMap": "Texture map"
+    },
+    "machine": {
+        "connectionTitle": "EggBot connection",
+        "connectSerial": "Connect USB serial",
+        "disconnect": "Disconnect",
+        "mappingTitle": "Drawing mapping",
+        "stepsPerTurn": "Motor-1 steps / egg turn",
+        "penRangeSteps": "Motor-2 steps full pen travel",
+        "msPerStep": "Motion timing (ms per step)",
+        "servoUp": "Servo up value (`SC,4`)",
+        "servoDown": "Servo down value (`SC,5`)",
+        "invertPen": "Invert pen up/down (`SP`) logic",
+        "stopDraw": "Stop draw"
+    },
+    "status": {
+        "title": "Status",
+        "ready": "Ready. Generate a pattern and connect EggBot when you are ready to draw."
+    },
+    "footer": {
+        "title": "Imprint",
+        "responsible": "Responsible for this website",
+        "contact": "Contact",
+        "githubAria": "GitHub repository",
+        "githubTitle": "GitHub",
+        "mastodonAria": "Mastodon profile",
+        "mastodonTitle": "Mastodon"
+    },
+    "messages": {
+        "loadedFromSharedUrl": "Loaded project from shared URL.",
+        "loadSharedFailed": "Failed to load shared project: {{message}}",
+        "stopRequested": "Stop requested. Finishing current move and lifting pen.",
+        "patternGenerated": "Pattern generated ({{count}} strokes, seed {{seed}}).",
+        "eggbotConnected": "EggBot connected: {{version}}",
+        "serialConnectFailed": "Serial connect failed: {{message}}",
+        "eggbotDisconnected": "EggBot disconnected.",
+        "disconnectFailed": "Disconnect failed: {{message}}",
+        "noPatternToDraw": "No pattern to draw yet. Generate one first.",
+        "connectBeforeDraw": "Connect EggBot before drawing.",
+        "drawingProgress": "Drawing in progress: stroke {{done}}/{{total}}",
+        "drawCompleted": "EggBot draw command stream completed.",
+        "drawFailed": "Draw failed: {{message}}",
+        "projectJsonDescription": "Project JSON",
+        "projectSaved": "Project saved: {{name}}",
+        "projectDownloaded": "Project downloaded: {{name}}",
+        "saveCanceled": "Save canceled.",
+        "saveFailed": "Save failed: {{message}}",
+        "loadCanceled": "Load canceled.",
+        "loadedProject": "Loaded project: {{name}}",
+        "loadFailed": "Load failed: {{message}}",
+        "projectUrlShared": "Project URL shared.",
+        "projectUrlCopied": "Project URL copied to clipboard.",
+        "copyProjectUrlPrompt": "Copy this project URL:",
+        "projectUrlReady": "Project URL ready to copy.",
+        "shareCanceled": "Share canceled.",
+        "shareFailed": "Share failed: {{message}}",
+        "storeProjectPrompt": "Store project as name:",
+        "storeCanceled": "Store canceled.",
+        "storedLocalProject": "Stored local project: {{name}}",
+        "noLocalProjectSelected": "No local project selected.",
+        "localProjectNotFound": "Selected local project was not found.",
+        "loadedLocalProject": "Loaded local project: {{name}}",
+        "localLoadFailed": "Local load failed: {{message}}",
+        "noLocalProjectSelectedForDelete": "No local project selected for deletion.",
+        "deleteLocalProjectConfirm": "Delete local project \"{{name}}\"?",
+        "deleteCanceled": "Delete canceled.",
+        "deletedLocalProject": "Deleted local project: {{name}}",
+        "appInitFailed": "App initialization failed: {{message}}",
+        "patternFileDescription": "SVG pattern",
+        "patternImportCanceled": "Pattern import canceled.",
+        "patternImported": "Pattern imported: {{name}} ({{count}} strokes).",
+        "patternImportFailed": "Pattern import failed: {{message}}",
+        "noDrawableGeometry": "The SVG has no drawable paths.",
+        "invalidSvgFile": "Invalid SVG file."
+    }
+}

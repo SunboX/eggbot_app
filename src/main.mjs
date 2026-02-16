@@ -6,6 +6,8 @@ import { EggScene } from './EggScene.mjs'
 import { EggBotSerial } from './EggBotSerial.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
+import { I18n } from './I18n.mjs'
+import { SvgPatternImportUtils } from './SvgPatternImportUtils.mjs'
 
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
 
@@ -13,7 +15,10 @@ const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
  * App orchestration for controls, rendering, persistence, and EggBot drawing.
  */
 class AppController {
-    constructor() {
+    /**
+     * @param {I18n} i18n
+     */
+    constructor(i18n) {
         this.els = AppElements.query(document)
         this.state = AppRuntimeConfig.createDefaultState()
         this.state.strokes = []
@@ -22,6 +27,8 @@ class AppController {
         this.eggScene = new EggScene(this.els.eggCanvas)
         this.serial = new EggBotSerial()
         this.isDrawing = false
+        this.i18n = i18n
+        this.importedPattern = null
     }
 
     /**
@@ -29,12 +36,43 @@ class AppController {
      * @returns {Promise<void>}
      */
     async init() {
+        this.#applyLocaleToUi()
         this.#syncControlsFromState()
         this.#applyProjectFromUrl()
         this.#bindEvents()
         this.#refreshSavedProjectsSelect()
-        this.#renderPattern({ reason: 'initialization' })
+        this.#renderPattern()
         this.#syncConnectionUi()
+    }
+
+    /**
+     * Resolves translated text.
+     * @param {string} key
+     * @param {Record<string, string | number>} [params]
+     * @returns {string}
+     */
+    #t(key, params = {}) {
+        return this.i18n.t(key, params)
+    }
+
+    /**
+     * Applies static locale text to the document and selector.
+     */
+    #applyLocaleToUi() {
+        this.i18n.applyTranslations(document)
+        if (this.els.localeSelect) {
+            this.els.localeSelect.value = this.i18n.locale
+        }
+    }
+
+    /**
+     * Clears imported pattern mode and returns true if one was active.
+     * @returns {boolean}
+     */
+    #clearImportedPattern() {
+        if (!this.importedPattern) return false
+        this.importedPattern = null
+        return true
     }
 
     /**
@@ -43,6 +81,7 @@ class AppController {
      * @param {'info' | 'success' | 'error'} [type='info']
      */
     #setStatus(text, type = 'info') {
+        this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
     }
@@ -55,12 +94,13 @@ class AppController {
             const source = ProjectUrlUtils.resolveProjectSource(new URLSearchParams(window.location.search))
             if (!source.kind || !source.value) return
             const payload = ProjectUrlUtils.decodeEmbeddedProjectParam(source.value)
+            this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(payload)
             this.state.strokes = []
             this.#syncControlsFromState()
-            this.#setStatus('Loaded project from shared URL.', 'success')
+            this.#setStatus(this.#t('messages.loadedFromSharedUrl'), 'success')
         } catch (error) {
-            this.#setStatus(`Failed to load shared project: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.loadSharedFailed', { message: error.message }), 'error')
         }
     }
 
@@ -68,94 +108,111 @@ class AppController {
      * Binds UI event listeners.
      */
     #bindEvents() {
+        this.els.localeSelect.addEventListener('change', () => {
+            this.#handleLocaleChange(this.els.localeSelect.value)
+        })
+
         this.els.projectName.addEventListener('input', () => {
-            this.state.projectName = this.els.projectName.value.trim() || 'Sorbische Komposition'
+            this.state.projectName = this.els.projectName.value.trim() || this.#t('project.defaultName')
         })
 
         this.els.preset.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.preset = this.els.preset.value
             this.state.motifs = AppRuntimeConfig.presetMotifs(this.state.preset)
             this.#syncMotifControls()
-            this.#scheduleRender('preset changed')
+            this.#scheduleRender()
         })
 
         this.els.seed.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.seed = AppController.#parseInteger(this.els.seed.value, this.state.seed)
-            this.#scheduleRender('seed changed')
+            this.#scheduleRender()
         })
 
         this.els.rerollSeed.addEventListener('click', () => {
+            this.#clearImportedPattern()
             this.#rerollSeed()
-            this.#renderPattern({ reason: 'seed reroll' })
+            this.#renderPattern()
         })
 
         this.els.regenerate.addEventListener('click', () => {
+            this.#clearImportedPattern()
             this.#rerollSeed()
-            this.#renderPattern({ reason: 'manual regenerate' })
+            this.#renderPattern()
         })
 
         this.els.symmetry.addEventListener('input', () => {
+            this.#clearImportedPattern()
             this.state.symmetry = AppController.#parseInteger(this.els.symmetry.value, this.state.symmetry)
             this.els.symmetryLabel.textContent = String(this.state.symmetry)
-            this.#scheduleRender('symmetry changed')
+            this.#scheduleRender()
         })
 
         this.els.density.addEventListener('input', () => {
+            this.#clearImportedPattern()
             this.state.density = AppController.#parseFloat(this.els.density.value, this.state.density)
             this.els.densityLabel.textContent = this.state.density.toFixed(2)
-            this.#scheduleRender('density changed')
+            this.#scheduleRender()
         })
 
         this.els.bands.addEventListener('input', () => {
+            this.#clearImportedPattern()
             this.state.bands = AppController.#parseInteger(this.els.bands.value, this.state.bands)
             this.els.bandsLabel.textContent = String(this.state.bands)
-            this.#scheduleRender('bands changed')
+            this.#scheduleRender()
         })
 
         this.els.lineWidth.addEventListener('input', () => {
             this.state.lineWidth = AppController.#parseFloat(this.els.lineWidth.value, this.state.lineWidth)
             this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
-            this.#scheduleRender('line width changed')
+            this.#scheduleRender()
         })
         this.els.showHorizontalLines.addEventListener('change', () => {
             this.state.showHorizontalLines = this.els.showHorizontalLines.checked
-            this.#scheduleRender('horizontal lines toggled')
+            this.#scheduleRender()
         })
 
         this.els.baseColor.addEventListener('input', () => {
             this.state.baseColor = this.els.baseColor.value
-            this.#scheduleRender('base color changed')
+            this.#scheduleRender()
         })
 
         this.els.colorCount.addEventListener('change', () => {
             this.#normalizePaletteLength(AppController.#parseInteger(this.els.colorCount.value, this.state.palette.length))
             this.#renderPaletteControls()
-            this.#scheduleRender('color count changed')
+            this.#scheduleRender()
         })
 
         this.els.motifDots.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.dots = this.els.motifDots.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
         this.els.motifRays.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.rays = this.els.motifRays.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
         this.els.motifHoneycomb.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.honeycomb = this.els.motifHoneycomb.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
         this.els.motifWolfTeeth.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.wolfTeeth = this.els.motifWolfTeeth.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
         this.els.motifPine.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.pineBranch = this.els.motifPine.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
         this.els.motifDiamond.addEventListener('change', () => {
+            this.#clearImportedPattern()
             this.state.motifs.diamonds = this.els.motifDiamond.checked
-            this.#scheduleRender('motifs changed')
+            this.#scheduleRender()
         })
 
         this.els.stepsPerTurn.addEventListener('change', () => {
@@ -195,25 +252,41 @@ class AppController {
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
         this.els.drawButton.addEventListener('click', () => this.#drawCurrentPattern())
+        this.els.loadPattern.addEventListener('click', () => this.#loadPatternFromFile())
         this.els.stopButton.addEventListener('click', () => {
             this.serial.stop()
-            this.#setStatus('Stop requested. Finishing current move and lifting pen.', 'info')
+            this.#setStatus(this.#t('messages.stopRequested'), 'info')
         })
 
         this.els.saveProject.addEventListener('click', () => this.#saveProjectToFile())
         this.els.loadProject.addEventListener('click', () => this.#loadProjectFromFile())
         this.els.shareProject.addEventListener('click', () => this.#shareProjectUrl())
         this.els.storeLocal.addEventListener('click', () => this.#storeProjectLocally())
-        this.els.loadLocal.addEventListener('click', () => this.#loadSelectedLocalProject())
-        this.els.deleteLocal.addEventListener('click', () => this.#deleteSelectedLocalProject())
+        if (this.els.loadLocal) {
+            this.els.loadLocal.addEventListener('click', () => this.#loadSelectedLocalProject())
+        }
+        if (this.els.deleteLocal) {
+            this.els.deleteLocal.addEventListener('click', () => this.#deleteSelectedLocalProject())
+        }
+    }
+
+    /**
+     * Applies locale change and refreshes dynamic UI fragments.
+     * @param {string} locale
+     */
+    #handleLocaleChange(locale) {
+        this.i18n.setLocale(locale)
+        this.#applyLocaleToUi()
+        this.#renderPaletteControls()
+        const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
+        this.#refreshSavedProjectsSelect(selectedLocalProjectId)
     }
 
     /**
      * Regenerates the pattern and updates 2D/3D output.
-     * @param {{ reason: string }} meta
      */
-    #renderPattern(meta) {
-        this.state.strokes = PatternGenerator.generate(this.state)
+    #renderPattern() {
+        this.state.strokes = this.importedPattern ? this.importedPattern.strokes : PatternGenerator.generate(this.state)
         this.renderer2d.render({
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
@@ -222,20 +295,26 @@ class AppController {
             showGuides: this.state.showHorizontalLines
         })
         this.eggScene.updateTexture(this.els.textureCanvas)
-        this.#setStatus(
-            `Pattern generated (${this.state.strokes.length} strokes, seed ${this.state.seed}). Reason: ${meta.reason}`,
-            'success'
-        )
+        if (this.importedPattern) {
+            this.#setStatus(
+                this.#t('messages.patternImported', {
+                    name: this.importedPattern.name,
+                    count: this.state.strokes.length
+                }),
+                'success'
+            )
+            return
+        }
+        this.#setStatus(this.#t('messages.patternGenerated', { count: this.state.strokes.length, seed: this.state.seed }), 'success')
     }
 
     /**
      * Schedules a delayed render for slider/input changes.
-     * @param {string} reason
      */
-    #scheduleRender(reason) {
+    #scheduleRender() {
         clearTimeout(this.renderDebounceTimer)
         this.renderDebounceTimer = window.setTimeout(() => {
-            this.#renderPattern({ reason })
+            this.#renderPattern()
         }, 60)
     }
 
@@ -251,6 +330,9 @@ class AppController {
      * Syncs all controls from the current state.
      */
     #syncControlsFromState() {
+        if (!String(this.state.projectName || '').trim()) {
+            this.state.projectName = this.#t('project.defaultName')
+        }
         this.els.projectName.value = this.state.projectName
         this.els.preset.value = this.state.preset
         this.els.seed.value = String(this.state.seed)
@@ -299,7 +381,7 @@ class AppController {
         this.state.palette.forEach((color, index) => {
             const wrapper = document.createElement('label')
             wrapper.className = 'palette-item'
-            wrapper.textContent = `Color ${index + 1}`
+            wrapper.textContent = this.#t('colors.colorLabel', { index: index + 1 })
 
             const input = document.createElement('input')
             input.type = 'color'
@@ -308,7 +390,7 @@ class AppController {
             input.addEventListener('input', () => {
                 const targetIndex = AppController.#parseInteger(input.dataset.index, index)
                 this.state.palette[targetIndex] = input.value
-                this.#scheduleRender('palette updated')
+                this.#scheduleRender()
             })
 
             wrapper.appendChild(input)
@@ -336,10 +418,10 @@ class AppController {
     async #connectSerial() {
         try {
             const version = await this.serial.connect()
-            this.#setStatus(`EggBot connected: ${version}`, 'success')
+            this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
             this.#syncConnectionUi()
         } catch (error) {
-            this.#setStatus(`Serial connect failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
             this.#syncConnectionUi()
         }
     }
@@ -351,9 +433,9 @@ class AppController {
     async #disconnectSerial() {
         try {
             await this.serial.disconnect()
-            this.#setStatus('EggBot disconnected.', 'info')
+            this.#setStatus(this.#t('messages.eggbotDisconnected'), 'info')
         } catch (error) {
-            this.#setStatus(`Disconnect failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.disconnectFailed', { message: error.message }), 'error')
         }
         this.#syncConnectionUi()
     }
@@ -364,11 +446,11 @@ class AppController {
      */
     async #drawCurrentPattern() {
         if (!this.state.strokes.length) {
-            this.#setStatus('No pattern to draw yet. Generate one first.', 'error')
+            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
             return
         }
         if (!this.serial.isConnected) {
-            this.#setStatus('Connect EggBot before drawing.', 'error')
+            this.#setStatus(this.#t('messages.connectBeforeDraw'), 'error')
             return
         }
 
@@ -378,12 +460,11 @@ class AppController {
         try {
             await this.serial.drawStrokes(this.state.strokes, this.state.drawConfig, {
                 onStatus: (text) => this.#setStatus(text, 'info'),
-                onProgress: (done, total) =>
-                    this.#setStatus(`Drawing in progress: stroke ${done}/${total}`, 'info')
+                onProgress: (done, total) => this.#setStatus(this.#t('messages.drawingProgress', { done, total }), 'info')
             })
-            this.#setStatus('EggBot draw command stream completed.', 'success')
+            this.#setStatus(this.#t('messages.drawCompleted'), 'success')
         } catch (error) {
-            this.#setStatus(`Draw failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.drawFailed', { message: error.message }), 'error')
         } finally {
             this.isDrawing = false
             this.#syncConnectionUi()
@@ -402,13 +483,142 @@ class AppController {
     }
 
     /**
+     * Imports an SVG pattern file and switches render mode to imported strokes.
+     * @returns {Promise<void>}
+     */
+    async #loadPatternFromFile() {
+        let fileName = 'unknown'
+        let debugGroupOpened = false
+        try {
+            if (typeof console.groupCollapsed === 'function') {
+                console.groupCollapsed('[PatternImport] Start')
+                debugGroupOpened = true
+            }
+            const file = await this.#promptForPatternFile()
+            if (!file) {
+                console.info('[PatternImport] Canceled by user')
+                this.#setStatus(this.#t('messages.patternImportCanceled'), 'info')
+                return
+            }
+
+            fileName = String(file.name || 'unknown.svg')
+            console.info('[PatternImport] File selected', {
+                name: fileName,
+                size: file.size,
+                type: file.type || 'n/a'
+            })
+
+            const svgText = await file.text()
+            console.info('[PatternImport] File read complete', {
+                name: fileName,
+                chars: svgText.length
+            })
+
+            const parsed = SvgPatternImportUtils.parse(svgText, {
+                maxColors: 6,
+                debug: true,
+                sourceName: fileName
+            })
+            console.info('[PatternImport] Parse completed', {
+                name: fileName,
+                strokes: parsed.strokes.length,
+                colors: parsed.palette.length
+            })
+
+            this.importedPattern = {
+                name: file.name,
+                strokes: parsed.strokes
+            }
+
+            if (parsed.palette.length) {
+                this.#normalizePaletteLength(Math.max(1, Math.min(6, parsed.palette.length)))
+                parsed.palette.slice(0, this.state.palette.length).forEach((color, index) => {
+                    this.state.palette[index] = color
+                })
+            }
+            if (parsed.baseColor) {
+                this.state.baseColor = parsed.baseColor
+                this.els.baseColor.value = parsed.baseColor
+            }
+            this.els.colorCount.value = String(this.state.palette.length)
+            this.#renderPaletteControls()
+            this.#renderPattern()
+        } catch (error) {
+            console.error('[PatternImport] Import failed', {
+                name: fileName,
+                message: String(error?.message || error),
+                stack: String(error?.stack || '')
+            })
+            if (error?.name === 'AbortError') {
+                this.#setStatus(this.#t('messages.patternImportCanceled'), 'info')
+                return
+            }
+            if (error?.message === 'no-drawable-geometry') {
+                this.#setStatus(this.#t('messages.noDrawableGeometry'), 'error')
+                return
+            }
+            if (error?.message === 'invalid-svg') {
+                this.#setStatus(this.#t('messages.invalidSvgFile'), 'error')
+                return
+            }
+            this.#setStatus(this.#t('messages.patternImportFailed', { message: error.message }), 'error')
+        } finally {
+            if (debugGroupOpened && typeof console.groupEnd === 'function') {
+                console.groupEnd()
+            }
+        }
+    }
+
+    /**
+     * Prompts for an SVG pattern file.
+     * @returns {Promise<File | null>}
+     */
+    async #promptForPatternFile() {
+        if (window.showOpenFilePicker) {
+            const [handle] = await window.showOpenFilePicker({
+                multiple: false,
+                types: [
+                    {
+                        description: this.#t('messages.patternFileDescription'),
+                        accept: { 'image/svg+xml': ['.svg'] }
+                    }
+                ]
+            })
+            return handle ? handle.getFile() : null
+        }
+
+        return new Promise((resolve) => {
+            const input = this.els.patternInput
+            const onChange = () => {
+                cleanup()
+                resolve(input.files?.[0] ?? null)
+            }
+            const onFocus = () => {
+                window.setTimeout(() => {
+                    cleanup()
+                    resolve(null)
+                }, 0)
+            }
+            const cleanup = () => {
+                input.removeEventListener('change', onChange)
+                window.removeEventListener('focus', onFocus)
+            }
+
+            input.value = ''
+            input.addEventListener('change', onChange)
+            window.addEventListener('focus', onFocus, { once: true })
+            input.click()
+        })
+    }
+
+    /**
      * Saves current project JSON to file.
      * @returns {Promise<void>}
      */
     async #saveProjectToFile() {
         const payload = ProjectIoUtils.buildProjectPayload(this.state)
         const contents = JSON.stringify(payload, null, 2)
-        const suggestedName = `${(this.state.projectName || 'eggbot-pattern').replace(/\s+/g, '-').toLowerCase()}.json`
+        const suggestedName = `${(this.state.projectName || this.#t('project.defaultFileStem')).replace(/\s+/g, '-').toLowerCase()}.json`
 
         try {
             if (window.showSaveFilePicker) {
@@ -416,7 +626,7 @@ class AppController {
                     suggestedName,
                     types: [
                         {
-                            description: 'Project JSON',
+                            description: this.#t('messages.projectJsonDescription'),
                             accept: { 'application/json': ['.json'] }
                         }
                     ]
@@ -424,7 +634,7 @@ class AppController {
                 const writable = await handle.createWritable()
                 await writable.write(contents)
                 await writable.close()
-                this.#setStatus(`Project saved: ${handle.name || suggestedName}`, 'success')
+                this.#setStatus(this.#t('messages.projectSaved', { name: handle.name || suggestedName }), 'success')
                 return
             }
 
@@ -437,13 +647,13 @@ class AppController {
             link.click()
             link.remove()
             window.setTimeout(() => URL.revokeObjectURL(url), 0)
-            this.#setStatus(`Project downloaded: ${suggestedName}`, 'success')
+            this.#setStatus(this.#t('messages.projectDownloaded', { name: suggestedName }), 'success')
         } catch (error) {
             if (error?.name === 'AbortError') {
-                this.#setStatus('Save canceled.', 'info')
+                this.#setStatus(this.#t('messages.saveCanceled'), 'info')
                 return
             }
-            this.#setStatus(`Save failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.saveFailed', { message: error.message }), 'error')
         }
     }
 
@@ -455,22 +665,23 @@ class AppController {
         try {
             const file = await this.#promptForProjectFile()
             if (!file) {
-                this.#setStatus('Load canceled.', 'info')
+                this.#setStatus(this.#t('messages.loadCanceled'), 'info')
                 return
             }
             const rawText = await file.text()
             const rawProject = JSON.parse(rawText)
+            this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(rawProject)
             this.state.strokes = []
             this.#syncControlsFromState()
-            this.#renderPattern({ reason: `project loaded (${file.name})` })
-            this.#setStatus(`Loaded project: ${file.name}`, 'success')
+            this.#renderPattern()
+            this.#setStatus(this.#t('messages.loadedProject', { name: file.name }), 'success')
         } catch (error) {
             if (error?.name === 'AbortError') {
-                this.#setStatus('Load canceled.', 'info')
+                this.#setStatus(this.#t('messages.loadCanceled'), 'info')
                 return
             }
-            this.#setStatus(`Load failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.loadFailed', { message: error.message }), 'error')
         }
     }
 
@@ -484,7 +695,7 @@ class AppController {
                 multiple: false,
                 types: [
                     {
-                        description: 'Project JSON',
+                        description: this.#t('messages.projectJsonDescription'),
                         accept: { 'application/json': ['.json'] }
                     }
                 ]
@@ -533,24 +744,24 @@ class AppController {
                     title: this.state.projectName,
                     url: shareUrl
                 })
-                this.#setStatus('Project URL shared.', 'success')
+                this.#setStatus(this.#t('messages.projectUrlShared'), 'success')
                 return
             }
 
             if (navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(shareUrl)
-                this.#setStatus('Project URL copied to clipboard.', 'success')
+                this.#setStatus(this.#t('messages.projectUrlCopied'), 'success')
                 return
             }
 
-            window.prompt('Copy this project URL:', shareUrl)
-            this.#setStatus('Project URL ready to copy.', 'info')
+            window.prompt(this.#t('messages.copyProjectUrlPrompt'), shareUrl)
+            this.#setStatus(this.#t('messages.projectUrlReady'), 'info')
         } catch (error) {
             if (error?.name === 'AbortError') {
-                this.#setStatus('Share canceled.', 'info')
+                this.#setStatus(this.#t('messages.shareCanceled'), 'info')
                 return
             }
-            this.#setStatus(`Share failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.shareFailed', { message: error.message }), 'error')
         }
     }
 
@@ -558,9 +769,12 @@ class AppController {
      * Stores current project payload in localStorage.
      */
     #storeProjectLocally() {
-        const name = window.prompt('Store project as name:', this.state.projectName || 'New pattern')
+        const name = window.prompt(
+            this.#t('messages.storeProjectPrompt'),
+            this.state.projectName || this.#t('project.defaultPatternName')
+        )
         if (!name) {
-            this.#setStatus('Store canceled.', 'info')
+            this.#setStatus(this.#t('messages.storeCanceled'), 'info')
             return
         }
 
@@ -575,34 +789,36 @@ class AppController {
         })
         this.#saveSavedProjects(entries)
         this.#refreshSavedProjectsSelect(id)
-        this.#setStatus(`Stored local project: ${name}`, 'success')
+        this.#setStatus(this.#t('messages.storedLocalProject', { name }), 'success')
     }
 
     /**
      * Loads selected local project.
      */
     #loadSelectedLocalProject() {
+        if (!this.els.localPatterns) return
         const selectedId = this.els.localPatterns.value
         if (!selectedId) {
-            this.#setStatus('No local project selected.', 'info')
+            this.#setStatus(this.#t('messages.noLocalProjectSelected'), 'info')
             return
         }
         const entries = this.#loadSavedProjects()
         const entry = entries.find((candidate) => candidate.id === selectedId)
         if (!entry) {
-            this.#setStatus('Selected local project was not found.', 'error')
+            this.#setStatus(this.#t('messages.localProjectNotFound'), 'error')
             this.#refreshSavedProjectsSelect()
             return
         }
 
         try {
+            this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(entry.payload)
             this.state.strokes = []
             this.#syncControlsFromState()
-            this.#renderPattern({ reason: `local load (${entry.name})` })
-            this.#setStatus(`Loaded local project: ${entry.name}`, 'success')
+            this.#renderPattern()
+            this.#setStatus(this.#t('messages.loadedLocalProject', { name: entry.name }), 'success')
         } catch (error) {
-            this.#setStatus(`Local load failed: ${error.message}`, 'error')
+            this.#setStatus(this.#t('messages.localLoadFailed', { message: error.message }), 'error')
         }
     }
 
@@ -610,30 +826,31 @@ class AppController {
      * Deletes the selected local project.
      */
     #deleteSelectedLocalProject() {
+        if (!this.els.localPatterns) return
         const selectedId = this.els.localPatterns.value
         if (!selectedId) {
-            this.#setStatus('No local project selected for deletion.', 'info')
+            this.#setStatus(this.#t('messages.noLocalProjectSelectedForDelete'), 'info')
             return
         }
 
         const entries = this.#loadSavedProjects()
         const entry = entries.find((candidate) => candidate.id === selectedId)
         if (!entry) {
-            this.#setStatus('Selected local project was not found.', 'error')
+            this.#setStatus(this.#t('messages.localProjectNotFound'), 'error')
             this.#refreshSavedProjectsSelect()
             return
         }
 
-        const confirmed = window.confirm(`Delete local project "${entry.name}"?`)
+        const confirmed = window.confirm(this.#t('messages.deleteLocalProjectConfirm', { name: entry.name }))
         if (!confirmed) {
-            this.#setStatus('Delete canceled.', 'info')
+            this.#setStatus(this.#t('messages.deleteCanceled'), 'info')
             return
         }
 
         const filtered = entries.filter((candidate) => candidate.id !== selectedId)
         this.#saveSavedProjects(filtered)
         this.#refreshSavedProjectsSelect()
-        this.#setStatus(`Deleted local project: ${entry.name}`, 'success')
+        this.#setStatus(this.#t('messages.deletedLocalProject', { name: entry.name }), 'success')
     }
 
     /**
@@ -675,6 +892,7 @@ class AppController {
      * @param {string} [preferredId]
      */
     #refreshSavedProjectsSelect(preferredId = '') {
+        if (!this.els.localPatterns) return
         const entries = this.#loadSavedProjects().sort((left, right) => {
             return right.updatedAt.localeCompare(left.updatedAt)
         })
@@ -683,13 +901,18 @@ class AppController {
 
         const placeholder = document.createElement('option')
         placeholder.value = ''
-        placeholder.textContent = entries.length ? 'Choose local project' : 'No local projects stored'
+        placeholder.textContent = entries.length
+            ? this.#t('local.choosePlaceholder')
+            : this.#t('local.nonePlaceholder')
         this.els.localPatterns.appendChild(placeholder)
 
         entries.forEach((entry) => {
             const option = document.createElement('option')
             option.value = entry.id
-            option.textContent = `${entry.name} (${new Date(entry.updatedAt).toLocaleString()})`
+            option.textContent = this.#t('local.entryLabel', {
+                name: entry.name,
+                updatedAt: new Date(entry.updatedAt).toLocaleString(this.i18n.locale)
+            })
             if (preferredId && entry.id === preferredId) {
                 option.selected = true
             }
@@ -724,7 +947,29 @@ class AppController {
     }
 }
 
-const app = new AppController()
-app.init().catch((error) => {
+const i18n = new I18n({
+    storageKey: 'eggbot_app_locale'
+})
+
+/**
+ * Starts the localized application.
+ * @returns {Promise<void>}
+ */
+async function startApp() {
+    await i18n.init()
+    i18n.applyTranslations(document)
+    const app = new AppController(i18n)
+    await app.init()
+}
+
+startApp().catch((error) => {
     console.error(error)
+    const statusElement = document.querySelector('[data-status]')
+    if (!statusElement) return
+    const translated = i18n.t('messages.appInitFailed', { message: error?.message || '' })
+    statusElement.textContent =
+        translated === 'messages.appInitFailed'
+            ? `App initialization failed: ${String(error?.message || 'Unknown error')}`
+            : translated
+    statusElement.dataset.type = 'error'
 })

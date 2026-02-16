@@ -18,8 +18,9 @@ The default palette follows a traditional warm palette family:
 - deep red
 - deep blue
 - ochre / yellow
-- light wax-white
-- optional green and black accents
+- green
+- black
+- dark accent tone
 
 You can reduce the design to one color (single wax style) or increase to six colors.
 

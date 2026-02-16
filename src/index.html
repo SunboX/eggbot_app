@@ -3,14 +3,8 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>EggBot Sorbische Eier</title>
+        <title data-i18n="app.title">EggBot Sorbische Eier</title>
         <link rel="icon" type="image/svg+xml" href="./assets/eggbot-icon.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
         <link rel="stylesheet" href="./style.css" />
     </head>
     <body>
@@ -19,17 +13,31 @@
                 <div class="brand">
                     <img src="./assets/eggbot-icon.svg" alt="Egg icon" class="brand-icon" />
                     <div>
-                        <h1>Sorbische Eier Werkstatt</h1>
-                        <p>EggBot pattern generator and drawing studio</p>
+                        <h1 data-i18n="app.heading">Sorbische Eier Werkstatt</h1>
+                        <p data-i18n="app.subtitle">EggBot pattern generator and drawing studio</p>
                     </div>
                 </div>
                 <div class="topbar-actions">
-                    <button class="ghost" data-regenerate>Re-generate</button>
-                    <button class="ghost" data-save-project>Save</button>
-                    <button class="ghost" data-load-project>Load</button>
-                    <button class="ghost" data-share-project>Share</button>
-                    <button class="ghost" data-store-local>Store local</button>
-                    <button class="primary" data-draw>Draw</button>
+                    <div class="locale-group">
+                        <label class="visually-hidden" for="locale-select" data-i18n="app.languageLabel">Language</label>
+                        <select
+                            id="locale-select"
+                            data-locale-select
+                            aria-label="Language"
+                            data-i18n-aria-label="app.languageLabel"
+                        >
+                            <option value="en" data-i18n="locale.en">English</option>
+                            <option value="de" data-i18n="locale.de">Deutsch</option>
+                        </select>
+                    </div>
+                    <button class="ghost" data-regenerate data-i18n="toolbar.regenerate">Re-generate</button>
+                    <button class="ghost" data-load-pattern data-i18n="toolbar.loadPattern">Load pattern</button>
+                    <button class="ghost" data-save-project data-i18n="toolbar.save">Save</button>
+                    <button class="ghost" data-load-project data-i18n="toolbar.load">Load</button>
+                    <button class="ghost" data-share-project data-i18n="toolbar.share">Share</button>
+                    <button class="ghost" data-store-local data-i18n="toolbar.storeLocal">Store local</button>
+                    <button class="primary" data-draw data-i18n="toolbar.draw">Draw</button>
+                    <input type="file" accept=".svg,image/svg+xml" data-pattern-input hidden />
                     <input type="file" accept="application/json" data-load-input hidden />
                 </div>
             </header>
@@ -37,57 +45,61 @@
             <main class="layout-grid">
                 <aside class="panel controls-panel">
                     <section class="section">
-                        <h2>Project</h2>
+                        <h2 data-i18n="project.title">Project</h2>
                         <label>
-                            Name
-                            <input type="text" data-project-name value="Sorbische Komposition" />
+                            <span data-i18n="project.name">Name</span>
+                            <input type="text" data-project-name />
                         </label>
                         <label>
-                            Preset
+                            <span data-i18n="project.preset">Preset</span>
                             <select data-preset>
-                                <option value="traditional-mix">Traditional mix</option>
-                                <option value="punkte">Punkte</option>
-                                <option value="strahlen">Strahlen / Sonnenstrahlen</option>
-                                <option value="wabe">Wabenmuster</option>
-                                <option value="wolfszaehne">Wolfszähne</option>
-                                <option value="kiefernzweig">Kiefernzweig</option>
-                                <option value="feder-raute">Feder / Raute</option>
+                                <option value="traditional-mix" data-i18n="project.presets.traditionalMix">
+                                    Traditional mix
+                                </option>
+                                <option value="punkte" data-i18n="project.presets.punkte">Punkte</option>
+                                <option value="strahlen" data-i18n="project.presets.strahlen">
+                                    Strahlen / Sonnenstrahlen
+                                </option>
+                                <option value="wabe" data-i18n="project.presets.wabe">Wabenmuster</option>
+                                <option value="wolfszaehne" data-i18n="project.presets.wolfszaehne">Wolfszähne</option>
+                                <option value="kiefernzweig" data-i18n="project.presets.kiefernzweig">Kiefernzweig</option>
+                                <option value="feder-raute" data-i18n="project.presets.federRaute">Feder / Raute</option>
                             </select>
                         </label>
                         <div class="inline-row">
                             <label>
-                                Seed
+                                <span data-i18n="project.seed">Seed</span>
                                 <input type="number" data-seed />
                             </label>
-                            <button class="ghost" type="button" data-reroll-seed>Reroll</button>
+                            <button class="ghost" type="button" data-reroll-seed data-i18n="project.reroll">Reroll</button>
                         </div>
                     </section>
 
                     <section class="section">
-                        <h2>Pattern controls</h2>
+                        <h2 data-i18n="pattern.title">Pattern controls</h2>
                         <label>
-                            Symmetry
+                            <span data-i18n="pattern.symmetry">Symmetry</span>
                             <div class="range-row">
                                 <input type="range" min="2" max="24" step="1" data-symmetry />
                                 <span data-symmetry-label>8</span>
                             </div>
                         </label>
                         <label>
-                            Density
+                            <span data-i18n="pattern.density">Density</span>
                             <div class="range-row">
                                 <input type="range" min="0.05" max="1" step="0.01" data-density />
                                 <span data-density-label>0.58</span>
                             </div>
                         </label>
                         <label>
-                            Ornament bands
+                            <span data-i18n="pattern.bands">Ornament bands</span>
                             <div class="range-row">
                                 <input type="range" min="1" max="16" step="1" data-bands />
                                 <span data-bands-label>6</span>
                             </div>
                         </label>
                         <label>
-                            Line width
+                            <span data-i18n="pattern.lineWidth">Line width</span>
                             <div class="range-row">
                                 <input type="range" min="0.5" max="4" step="0.1" data-line-width />
                                 <span data-line-width-label>1.8</span>
@@ -95,27 +107,45 @@
                         </label>
                         <label class="inline-check">
                             <input type="checkbox" data-show-horizontal-lines />
-                            Show horizontal lines/rings
+                            <span data-i18n="pattern.showHorizontalLines">Show horizontal lines/rings</span>
                         </label>
 
                         <div class="motif-grid">
-                            <label><input type="checkbox" data-motif-dots /> Punkte</label>
-                            <label><input type="checkbox" data-motif-rays /> Strahlen</label>
-                            <label><input type="checkbox" data-motif-honeycomb /> Wabe</label>
-                            <label><input type="checkbox" data-motif-wolf-teeth /> Wolfszähne</label>
-                            <label><input type="checkbox" data-motif-pine /> Kiefernzweig</label>
-                            <label><input type="checkbox" data-motif-diamond /> Feder/Raute</label>
+                            <label>
+                                <input type="checkbox" data-motif-dots />
+                                <span data-i18n="pattern.motifs.dots">Punkte</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" data-motif-rays />
+                                <span data-i18n="pattern.motifs.rays">Strahlen</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" data-motif-honeycomb />
+                                <span data-i18n="pattern.motifs.honeycomb">Wabe</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" data-motif-wolf-teeth />
+                                <span data-i18n="pattern.motifs.wolfTeeth">Wolfszähne</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" data-motif-pine />
+                                <span data-i18n="pattern.motifs.pine">Kiefernzweig</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" data-motif-diamond />
+                                <span data-i18n="pattern.motifs.diamond">Feder/Raute</span>
+                            </label>
                         </div>
                     </section>
 
                     <section class="section">
-                        <h2>Colors</h2>
+                        <h2 data-i18n="colors.title">Colors</h2>
                         <label>
-                            Egg base color
+                            <span data-i18n="colors.baseColor">Egg base color</span>
                             <input type="color" data-base-color />
                         </label>
                         <label>
-                            Number of drawing colors
+                            <span data-i18n="colors.colorCount">Number of drawing colors</span>
                             <select data-color-count>
                                 <option value="1">1</option>
                                 <option value="2">2</option>
@@ -128,73 +158,129 @@
                         <div class="palette-list" data-palette-list></div>
                     </section>
 
-                    <section class="section">
-                        <h2>Local patterns</h2>
-                        <label>
-                            Stored project
-                            <select data-local-patterns></select>
-                        </label>
-                        <div class="inline-row compact">
-                            <button class="ghost" type="button" data-load-local>Load local</button>
-                            <button class="ghost" type="button" data-delete-local>Delete</button>
-                        </div>
-                    </section>
                 </aside>
 
                 <section class="panel viewport-panel">
-                    <h2>3D Egg Preview</h2>
-                    <p class="hint">Rotate with mouse or touch. Scroll/pinch to zoom.</p>
-                    <canvas data-egg-canvas class="egg-canvas" aria-label="Rotatable 3D egg preview"></canvas>
+                    <h2 data-i18n="preview.title">3D Egg Preview</h2>
+                    <p class="hint" data-i18n="preview.hint">Rotate with mouse or touch. Scroll/pinch to zoom.</p>
+                    <canvas
+                        data-egg-canvas
+                        class="egg-canvas"
+                        aria-label="Rotatable 3D egg preview"
+                        data-i18n-aria-label="preview.canvasAria"
+                    ></canvas>
                     <details>
-                        <summary>Texture map</summary>
+                        <summary data-i18n="preview.textureMap">Texture map</summary>
                         <canvas data-texture-canvas width="2048" height="1024" class="texture-canvas"></canvas>
                     </details>
                 </section>
 
                 <aside class="panel machine-panel">
                     <section class="section">
-                        <h2>EggBot connection</h2>
+                        <h2 data-i18n="machine.connectionTitle">EggBot connection</h2>
                         <div class="inline-row compact">
-                            <button class="ghost" type="button" data-serial-connect>Connect USB serial</button>
-                            <button class="ghost" type="button" data-serial-disconnect>Disconnect</button>
+                            <button class="ghost" type="button" data-serial-connect data-i18n="machine.connectSerial">
+                                Connect USB serial
+                            </button>
+                            <button class="ghost" type="button" data-serial-disconnect data-i18n="machine.disconnect">
+                                Disconnect
+                            </button>
                         </div>
                     </section>
 
                     <section class="section">
-                        <h2>Drawing mapping</h2>
+                        <h2 data-i18n="machine.mappingTitle">Drawing mapping</h2>
                         <label>
-                            Motor-1 steps / egg turn
+                            <span data-i18n="machine.stepsPerTurn">Motor-1 steps / egg turn</span>
                             <input type="number" min="100" step="1" data-steps-per-turn />
                         </label>
                         <label>
-                            Motor-2 steps full pen travel
+                            <span data-i18n="machine.penRangeSteps">Motor-2 steps full pen travel</span>
                             <input type="number" min="100" step="1" data-pen-range-steps />
                         </label>
                         <label>
-                            Motion timing (ms per step)
+                            <span data-i18n="machine.msPerStep">Motion timing (ms per step)</span>
                             <input type="number" min="0.2" max="20" step="0.1" data-ms-per-step />
                         </label>
                         <label>
-                            Servo up value (`SC,4`)
+                            <span data-i18n="machine.servoUp">Servo up value (`SC,4`)</span>
                             <input type="number" min="0" step="1" data-servo-up />
                         </label>
                         <label>
-                            Servo down value (`SC,5`)
+                            <span data-i18n="machine.servoDown">Servo down value (`SC,5`)</span>
                             <input type="number" min="0" step="1" data-servo-down />
                         </label>
                         <label class="inline-check">
                             <input type="checkbox" data-invert-pen />
-                            Invert pen up/down (`SP`) logic
+                            <span data-i18n="machine.invertPen">Invert pen up/down (`SP`) logic</span>
                         </label>
-                        <button class="warn" type="button" data-stop>Stop draw</button>
+                        <button class="warn" type="button" data-stop data-i18n="machine.stopDraw">Stop draw</button>
                     </section>
 
                     <section class="section">
-                        <h2>Status</h2>
-                        <div class="status" data-status>Ready. Generate a pattern and connect EggBot when you are ready to draw.</div>
+                        <h2 data-i18n="status.title">Status</h2>
+                        <div class="status" data-status data-i18n="status.ready">
+                            Ready. Generate a pattern and connect EggBot when you are ready to draw.
+                        </div>
                     </section>
                 </aside>
             </main>
+            <footer class="page-footer">
+                <div class="footer-card">
+                    <div class="footer-title" data-i18n="footer.title">Imprint</div>
+                    <div class="footer-grid">
+                        <div class="footer-block">
+                            <div class="footer-label" data-i18n="footer.responsible">Responsible for this website</div>
+                            <div class="footer-text">
+                                <div>André Fiedler</div>
+                                <div>Rädelstraße 7</div>
+                                <div>08523 Plauen</div>
+                                <div>Germany</div>
+                            </div>
+                        </div>
+                        <div class="footer-block">
+                            <div class="footer-label" data-i18n="footer.contact">Contact</div>
+                            <div class="footer-text">
+                                <a href="mailto:mail@andrefiedler.de">mail@andrefiedler.de</a>
+                            </div>
+                        </div>
+                        <div class="footer-actions">
+                            <a
+                                class="icon-link"
+                                href="https://github.com/SunboX/eggbot_app"
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label="GitHub repository"
+                                title="GitHub"
+                                data-i18n-aria-label="footer.githubAria"
+                                data-i18n-title="footer.githubTitle"
+                            >
+                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path
+                                        d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.11-1.46-1.11-1.46-.91-.62.07-.61.07-.61 1.01.07 1.54 1.03 1.54 1.03.9 1.53 2.36 1.09 2.94.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02A9.5 9.5 0 0 1 12 6.8c.85 0 1.71.12 2.51.34 1.9-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.95.36.31.68.92.68 1.85 0 1.34-.01 2.41-.01 2.74 0 .26.18.58.69.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"
+                                    />
+                                </svg>
+                            </a>
+                            <a
+                                class="icon-link"
+                                href="https://mastodon.social/@sonnenkiste"
+                                target="_blank"
+                                rel="me noreferrer"
+                                aria-label="Mastodon profile"
+                                title="Mastodon"
+                                data-i18n-aria-label="footer.mastodonAria"
+                                data-i18n-title="footer.mastodonTitle"
+                            >
+                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path
+                                        d="M23.268 5.313c-.35-2.578-2.617-4.61-5.304-5.004C17.51.242 15.792 0 11.813 0h-.03c-3.98 0-4.835.242-5.288.309C3.882.692 1.496 2.518.917 5.127.64 6.412.61 7.837.661 9.143c.074 1.874.088 3.745.26 5.611.118 1.24.325 2.47.62 3.68.55 2.237 2.777 4.098 4.96 4.857 2.336.792 4.849.923 7.256.38.265-.061.527-.132.786-.213.585-.184 1.27-.39 1.774-.753a.057.057 0 0 0 .023-.043v-1.809a.052.052 0 0 0-.02-.041.053.053 0 0 0-.046-.01 20.282 20.282 0 0 1-4.709.545c-2.73 0-3.463-1.284-3.674-1.818a5.593 5.593 0 0 1-.319-1.433.053.053 0 0 1 .066-.054c1.517.363 3.072.546 4.632.546.376 0 .75 0 1.125-.01 1.57-.044 3.224-.124 4.768-.422.038-.008.077-.015.11-.024 2.435-.464 4.753-1.92 4.989-5.604.008-.145.03-1.52.03-1.67.002-.512.167-3.63-.024-5.545zm-3.748 9.195h-2.561V8.29c0-1.309-.55-1.976-1.67-1.976-1.23 0-1.846.79-1.846 2.35v3.403h-2.546V8.663c0-1.56-.617-2.35-1.848-2.35-1.112 0-1.668.668-1.67 1.977v6.218H4.822V8.102c0-1.31.337-2.35 1.011-3.12.696-.77 1.608-1.164 2.74-1.164 1.311 0 2.302.5 2.962 1.498l.638 1.06.638-1.06c.66-.999 1.65-1.498 2.96-1.498 1.13 0 2.043.395 2.74 1.164.675.77 1.012 1.81 1.012 3.12z"
+                                    />
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </footer>
         </div>
 
         <script type="importmap">
