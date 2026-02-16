@@ -1,0 +1,125 @@
+:root {
+    --paper: #f4ebd6;
+    --paper-strong: #ead7b3;
+    --ink: #2f1f14;
+    --ink-soft: #61412a;
+    --red: #8b1f1a;
+    --blue: #1f3f8b;
+    --ochre: #bb7f1a;
+    --green: #4f7b3c;
+    --line: #c9ad7a;
+    --panel-shadow: 0 12px 28px rgba(67, 39, 17, 0.18);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+    color: var(--ink);
+    font-family: 'Manrope', sans-serif;
+    background: radial-gradient(circle at 20% -10%, #f8eed5 0%, #ead9b8 42%, #dfc89f 100%);
+}
+
+h1,
+h2,
+h3 {
+    font-family: 'Cormorant Garamond', serif;
+    letter-spacing: 0.01em;
+    margin: 0;
+}
+
+h1 {
+    font-size: 1.75rem;
+}
+
+h2 {
+    font-size: 1.38rem;
+    color: var(--ink-soft);
+}
+
+p {
+    margin: 0;
+}
+
+label {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.91rem;
+    color: var(--ink-soft);
+}
+
+input,
+select,
+button,
+textarea {
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.52rem 0.75rem;
+    background: #f7efd9;
+    cursor: pointer;
+    transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+button:hover {
+    transform: translateY(-1px);
+    border-color: var(--ink-soft);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+button.primary {
+    background: linear-gradient(150deg, var(--red), #67120d);
+    color: #fff;
+    border-color: #5f120d;
+    font-weight: 600;
+}
+
+button.warn {
+    background: linear-gradient(150deg, #9c2f22, #762319);
+    color: #fff;
+    border-color: #622014;
+}
+
+button.ghost {
+    background: #f8f2e3;
+}
+
+input,
+select {
+    width: 100%;
+    border: 1px solid #c9ad7b;
+    border-radius: 10px;
+    padding: 0.42rem 0.58rem;
+    background: #fffaf0;
+}
+
+input[type='color'] {
+    min-height: 2.1rem;
+    padding: 0.2rem;
+}
+
+input[type='range'] {
+    padding: 0;
+}
+
+details > summary {
+    cursor: pointer;
+    user-select: none;
+    color: var(--ink-soft);
+}
+
+.hint {
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+}

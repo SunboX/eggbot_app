@@ -1,0 +1,48 @@
+.topbar,
+.panel {
+    animation: riseIn 420ms ease both;
+}
+
+.panel:nth-child(2) {
+    animation-delay: 60ms;
+}
+
+.panel:nth-child(3) {
+    animation-delay: 120ms;
+}
+
+@keyframes riseIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+input[type='checkbox'] {
+    accent-color: var(--red);
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #b27c2f, #8b5e1b);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(170, 131, 71, 0.18);
+    border-radius: 999px;
+}
