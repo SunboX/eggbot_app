@@ -78,3 +78,13 @@ test('PatternGenerator should keep framework rings near top, middle, and bottom'
     assert.ok(hasNear(meanLevels, 0.5, 0.03))
     assert.ok(hasNear(meanLevels, 0.88, 0.03))
 })
+
+test('PatternGenerator should remove horizontal framework rings when disabled', () => {
+    const settings = AppRuntimeConfig.createDefaultState()
+    settings.showHorizontalLines = false
+
+    const strokes = PatternGenerator.generate(settings)
+    const ringStrokes = strokes.filter((stroke) => stroke.closed !== true && stroke.points.length >= 180)
+
+    assert.equal(ringStrokes.length, 0)
+})

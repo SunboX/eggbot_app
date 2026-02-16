@@ -117,6 +117,10 @@ class AppController {
             this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
             this.#scheduleRender('line width changed')
         })
+        this.els.showHorizontalLines.addEventListener('change', () => {
+            this.state.showHorizontalLines = this.els.showHorizontalLines.checked
+            this.#scheduleRender('horizontal lines toggled')
+        })
 
         this.els.baseColor.addEventListener('input', () => {
             this.state.baseColor = this.els.baseColor.value
@@ -214,7 +218,8 @@ class AppController {
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
             palette: this.state.palette,
-            strokes: this.state.strokes
+            strokes: this.state.strokes,
+            showGuides: this.state.showHorizontalLines
         })
         this.eggScene.updateTexture(this.els.textureCanvas)
         this.#setStatus(
@@ -258,6 +263,7 @@ class AppController {
         this.els.bandsLabel.textContent = String(this.state.bands)
         this.els.lineWidth.value = String(this.state.lineWidth)
         this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
+        this.els.showHorizontalLines.checked = this.state.showHorizontalLines !== false
 
         this.els.baseColor.value = this.state.baseColor
         this.#normalizePaletteLength(this.state.palette.length)

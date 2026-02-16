@@ -1,6 +1,9 @@
 :root {
     --paper: #f4ebd6;
     --paper-strong: #ead7b3;
+    --page-bg-start: #f8eed5;
+    --page-bg-mid: #ead9b8;
+    --page-bg-end: #dfc89f;
     --ink: #2f1f14;
     --ink-soft: #61412a;
     --red: #8b1f1a;
@@ -21,7 +24,17 @@ body {
     min-height: 100%;
     color: var(--ink);
     font-family: 'Manrope', sans-serif;
-    background: radial-gradient(circle at 20% -10%, #f8eed5 0%, #ead9b8 42%, #dfc89f 100%);
+    background-color: var(--page-bg-mid);
+    background-image: radial-gradient(circle at 20% -10%, var(--page-bg-start) 0%, var(--page-bg-mid) 42%, var(--page-bg-end) 100%);
+    background-attachment: fixed;
+}
+
+html {
+    scrollbar-gutter: stable;
+}
+
+body {
+    min-height: 100vh;
 }
 
 h1,
