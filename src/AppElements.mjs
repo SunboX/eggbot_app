@@ -15,13 +15,16 @@ export class AppElements {
             }
             return element
         }
+        const queryOptional = (selector) => root.querySelector(selector)
 
         return {
+            localeSelect: query('[data-locale-select]'),
             projectName: query('[data-project-name]'),
             preset: query('[data-preset]'),
             seed: query('[data-seed]'),
             rerollSeed: query('[data-reroll-seed]'),
             regenerate: query('[data-regenerate]'),
+            loadPattern: query('[data-load-pattern]'),
             symmetry: query('[data-symmetry]'),
             symmetryLabel: query('[data-symmetry-label]'),
             density: query('[data-density]'),
@@ -53,11 +56,12 @@ export class AppElements {
             saveProject: query('[data-save-project]'),
             loadProject: query('[data-load-project]'),
             loadInput: query('[data-load-input]'),
+            patternInput: query('[data-pattern-input]'),
             shareProject: query('[data-share-project]'),
             storeLocal: query('[data-store-local]'),
-            localPatterns: query('[data-local-patterns]'),
-            loadLocal: query('[data-load-local]'),
-            deleteLocal: query('[data-delete-local]'),
+            localPatterns: queryOptional('[data-local-patterns]'),
+            loadLocal: queryOptional('[data-load-local]'),
+            deleteLocal: queryOptional('[data-delete-local]'),
             status: query('[data-status]'),
             eggCanvas: query('[data-egg-canvas]'),
             textureCanvas: query('[data-texture-canvas]')
