@@ -11,10 +11,12 @@
     },
     "toolbar": {
         "regenerate": "Re-generate",
-        "loadPattern": "Load pattern",
+        "loadPattern": "Load pattern (SVG)",
         "save": "Save",
         "load": "Load",
         "share": "Share",
+        "shareAria": "Share project URL",
+        "shareTitle": "Share project URL",
         "storeLocal": "Store local",
         "draw": "Draw"
     },
@@ -43,6 +45,7 @@
         "density": "Density",
         "bands": "Ornament bands",
         "lineWidth": "Line width",
+        "importHeightScale": "Imported height scale",
         "showHorizontalLines": "Show horizontal lines/rings",
         "motifs": {
             "dots": "Punkte",
@@ -141,9 +144,14 @@
         "deletedLocalProject": "Deleted local project: {{name}}",
         "appInitFailed": "App initialization failed: {{message}}",
         "patternFileDescription": "SVG pattern",
+        "patternImportLoading": "Loading pattern: {{name}}…",
+        "patternImportReading": "Reading file: {{name}}…",
+        "patternImportParsing": "Parsing: {{name}}…",
+        "patternImportPreparingPreview": "Preparing preview: {{name}}…",
         "patternImportCanceled": "Pattern import canceled.",
         "patternImported": "Pattern imported: {{name}} ({{count}} strokes).",
         "patternImportFailed": "Pattern import failed: {{message}}",
+        "previewPreparationFailed": "Preview preparation failed.",
         "noDrawableGeometry": "The SVG has no drawable paths.",
         "invalidSvgFile": "Invalid SVG file."
     }

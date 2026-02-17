@@ -16,7 +16,7 @@ export class PatternRenderer2D {
 
     /**
      * Renders a full texture frame.
-     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, showGuides?: boolean, importedSvgText?: string }} data
+     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, importedSvgText?: string, importedSvgHeightRatio?: number, importedSvgParsedHeightRatio?: number }} data
      */
     render(data) {
         const width = this.canvas.width
@@ -27,66 +27,56 @@ export class PatternRenderer2D {
         this.ctx.fillStyle = String(data.baseColor || '#efe7ce')
         this.ctx.fillRect(0, 0, width, height)
 
-        if (data.showGuides !== false) {
-            this.#drawGuides(width, height)
-        }
-
         const importedSvgText = String(data.importedSvgText || '').trim()
-        if (importedSvgText) {
-            this.#drawImportedSvg(importedSvgText, token)
+        const strokes = Array.isArray(data.strokes) ? data.strokes : []
+
+        if (importedSvgText && !strokes.length) {
+            this.#drawImportedSvg(importedSvgText, token, Number(data.importedSvgHeightRatio) || 1)
             return
         }
-        this.#drawStrokes(data.strokes || [], data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8)
+
+        const normalizedStrokes = importedSvgText
+            ? PatternRenderer2D.#rescaleImportedStrokes(
+                  strokes,
+                  Number(data.importedSvgParsedHeightRatio) || 1,
+                  Number(data.importedSvgHeightRatio) || 1
+              )
+            : strokes
+
+        this.#drawStrokes(normalizedStrokes, data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8)
+
+        if (importedSvgText) {
+            this.canvas.dispatchEvent(new Event('pattern-rendered'))
+        }
     }
 
     /**
      * Draws an imported SVG directly so fill-rule/hole semantics stay exact.
      * @param {string} svgText
      * @param {number} token
+     * @param {number} heightRatio
      * @returns {void}
      */
-    #drawImportedSvg(svgText, token) {
+    #drawImportedSvg(svgText, token, heightRatio) {
         const width = this.canvas.width
         const height = this.canvas.height
+        const drawHeight = height * Math.max(0.02, Math.min(3, Number(heightRatio) || 1))
+        const drawY = (height - drawHeight) / 2
         const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const image = new Image()
         image.onload = () => {
             URL.revokeObjectURL(url)
             if (token !== this.importedSvgRenderToken) return
-            this.ctx.drawImage(image, 0, 0, width, height)
+            this.ctx.drawImage(image, 0, drawY, width, drawHeight)
+            this.canvas.dispatchEvent(new Event('pattern-rendered'))
         }
         image.onerror = () => {
             URL.revokeObjectURL(url)
+            if (token !== this.importedSvgRenderToken) return
+            this.canvas.dispatchEvent(new CustomEvent('pattern-render-failed', { detail: { reason: 'image-load-error' } }))
         }
         image.src = url
-    }
-
-    /**
-     * Draws subtle guide rings to communicate orientation.
-     * @param {number} width
-     * @param {number} height
-     */
-    #drawGuides(width, height) {
-        this.ctx.save()
-        this.ctx.globalAlpha = 0.15
-        this.ctx.strokeStyle = '#6b4f1f'
-        this.ctx.lineWidth = 1
-        for (let lineIndex = 1; lineIndex <= 7; lineIndex += 1) {
-            const y = (lineIndex / 8) * height
-            this.ctx.beginPath()
-            this.ctx.moveTo(0, y)
-            this.ctx.lineTo(width, y)
-            this.ctx.stroke()
-        }
-        for (let lineIndex = 0; lineIndex < 24; lineIndex += 1) {
-            const x = (lineIndex / 24) * width
-            this.ctx.beginPath()
-            this.ctx.moveTo(x, 0)
-            this.ctx.lineTo(x, height)
-            this.ctx.stroke()
-        }
-        this.ctx.restore()
     }
 
     /**
@@ -176,6 +166,36 @@ export class PatternRenderer2D {
                     }
                 }
                 this.ctx.stroke()
+            }
+        })
+    }
+
+    /**
+     * Rescales imported UV strokes to match live preview height without re-parsing.
+     * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>} strokes
+     * @param {number} parsedHeightRatio
+     * @param {number} activeHeightRatio
+     * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>}
+     */
+    static #rescaleImportedStrokes(strokes, parsedHeightRatio, activeHeightRatio) {
+        const parsedRatio = Math.max(0.02, Math.min(3, Number(parsedHeightRatio) || 1))
+        const activeRatio = Math.max(0.02, Math.min(3, Number(activeHeightRatio) || 1))
+        if (Math.abs(parsedRatio - activeRatio) < 1e-6) return strokes
+
+        const parsedOffset = (1 - parsedRatio) / 2
+        const activeOffset = (1 - activeRatio) / 2
+
+        return strokes.map((stroke) => {
+            if (!Array.isArray(stroke.points)) return stroke
+            return {
+                ...stroke,
+                points: stroke.points.map((point) => {
+                    const localV = Math.max(0, Math.min(1, (Number(point.v) - parsedOffset) / parsedRatio))
+                    return {
+                        u: Number(point.u),
+                        v: Math.max(0, Math.min(1, activeOffset + localV * activeRatio))
+                    }
+                })
             }
         })
     }

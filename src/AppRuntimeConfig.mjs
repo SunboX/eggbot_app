@@ -17,6 +17,7 @@ export class AppRuntimeConfig {
             density: 0.58,
             bands: 6,
             lineWidth: 1.8,
+            importHeightScale: 1,
             showHorizontalLines: true,
             baseColor: '#efe7ce',
             palette: AppRuntimeConfig.#palette.slice(0, 4),

@@ -1,0 +1,130 @@
+name: Deploy to FTP (main)
+
+on:
+  push:
+    branches: [ "main" ]
+    # optional: only deploy if certain paths changed
+    # paths:
+    #   - "dist/**"
+    #   - "public/**"
+    #   - ".github/workflows/deploy-ftp.yml"
+
+concurrency:
+  group: ftp-deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            deps:
+              - 'package.json'
+              - 'package-lock.json'
+            src:
+              - 'src/**'
+            api:
+              - 'api/**'
+            docs:
+              - 'docs/**'
+           
+      # 1) Deploy src -> /
+      # Deploy src always (or only if src changed)
+      - name: Deploy src to /
+        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.deps == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          local-dir: ./src/
+          server-dir: /
+          exclude: |
+            **/node_modules/**
+            **/.env
+            **/.env.*
+            **/*.env
+            **/*.env.*
+          state-name: .ftp-deploy-src-state.json
+
+      # 2) Deploy PHP backend -> /api/
+      - name: Deploy api to /api/
+        if: steps.changes.outputs.api == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          local-dir: ./api/
+          server-dir: /api/
+          exclude: |
+            **/.DS_Store
+            **/.env
+            **/.env.*
+            **/*.env
+            **/*.env.*
+          state-name: .ftp-deploy-api-state.json
+
+      # 3) Deploy docs -> /docs/ (used for AI grounding when AI_DOCS_DIR=docs)
+      - name: Deploy docs to /docs/
+        if: steps.changes.outputs.docs == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          local-dir: ./docs/
+          server-dir: /docs/
+          exclude: |
+            **/.DS_Store
+            **/.env
+            **/.env.*
+            **/*.env
+            **/*.env.*
+          state-name: .ftp-deploy-docs-state.json
+
+      # 4) Deploy node_modules -> /node_modules/
+      # Only install+deploy node_modules when deps changed
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.deps == 'true'
+        with:
+          node-version: 20
+          cache: npm
+          
+      # - name: Install & build
+      #   run: |
+      #     npm ci
+      #     npm run build
+
+      # Prefer npm ci for CI + reproducible installs
+      - name: Install production dependencies
+        if: steps.changes.outputs.deps == 'true'
+        run: npm ci --omit=dev
+
+      - name: Deploy node_modules
+        if: steps.changes.outputs.deps == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./node_modules/
+          server-dir: /node_modules/
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/.env
+            **/.env.*
+            **/*.env
+            **/*.env.*
+          state-name: .ftp-deploy-nm-state.json
+       
