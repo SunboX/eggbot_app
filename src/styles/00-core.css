@@ -216,6 +216,36 @@ button.ghost {
     background: #f8f2e3;
 }
 
+.icon-button {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    padding: 0;
+    border-radius: 14px;
+    line-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.icon-share {
+    width: 21px;
+    height: 21px;
+    display: block;
+}
+
+.icon-share line {
+    stroke: currentColor;
+    stroke-width: 2.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.icon-share circle {
+    fill: currentColor;
+}
+
 input:not([type='checkbox']):not([type='radio']),
 select {
     width: 100%;

@@ -177,6 +177,26 @@
     white-space: pre-wrap;
 }
 
+.status[data-type='loading'] {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-color: rgba(144, 87, 23, 0.55);
+    background: rgba(255, 239, 204, 0.9);
+    color: #5c2f0f;
+}
+
+.status[data-type='loading']::before {
+    content: '';
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 2px solid rgba(130, 76, 22, 0.3);
+    border-top-color: #8b2a1a;
+    border-radius: 50%;
+    animation: statusSpin 760ms linear infinite;
+    flex: 0 0 auto;
+}
+
 .page-footer {
     margin-top: 1rem;
 }

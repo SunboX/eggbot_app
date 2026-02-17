@@ -1,5 +1,6 @@
 import { AppElements } from './AppElements.mjs'
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
+import { ImportedPatternScaleUtils } from './ImportedPatternScaleUtils.mjs'
 import { PatternGenerator } from './PatternGenerator.mjs'
 import { PatternRenderer2D } from './PatternRenderer2D.mjs'
 import { EggScene } from './EggScene.mjs'
@@ -7,10 +8,10 @@ import { EggBotSerial } from './EggBotSerial.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
-import { SvgPatternImportUtils } from './SvgPatternImportUtils.mjs'
-
+import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
+import { PatternImportControlUtils } from './PatternImportControlUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
-
+const IMPORT_HEIGHT_REFERENCE = 800
 /**
  * App orchestration for controls, rendering, persistence, and EggBot drawing.
  */
@@ -26,11 +27,27 @@ class AppController {
         this.renderer2d = new PatternRenderer2D(this.els.textureCanvas)
         this.eggScene = new EggScene(this.els.eggCanvas)
         this.serial = new EggBotSerial()
+        this.patternImportWorker = new PatternImportWorkerClient()
         this.isDrawing = false
+        this.isPatternImporting = false
         this.i18n = i18n
         this.importedPattern = null
+        this.autoGenerateOrnamentControls = [
+            this.els.preset,
+            this.els.seed,
+            this.els.rerollSeed,
+            this.els.symmetry,
+            this.els.density,
+            this.els.bands,
+            this.els.showHorizontalLines,
+            this.els.motifDots,
+            this.els.motifRays,
+            this.els.motifHoneycomb,
+            this.els.motifWolfTeeth,
+            this.els.motifPine,
+            this.els.motifDiamond
+        ]
     }
-
     /**
      * Starts the app.
      * @returns {Promise<void>}
@@ -40,11 +57,13 @@ class AppController {
         this.#syncControlsFromState()
         this.#applyProjectFromUrl()
         this.#bindEvents()
+        this.els.textureCanvas.addEventListener('pattern-rendered', () => this.eggScene.updateTexture(this.els.textureCanvas))
         this.#refreshSavedProjectsSelect()
         this.#renderPattern()
         this.#syncConnectionUi()
+        this.#syncPatternImportUi()
+        this.#syncAutoGenerateOrnamentControlsUi()
     }
-
     /**
      * Resolves translated text.
      * @param {string} key
@@ -54,7 +73,6 @@ class AppController {
     #t(key, params = {}) {
         return this.i18n.t(key, params)
     }
-
     /**
      * Applies static locale text to the document and selector.
      */
@@ -64,28 +82,28 @@ class AppController {
             this.els.localeSelect.value = this.i18n.locale
         }
     }
-
     /**
      * Clears imported pattern mode and returns true if one was active.
      * @returns {boolean}
      */
     #clearImportedPattern() {
-        if (!this.importedPattern) return false
-        this.importedPattern = null
-        return true
+        const hadImportedPattern = Boolean(this.importedPattern)
+        if (hadImportedPattern) {
+            this.importedPattern = null
+        }
+        this.#syncAutoGenerateOrnamentControlsUi()
+        return hadImportedPattern
     }
-
     /**
      * Writes status text and type.
      * @param {string} text
-     * @param {'info' | 'success' | 'error'} [type='info']
+     * @param {'info' | 'success' | 'error' | 'loading'} [type='info']
      */
     #setStatus(text, type = 'info') {
         this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
     }
-
     /**
      * Applies URL-embedded project if present.
      */
@@ -103,7 +121,6 @@ class AppController {
             this.#setStatus(this.#t('messages.loadSharedFailed', { message: error.message }), 'error')
         }
     }
-
     /**
      * Binds UI event listeners.
      */
@@ -111,11 +128,9 @@ class AppController {
         this.els.localeSelect.addEventListener('change', () => {
             this.#handleLocaleChange(this.els.localeSelect.value)
         })
-
         this.els.projectName.addEventListener('input', () => {
             this.state.projectName = this.els.projectName.value.trim() || this.#t('project.defaultName')
         })
-
         this.els.preset.addEventListener('change', () => {
             this.#clearImportedPattern()
             this.state.preset = this.els.preset.value
@@ -123,67 +138,101 @@ class AppController {
             this.#syncMotifControls()
             this.#scheduleRender()
         })
-
         this.els.seed.addEventListener('change', () => {
             this.#clearImportedPattern()
             this.state.seed = AppController.#parseInteger(this.els.seed.value, this.state.seed)
             this.#scheduleRender()
         })
-
         this.els.rerollSeed.addEventListener('click', () => {
             this.#clearImportedPattern()
             this.#rerollSeed()
             this.#renderPattern()
         })
-
         this.els.regenerate.addEventListener('click', () => {
             this.#clearImportedPattern()
             this.#rerollSeed()
             this.#renderPattern()
         })
-
         this.els.symmetry.addEventListener('input', () => {
             this.#clearImportedPattern()
             this.state.symmetry = AppController.#parseInteger(this.els.symmetry.value, this.state.symmetry)
             this.els.symmetryLabel.textContent = String(this.state.symmetry)
             this.#scheduleRender()
         })
-
         this.els.density.addEventListener('input', () => {
             this.#clearImportedPattern()
             this.state.density = AppController.#parseFloat(this.els.density.value, this.state.density)
             this.els.densityLabel.textContent = this.state.density.toFixed(2)
             this.#scheduleRender()
         })
-
         this.els.bands.addEventListener('input', () => {
             this.#clearImportedPattern()
             this.state.bands = AppController.#parseInteger(this.els.bands.value, this.state.bands)
             this.els.bandsLabel.textContent = String(this.state.bands)
             this.#scheduleRender()
         })
-
         this.els.lineWidth.addEventListener('input', () => {
             this.state.lineWidth = AppController.#parseFloat(this.els.lineWidth.value, this.state.lineWidth)
             this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
             this.#scheduleRender()
         })
+        this.els.importHeightScale.addEventListener('input', () => {
+            const nextValue = AppController.#parseFloat(this.els.importHeightScale.value, this.state.importHeightScale)
+            this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(nextValue)
+            this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
+            if (this.importedPattern?.svgText) {
+                this.#scheduleRender()
+            }
+        })
+        this.els.importHeightScale.addEventListener('change', async () => {
+            if (!this.importedPattern?.svgText || this.isPatternImporting) return
+            clearTimeout(this.renderDebounceTimer)
+            this.isPatternImporting = true
+            this.#syncPatternImportUi()
+            this.#setStatus(this.#t('messages.patternImportParsing', { name: this.importedPattern.name }), 'loading')
+            try {
+                const parsed = await this.#parseImportedPattern(this.importedPattern.svgText)
+                if (!this.importedPattern) return
+                this.importedPattern.strokes = parsed.strokes
+                this.importedPattern.heightRatio = parsed.heightRatio
+                this.importedPattern.heightScale = this.state.importHeightScale
+                this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: this.importedPattern.name }), 'loading')
+                await this.#renderImportedPreviewAndWait()
+                this.#setStatus(
+                    this.#t('messages.patternImported', {
+                        name: this.importedPattern.name,
+                        count: this.state.strokes.length
+                    }),
+                    'success'
+                )
+            } catch (error) {
+                if (error?.message === 'no-drawable-geometry') {
+                    this.#setStatus(this.#t('messages.noDrawableGeometry'), 'error')
+                } else if (error?.message === 'invalid-svg') {
+                    this.#setStatus(this.#t('messages.invalidSvgFile'), 'error')
+                } else if (error?.message === 'preview-timeout' || error?.message === 'preview-render-failed') {
+                    this.#setStatus(this.#t('messages.previewPreparationFailed'), 'error')
+                } else {
+                    this.#setStatus(this.#t('messages.patternImportFailed', { message: error.message }), 'error')
+                }
+            } finally {
+                this.isPatternImporting = false
+                this.#syncPatternImportUi()
+            }
+        })
         this.els.showHorizontalLines.addEventListener('change', () => {
             this.state.showHorizontalLines = this.els.showHorizontalLines.checked
             this.#scheduleRender()
         })
-
         this.els.baseColor.addEventListener('input', () => {
             this.state.baseColor = this.els.baseColor.value
             this.#scheduleRender()
         })
-
         this.els.colorCount.addEventListener('change', () => {
             this.#normalizePaletteLength(AppController.#parseInteger(this.els.colorCount.value, this.state.palette.length))
             this.#renderPaletteControls()
             this.#scheduleRender()
         })
-
         this.els.motifDots.addEventListener('change', () => {
             this.#clearImportedPattern()
             this.state.motifs.dots = this.els.motifDots.checked
@@ -214,7 +263,6 @@ class AppController {
             this.state.motifs.diamonds = this.els.motifDiamond.checked
             this.#scheduleRender()
         })
-
         this.els.stepsPerTurn.addEventListener('change', () => {
             this.state.drawConfig.stepsPerTurn = AppController.#parseInteger(
                 this.els.stepsPerTurn.value,
@@ -248,7 +296,6 @@ class AppController {
         this.els.invertPen.addEventListener('change', () => {
             this.state.drawConfig.invertPen = this.els.invertPen.checked
         })
-
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
         this.els.drawButton.addEventListener('click', () => this.#drawCurrentPattern())
@@ -257,11 +304,12 @@ class AppController {
             this.serial.stop()
             this.#setStatus(this.#t('messages.stopRequested'), 'info')
         })
-
         this.els.saveProject.addEventListener('click', () => this.#saveProjectToFile())
         this.els.loadProject.addEventListener('click', () => this.#loadProjectFromFile())
         this.els.shareProject.addEventListener('click', () => this.#shareProjectUrl())
-        this.els.storeLocal.addEventListener('click', () => this.#storeProjectLocally())
+        if (this.els.storeLocal) {
+            this.els.storeLocal.addEventListener('click', () => this.#storeProjectLocally())
+        }
         if (this.els.loadLocal) {
             this.els.loadLocal.addEventListener('click', () => this.#loadSelectedLocalProject())
         }
@@ -269,7 +317,6 @@ class AppController {
             this.els.deleteLocal.addEventListener('click', () => this.#deleteSelectedLocalProject())
         }
     }
-
     /**
      * Applies locale change and refreshes dynamic UI fragments.
      * @param {string} locale
@@ -281,20 +328,37 @@ class AppController {
         const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
         this.#refreshSavedProjectsSelect(selectedLocalProjectId)
     }
-
     /**
      * Regenerates the pattern and updates 2D/3D output.
+     * @param {{ skipImportedStatus?: boolean }} [options]
      */
-    #renderPattern() {
+    #renderPattern(options = {}) {
+        const skipImportedStatus = Boolean(options.skipImportedStatus)
         this.state.strokes = this.importedPattern ? this.importedPattern.strokes : PatternGenerator.generate(this.state)
+        const importedSvgText = this.importedPattern ? String(this.importedPattern.svgText || '') : ''
+        const importedSvgParsedHeightRatio = this.importedPattern
+            ? Math.max(0.02, Math.min(3, Number(this.importedPattern.heightRatio) || 1))
+            : 1
+        const importedSvgHeightRatio = this.importedPattern
+            ? ImportedPatternScaleUtils.resolvePreviewHeightRatio({
+                  parsedHeightRatio: this.importedPattern.heightRatio,
+                  parsedHeightScale: this.importedPattern.heightScale,
+                  activeHeightScale: this.state.importHeightScale
+              })
+            : 1
         this.renderer2d.render({
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
             palette: this.state.palette,
             strokes: this.state.strokes,
-            showGuides: this.state.showHorizontalLines
+            importedSvgText,
+            importedSvgParsedHeightRatio,
+            importedSvgHeightRatio
         })
-        this.eggScene.updateTexture(this.els.textureCanvas)
+        if (!importedSvgText) {
+            this.eggScene.updateTexture(this.els.textureCanvas)
+        }
+        if (skipImportedStatus) return
         if (this.importedPattern) {
             this.#setStatus(
                 this.#t('messages.patternImported', {
@@ -307,7 +371,39 @@ class AppController {
         }
         this.#setStatus(this.#t('messages.patternGenerated', { count: this.state.strokes.length, seed: this.state.seed }), 'success')
     }
-
+    /**
+     * Renders imported SVG preview and waits for async image completion.
+     * @returns {Promise<void>}
+     */
+    async #renderImportedPreviewAndWait() {
+        return new Promise((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                cleanup()
+                reject(new Error('preview-timeout'))
+            }, 25_000)
+            const onRendered = () => {
+                cleanup()
+                resolve()
+            }
+            const onFailed = () => {
+                cleanup()
+                reject(new Error('preview-render-failed'))
+            }
+            const cleanup = () => {
+                window.clearTimeout(timeoutId)
+                this.els.textureCanvas.removeEventListener('pattern-rendered', onRendered)
+                this.els.textureCanvas.removeEventListener('pattern-render-failed', onFailed)
+            }
+            this.els.textureCanvas.addEventListener('pattern-rendered', onRendered, { once: true })
+            this.els.textureCanvas.addEventListener('pattern-render-failed', onFailed, { once: true })
+            try {
+                this.#renderPattern({ skipImportedStatus: true })
+            } catch (error) {
+                cleanup()
+                reject(error)
+            }
+        })
+    }
     /**
      * Schedules a delayed render for slider/input changes.
      */
@@ -317,7 +413,6 @@ class AppController {
             this.#renderPattern()
         }, 60)
     }
-
     /**
      * Randomizes seed and syncs input.
      */
@@ -325,7 +420,6 @@ class AppController {
         this.state.seed = Math.floor(Math.random() * 2147483646) + 1
         this.els.seed.value = String(this.state.seed)
     }
-
     /**
      * Syncs all controls from the current state.
      */
@@ -336,7 +430,6 @@ class AppController {
         this.els.projectName.value = this.state.projectName
         this.els.preset.value = this.state.preset
         this.els.seed.value = String(this.state.seed)
-
         this.els.symmetry.value = String(this.state.symmetry)
         this.els.symmetryLabel.textContent = String(this.state.symmetry)
         this.els.density.value = String(this.state.density)
@@ -345,14 +438,17 @@ class AppController {
         this.els.bandsLabel.textContent = String(this.state.bands)
         this.els.lineWidth.value = String(this.state.lineWidth)
         this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
+        this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(
+            AppController.#parseFloat(this.state.importHeightScale, 1)
+        )
+        this.els.importHeightScale.value = String(this.state.importHeightScale)
+        this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
         this.els.showHorizontalLines.checked = this.state.showHorizontalLines !== false
-
         this.els.baseColor.value = this.state.baseColor
         this.#normalizePaletteLength(this.state.palette.length)
         this.els.colorCount.value = String(this.state.palette.length)
         this.#syncMotifControls()
         this.#renderPaletteControls()
-
         this.els.stepsPerTurn.value = String(this.state.drawConfig.stepsPerTurn)
         this.els.penRangeSteps.value = String(this.state.drawConfig.penRangeSteps)
         this.els.msPerStep.value = String(this.state.drawConfig.msPerStep)
@@ -360,7 +456,6 @@ class AppController {
         this.els.servoDown.value = String(this.state.drawConfig.servoDown)
         this.els.invertPen.checked = Boolean(this.state.drawConfig.invertPen)
     }
-
     /**
      * Syncs motif checkbox states.
      */
@@ -372,7 +467,6 @@ class AppController {
         this.els.motifPine.checked = Boolean(this.state.motifs.pineBranch)
         this.els.motifDiamond.checked = Boolean(this.state.motifs.diamonds)
     }
-
     /**
      * Rebuilds dynamic palette controls.
      */
@@ -382,7 +476,6 @@ class AppController {
             const wrapper = document.createElement('label')
             wrapper.className = 'palette-item'
             wrapper.textContent = this.#t('colors.colorLabel', { index: index + 1 })
-
             const input = document.createElement('input')
             input.type = 'color'
             input.value = color
@@ -392,12 +485,10 @@ class AppController {
                 this.state.palette[targetIndex] = input.value
                 this.#scheduleRender()
             })
-
             wrapper.appendChild(input)
             this.els.paletteList.appendChild(wrapper)
         })
     }
-
     /**
      * Ensures the palette array matches requested length.
      * @param {number} desiredCount
@@ -410,7 +501,6 @@ class AppController {
         }
         this.state.palette = this.state.palette.slice(0, count)
     }
-
     /**
      * Opens Web Serial and refreshes UI.
      * @returns {Promise<void>}
@@ -425,7 +515,6 @@ class AppController {
             this.#syncConnectionUi()
         }
     }
-
     /**
      * Disconnects serial resources.
      * @returns {Promise<void>}
@@ -439,7 +528,6 @@ class AppController {
         }
         this.#syncConnectionUi()
     }
-
     /**
      * Executes a draw run for current strokes.
      * @returns {Promise<void>}
@@ -453,10 +541,8 @@ class AppController {
             this.#setStatus(this.#t('messages.connectBeforeDraw'), 'error')
             return
         }
-
         this.isDrawing = true
         this.#syncConnectionUi()
-
         try {
             await this.serial.drawStrokes(this.state.strokes, this.state.drawConfig, {
                 onStatus: (text) => this.#setStatus(text, 'info'),
@@ -470,7 +556,6 @@ class AppController {
             this.#syncConnectionUi()
         }
     }
-
     /**
      * Syncs machine control button enabled states.
      */
@@ -481,55 +566,64 @@ class AppController {
         this.els.drawButton.disabled = !connected || this.isDrawing
         this.els.stopButton.disabled = !this.isDrawing
     }
-
+    /**
+     * Syncs pattern import loading controls.
+     */
+    #syncPatternImportUi() {
+        this.els.loadPattern.disabled = this.isPatternImporting
+        this.els.loadPattern.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
+        this.els.status.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
+    }
+    /**
+     * Enables/disables auto-generated ornament controls for imported SVG mode.
+     */
+    #syncAutoGenerateOrnamentControlsUi() {
+        const disableAutoGenerateOrnaments = Boolean(this.importedPattern)
+        PatternImportControlUtils.setAutoGenerateOrnamentControlsDisabled(
+            this.autoGenerateOrnamentControls,
+            disableAutoGenerateOrnaments
+        )
+    }
+    /**
+     * Parses imported SVG in worker thread.
+     * @param {string} svgText
+     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
+     */
+    async #parseImportedPattern(svgText) {
+        return this.patternImportWorker.parse(svgText, {
+            maxColors: 6,
+            heightScale: this.state.importHeightScale,
+            heightReference: IMPORT_HEIGHT_REFERENCE
+        })
+    }
     /**
      * Imports an SVG pattern file and switches render mode to imported strokes.
      * @returns {Promise<void>}
      */
     async #loadPatternFromFile() {
-        let fileName = 'unknown'
-        let debugGroupOpened = false
+        let fileName = 'unknown.svg'
         try {
-            if (typeof console.groupCollapsed === 'function') {
-                console.groupCollapsed('[PatternImport] Start')
-                debugGroupOpened = true
-            }
+            if (this.isPatternImporting) return
             const file = await this.#promptForPatternFile()
             if (!file) {
-                console.info('[PatternImport] Canceled by user')
                 this.#setStatus(this.#t('messages.patternImportCanceled'), 'info')
                 return
             }
-
             fileName = String(file.name || 'unknown.svg')
-            console.info('[PatternImport] File selected', {
-                name: fileName,
-                size: file.size,
-                type: file.type || 'n/a'
-            })
-
+            this.isPatternImporting = true
+            this.#syncPatternImportUi()
+            this.#setStatus(this.#t('messages.patternImportReading', { name: fileName }), 'loading')
             const svgText = await file.text()
-            console.info('[PatternImport] File read complete', {
-                name: fileName,
-                chars: svgText.length
-            })
-
-            const parsed = SvgPatternImportUtils.parse(svgText, {
-                maxColors: 6,
-                debug: true,
-                sourceName: fileName
-            })
-            console.info('[PatternImport] Parse completed', {
-                name: fileName,
-                strokes: parsed.strokes.length,
-                colors: parsed.palette.length
-            })
-
+            this.#setStatus(this.#t('messages.patternImportParsing', { name: fileName }), 'loading')
+            const parsed = await this.#parseImportedPattern(svgText)
             this.importedPattern = {
                 name: file.name,
-                strokes: parsed.strokes
+                strokes: parsed.strokes,
+                svgText,
+                heightRatio: parsed.heightRatio,
+                heightScale: this.state.importHeightScale
             }
-
+            this.#syncAutoGenerateOrnamentControlsUi()
             if (parsed.palette.length) {
                 this.#normalizePaletteLength(Math.max(1, Math.min(6, parsed.palette.length)))
                 parsed.palette.slice(0, this.state.palette.length).forEach((color, index) => {
@@ -542,13 +636,16 @@ class AppController {
             }
             this.els.colorCount.value = String(this.state.palette.length)
             this.#renderPaletteControls()
-            this.#renderPattern()
+            this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: fileName }), 'loading')
+            await this.#renderImportedPreviewAndWait()
+            this.#setStatus(
+                this.#t('messages.patternImported', {
+                    name: file.name,
+                    count: this.state.strokes.length
+                }),
+                'success'
+            )
         } catch (error) {
-            console.error('[PatternImport] Import failed', {
-                name: fileName,
-                message: String(error?.message || error),
-                stack: String(error?.stack || '')
-            })
             if (error?.name === 'AbortError') {
                 this.#setStatus(this.#t('messages.patternImportCanceled'), 'info')
                 return
@@ -561,14 +658,16 @@ class AppController {
                 this.#setStatus(this.#t('messages.invalidSvgFile'), 'error')
                 return
             }
+            if (error?.message === 'preview-timeout' || error?.message === 'preview-render-failed') {
+                this.#setStatus(this.#t('messages.previewPreparationFailed'), 'error')
+                return
+            }
             this.#setStatus(this.#t('messages.patternImportFailed', { message: error.message }), 'error')
         } finally {
-            if (debugGroupOpened && typeof console.groupEnd === 'function') {
-                console.groupEnd()
-            }
+            this.isPatternImporting = false
+            this.#syncPatternImportUi()
         }
     }
-
     /**
      * Prompts for an SVG pattern file.
      * @returns {Promise<File | null>}
@@ -586,7 +685,6 @@ class AppController {
             })
             return handle ? handle.getFile() : null
         }
-
         return new Promise((resolve) => {
             const input = this.els.patternInput
             const onChange = () => {
@@ -603,14 +701,12 @@ class AppController {
                 input.removeEventListener('change', onChange)
                 window.removeEventListener('focus', onFocus)
             }
-
             input.value = ''
             input.addEventListener('change', onChange)
             window.addEventListener('focus', onFocus, { once: true })
             input.click()
         })
     }
-
     /**
      * Saves current project JSON to file.
      * @returns {Promise<void>}
@@ -619,7 +715,6 @@ class AppController {
         const payload = ProjectIoUtils.buildProjectPayload(this.state)
         const contents = JSON.stringify(payload, null, 2)
         const suggestedName = `${(this.state.projectName || this.#t('project.defaultFileStem')).replace(/\s+/g, '-').toLowerCase()}.json`
-
         try {
             if (window.showSaveFilePicker) {
                 const handle = await window.showSaveFilePicker({
@@ -637,7 +732,6 @@ class AppController {
                 this.#setStatus(this.#t('messages.projectSaved', { name: handle.name || suggestedName }), 'success')
                 return
             }
-
             const blob = new Blob([contents], { type: 'application/json' })
             const url = URL.createObjectURL(blob)
             const link = document.createElement('a')
@@ -656,7 +750,6 @@ class AppController {
             this.#setStatus(this.#t('messages.saveFailed', { message: error.message }), 'error')
         }
     }
-
     /**
      * Loads a project JSON file.
      * @returns {Promise<void>}
@@ -684,7 +777,6 @@ class AppController {
             this.#setStatus(this.#t('messages.loadFailed', { message: error.message }), 'error')
         }
     }
-
     /**
      * Prompts user for a project file.
      * @returns {Promise<File | null>}
@@ -702,7 +794,6 @@ class AppController {
             })
             return handle ? handle.getFile() : null
         }
-
         return new Promise((resolve) => {
             const input = this.els.loadInput
             const onChange = () => {
@@ -719,14 +810,12 @@ class AppController {
                 input.removeEventListener('change', onChange)
                 window.removeEventListener('focus', onFocus)
             }
-
             input.value = ''
             input.addEventListener('change', onChange)
             window.addEventListener('focus', onFocus, { once: true })
             input.click()
         })
     }
-
     /**
      * Shares current project as URL parameter.
      * @returns {Promise<void>}
@@ -738,7 +827,6 @@ class AppController {
             const url = new URL(window.location.href)
             url.searchParams.set(ProjectUrlUtils.PROJECT_PARAM, encoded)
             const shareUrl = url.toString()
-
             if (navigator.share) {
                 await navigator.share({
                     title: this.state.projectName,
@@ -747,13 +835,11 @@ class AppController {
                 this.#setStatus(this.#t('messages.projectUrlShared'), 'success')
                 return
             }
-
             if (navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(shareUrl)
                 this.#setStatus(this.#t('messages.projectUrlCopied'), 'success')
                 return
             }
-
             window.prompt(this.#t('messages.copyProjectUrlPrompt'), shareUrl)
             this.#setStatus(this.#t('messages.projectUrlReady'), 'info')
         } catch (error) {
@@ -764,7 +850,6 @@ class AppController {
             this.#setStatus(this.#t('messages.shareFailed', { message: error.message }), 'error')
         }
     }
-
     /**
      * Stores current project payload in localStorage.
      */
@@ -777,7 +862,6 @@ class AppController {
             this.#setStatus(this.#t('messages.storeCanceled'), 'info')
             return
         }
-
         const entries = this.#loadSavedProjects()
         const payload = ProjectIoUtils.buildProjectPayload(this.state)
         const id = `pattern-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -791,7 +875,6 @@ class AppController {
         this.#refreshSavedProjectsSelect(id)
         this.#setStatus(this.#t('messages.storedLocalProject', { name }), 'success')
     }
-
     /**
      * Loads selected local project.
      */
@@ -809,7 +892,6 @@ class AppController {
             this.#refreshSavedProjectsSelect()
             return
         }
-
         try {
             this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(entry.payload)
@@ -821,7 +903,6 @@ class AppController {
             this.#setStatus(this.#t('messages.localLoadFailed', { message: error.message }), 'error')
         }
     }
-
     /**
      * Deletes the selected local project.
      */
@@ -832,7 +913,6 @@ class AppController {
             this.#setStatus(this.#t('messages.noLocalProjectSelectedForDelete'), 'info')
             return
         }
-
         const entries = this.#loadSavedProjects()
         const entry = entries.find((candidate) => candidate.id === selectedId)
         if (!entry) {
@@ -840,19 +920,16 @@ class AppController {
             this.#refreshSavedProjectsSelect()
             return
         }
-
         const confirmed = window.confirm(this.#t('messages.deleteLocalProjectConfirm', { name: entry.name }))
         if (!confirmed) {
             this.#setStatus(this.#t('messages.deleteCanceled'), 'info')
             return
         }
-
         const filtered = entries.filter((candidate) => candidate.id !== selectedId)
         this.#saveSavedProjects(filtered)
         this.#refreshSavedProjectsSelect()
         this.#setStatus(this.#t('messages.deletedLocalProject', { name: entry.name }), 'success')
     }
-
     /**
      * Loads localStorage entries.
      * @returns {Array<{id: string, name: string, updatedAt: string, payload: Record<string, any>}>}
@@ -878,7 +955,6 @@ class AppController {
             return []
         }
     }
-
     /**
      * Saves local project entries.
      * @param {Array<{id: string, name: string, updatedAt: string, payload: Record<string, any>}>} entries
@@ -886,7 +962,6 @@ class AppController {
     #saveSavedProjects(entries) {
         window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(entries.slice(-120)))
     }
-
     /**
      * Refreshes local project select options.
      * @param {string} [preferredId]
@@ -896,16 +971,13 @@ class AppController {
         const entries = this.#loadSavedProjects().sort((left, right) => {
             return right.updatedAt.localeCompare(left.updatedAt)
         })
-
         this.els.localPatterns.innerHTML = ''
-
         const placeholder = document.createElement('option')
         placeholder.value = ''
         placeholder.textContent = entries.length
             ? this.#t('local.choosePlaceholder')
             : this.#t('local.nonePlaceholder')
         this.els.localPatterns.appendChild(placeholder)
-
         entries.forEach((entry) => {
             const option = document.createElement('option')
             option.value = entry.id
@@ -918,12 +990,10 @@ class AppController {
             }
             this.els.localPatterns.appendChild(option)
         })
-
         if (!preferredId) {
             this.els.localPatterns.value = ''
         }
     }
-
     /**
      * Parses an integer with fallback.
      * @param {unknown} value
@@ -934,7 +1004,6 @@ class AppController {
         const parsed = Number.parseInt(String(value), 10)
         return Number.isFinite(parsed) ? parsed : fallback
     }
-
     /**
      * Parses a float with fallback.
      * @param {unknown} value
@@ -946,11 +1015,9 @@ class AppController {
         return Number.isFinite(parsed) ? parsed : fallback
     }
 }
-
 const i18n = new I18n({
     storageKey: 'eggbot_app_locale'
 })
-
 /**
  * Starts the localized application.
  * @returns {Promise<void>}
@@ -961,7 +1028,6 @@ async function startApp() {
     const app = new AppController(i18n)
     await app.init()
 }
-
 startApp().catch((error) => {
     console.error(error)
     const statusElement = document.querySelector('[data-status]')

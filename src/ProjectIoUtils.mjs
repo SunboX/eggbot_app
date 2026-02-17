@@ -56,6 +56,7 @@ export class ProjectIoUtils {
             density: Math.max(0.05, Math.min(1, ProjectIoUtils.#toNumber(state.density, 0.58))),
             bands: Math.max(1, Math.min(16, Math.trunc(ProjectIoUtils.#toNumber(state.bands, 6)))),
             lineWidth: Math.max(0.5, Math.min(4, ProjectIoUtils.#toNumber(state.lineWidth, 1.8))),
+            importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 1))),
             showHorizontalLines: ProjectIoUtils.#toBoolean(state.showHorizontalLines, true),
             baseColor: String(state.baseColor || '#efe7ce'),
             palette: Array.isArray(state.palette)

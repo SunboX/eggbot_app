@@ -10,6 +10,7 @@
     "dependencies": {
         "dotenv": "^16.4.7",
         "express": "^4.19.2",
+        "linkedom": "^0.18.12",
         "three": "^0.181.1"
     }
 }

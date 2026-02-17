@@ -11,10 +11,12 @@
     },
     "toolbar": {
         "regenerate": "Neu generieren",
-        "loadPattern": "Muster laden",
+        "loadPattern": "Muster laden (SVG)",
         "save": "Speichern",
         "load": "Laden",
         "share": "Teilen",
+        "shareAria": "Projekt-URL teilen",
+        "shareTitle": "Projekt-URL teilen",
         "storeLocal": "Lokal speichern",
         "draw": "Zeichnen"
     },
@@ -43,6 +45,7 @@
         "density": "Dichte",
         "bands": "Ornament-Bänder",
         "lineWidth": "Linienbreite",
+        "importHeightScale": "Import-Höhenskalierung",
         "showHorizontalLines": "Horizontale Linien/Ringe anzeigen",
         "motifs": {
             "dots": "Punkte",
@@ -141,9 +144,14 @@
         "deletedLocalProject": "Lokales Projekt gelöscht: {{name}}",
         "appInitFailed": "App-Initialisierung fehlgeschlagen: {{message}}",
         "patternFileDescription": "SVG-Muster",
+        "patternImportLoading": "Muster wird geladen: {{name}}…",
+        "patternImportReading": "Datei wird gelesen: {{name}}…",
+        "patternImportParsing": "Muster wird geparst: {{name}}…",
+        "patternImportPreparingPreview": "Vorschau wird vorbereitet: {{name}}…",
         "patternImportCanceled": "Muster-Import abgebrochen.",
         "patternImported": "Muster importiert: {{name}} ({{count}} Linienzüge).",
         "patternImportFailed": "Muster-Import fehlgeschlagen: {{message}}",
+        "previewPreparationFailed": "Vorschau konnte nicht vorbereitet werden.",
         "noDrawableGeometry": "Die SVG enthält keine zeichnbaren Pfade.",
         "invalidSvgFile": "Ungültige SVG-Datei."
     }

@@ -31,11 +31,25 @@
                         </select>
                     </div>
                     <button class="ghost" data-regenerate data-i18n="toolbar.regenerate">Re-generate</button>
-                    <button class="ghost" data-load-pattern data-i18n="toolbar.loadPattern">Load pattern</button>
+                    <button class="ghost" data-load-pattern data-i18n="toolbar.loadPattern">Load pattern (SVG)</button>
                     <button class="ghost" data-save-project data-i18n="toolbar.save">Save</button>
                     <button class="ghost" data-load-project data-i18n="toolbar.load">Load</button>
-                    <button class="ghost" data-share-project data-i18n="toolbar.share">Share</button>
-                    <button class="ghost" data-store-local data-i18n="toolbar.storeLocal">Store local</button>
+                    <button
+                        class="ghost icon-button"
+                        data-share-project
+                        aria-label="Share project URL"
+                        title="Share project URL"
+                        data-i18n-aria-label="toolbar.shareAria"
+                        data-i18n-title="toolbar.shareTitle"
+                    >
+                        <svg class="icon-share" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <line x1="8.3" y1="12.1" x2="14.1" y2="8.7"></line>
+                            <line x1="8.3" y1="11.9" x2="14.1" y2="15.3"></line>
+                            <circle cx="5.8" cy="12" r="3"></circle>
+                            <circle cx="16.9" cy="6.4" r="3"></circle>
+                            <circle cx="16.9" cy="17.6" r="3"></circle>
+                        </svg>
+                    </button>
                     <button class="primary" data-draw data-i18n="toolbar.draw">Draw</button>
                     <input type="file" accept=".svg,image/svg+xml" data-pattern-input hidden />
                     <input type="file" accept="application/json" data-load-input hidden />
@@ -103,6 +117,13 @@
                             <div class="range-row">
                                 <input type="range" min="0.5" max="4" step="0.1" data-line-width />
                                 <span data-line-width-label>1.8</span>
+                            </div>
+                        </label>
+                        <label>
+                            <span data-i18n="pattern.importHeightScale">Imported height scale</span>
+                            <div class="range-row">
+                                <input type="range" min="0.1" max="3" step="0.05" data-import-height-scale />
+                                <span data-import-height-scale-label>1.00</span>
                             </div>
                         </label>
                         <label class="inline-check">
