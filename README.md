@@ -2,6 +2,8 @@
 
 Web-based generator for Sorbian-style Easter egg decorations with:
 
+Live app: [https://eggbot.app/](https://eggbot.app/)
+
 - configurable motifs and complexity
 - configurable color count and palette
 - deterministic auto-generation with seed control
