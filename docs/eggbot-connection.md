@@ -4,6 +4,14 @@
 
 The app uses Web Serial directly from the browser.
 
+## Reload and reconnect behavior
+
+- A full page reload destroys the JavaScript context and releases the open serial handle.
+- The app keeps reconnect seamless by retrying when you press `Draw`.
+- First it checks already granted ports with `navigator.serial.getPorts()`.
+- If exactly one safe candidate can be selected (including remembered last-used USB vendor/product ID), it reconnects directly.
+- If no safe candidate exists, `Draw` falls back to `navigator.serial.requestPort()` and shows the browser chooser.
+
 ## EBB commands used
 
 - `SC,4,<value>`: servo up calibration slot

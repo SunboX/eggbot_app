@@ -76,6 +76,7 @@
 .viewport-panel {
     display: grid;
     gap: 0.6rem;
+    align-content: start;
 }
 
 .section {
@@ -111,6 +112,10 @@
     grid-template-columns: 1fr auto;
     gap: 0.6rem;
     align-items: center;
+}
+
+.range-control {
+    gap: 0;
 }
 
 .range-row span {
@@ -256,10 +261,31 @@
 
 .footer-actions {
     display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.55rem;
+    justify-content: space-between;
+    justify-self: end;
+    align-self: stretch;
+}
+
+.footer-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+}
+
+.footer-version-value {
+    font-variant-numeric: tabular-nums;
+    color: #583c24;
+    font-weight: 600;
+}
+
+.footer-social {
+    display: flex;
     align-items: center;
     gap: 0.55rem;
-    justify-self: end;
-    align-self: end;
 }
 
 .icon-link {
@@ -308,5 +334,10 @@
 
     .footer-actions {
         justify-self: start;
+        align-items: flex-start;
+    }
+
+    .footer-meta {
+        align-items: flex-start;
     }
 }
