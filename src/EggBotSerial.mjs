@@ -1,3 +1,5 @@
+const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
+
 /**
  * Web Serial bridge for EggBot EBB command streaming.
  *
@@ -36,29 +38,107 @@ export class EggBotSerial {
      * @returns {Promise<string>}
      */
     async connect() {
-        if (!('serial' in navigator)) {
-            throw new Error('Web Serial is not supported in this browser.')
-        }
+        this.#assertSerialSupport()
         if (this.isConnected) {
             return 'Already connected'
         }
 
-        this.port = await navigator.serial.requestPort()
-        await this.port.open({
-            baudRate: 9600,
-            dataBits: 8,
-            stopBits: 1,
-            parity: 'none',
-            flowControl: 'none'
-        })
+        const requestedPort = await navigator.serial.requestPort()
+        return this.#openPortAndInitialize(requestedPort)
+    }
 
-        this.writer = this.port.writable.getWriter()
-        if (this.port.readable) {
-            this.reader = this.port.readable.getReader()
-            this.readLoopAbort = false
-            this.#startReadLoop()
+    /**
+     * Opens a serial connection for draw-time reconnect.
+     * @returns {Promise<string>}
+     */
+    async connectForDraw() {
+        this.#assertSerialSupport()
+        if (this.isConnected) {
+            return 'Already connected'
         }
 
+        const grantedPorts = typeof navigator.serial.getPorts === 'function' ? await navigator.serial.getPorts() : []
+        const reconnectPort = this.#selectReconnectPort(grantedPorts)
+        if (reconnectPort) {
+            return this.#openPortAndInitialize(reconnectPort)
+        }
+
+        const requestedPort = await navigator.serial.requestPort()
+        return this.#openPortAndInitialize(requestedPort)
+    }
+
+    /**
+     * Returns true if the provided port is the active one.
+     * @param {SerialPort | null | undefined} port
+     * @returns {boolean}
+     */
+    isCurrentPort(port) {
+        return Boolean(port && this.port === port)
+    }
+
+    /**
+     * Closes serial resources.
+     * @returns {Promise<void>}
+     */
+    async disconnect() {
+        this.abortDrawing = true
+        await this.#releaseConnectionResources()
+    }
+
+    /**
+     * Throws if Web Serial is unavailable.
+     */
+    #assertSerialSupport() {
+        if (!('serial' in navigator)) {
+            throw new Error('Web Serial is not supported in this browser.')
+        }
+    }
+
+    /**
+     * Opens and initializes one serial port.
+     * @param {SerialPort} port
+     * @returns {Promise<string>}
+     */
+    async #openPortAndInitialize(port) {
+        if (!port) {
+            throw new Error('No serial port selected.')
+        }
+
+        this.port = port
+        try {
+            await this.port.open({
+                baudRate: 9600,
+                dataBits: 8,
+                stopBits: 1,
+                parity: 'none',
+                flowControl: 'none'
+            })
+
+            this.writer = this.port.writable?.getWriter?.() || null
+            if (!this.writer) {
+                throw new Error('Serial writer is not available.')
+            }
+
+            if (this.port.readable?.getReader) {
+                this.reader = this.port.readable.getReader()
+                this.readLoopAbort = false
+                this.#startReadLoop()
+            }
+
+            const version = await this.#probeVersion()
+            this.#savePortHint(this.port)
+            return version
+        } catch (error) {
+            await this.#releaseConnectionResources()
+            throw error
+        }
+    }
+
+    /**
+     * Tries to read one version line from EBB.
+     * @returns {Promise<string>}
+     */
+    async #probeVersion() {
         try {
             const versionLine = await this.sendCommand('v', { expectResponse: true, timeoutMs: 1500 })
             return versionLine || 'Connected'
@@ -68,14 +148,13 @@ export class EggBotSerial {
     }
 
     /**
-     * Closes serial resources.
+     * Releases open reader/writer/port resources.
      * @returns {Promise<void>}
      */
-    async disconnect() {
-        this.abortDrawing = true
+    async #releaseConnectionResources() {
+        this.readLoopAbort = true
 
         if (this.reader) {
-            this.readLoopAbort = true
             try {
                 await this.reader.cancel()
             } catch (_error) {
@@ -107,10 +186,106 @@ export class EggBotSerial {
             this.port = null
         }
 
+        this.#resetReadState()
+    }
+
+    /**
+     * Resets buffered line-based read state.
+     */
+    #resetReadState() {
         this.readBuffer = ''
         this.lineQueue = []
         this.pendingLineResolvers = []
         this.readLoopActive = false
+        this.readLoopAbort = false
+    }
+
+    /**
+     * Loads the persisted port hint from localStorage.
+     * @returns {{ usbVendorId: number, usbProductId: number } | null}
+     */
+    #loadPortHint() {
+        try {
+            if (!window?.localStorage) return null
+            const raw = window.localStorage.getItem(LAST_PORT_STORAGE_KEY)
+            if (!raw) return null
+            const parsed = JSON.parse(raw)
+            return this.#isValidPortHint(parsed) ? parsed : null
+        } catch (_error) {
+            return null
+        }
+    }
+
+    /**
+     * Persists USB vendor/product identifiers for the active port.
+     * @param {SerialPort | null} port
+     */
+    #savePortHint(port) {
+        try {
+            if (!port?.getInfo || !window?.localStorage) return
+            const info = port.getInfo()
+            const hint = {
+                usbVendorId: Number(info?.usbVendorId),
+                usbProductId: Number(info?.usbProductId)
+            }
+            if (!this.#isValidPortHint(hint)) return
+            window.localStorage.setItem(LAST_PORT_STORAGE_KEY, JSON.stringify(hint))
+        } catch (_error) {
+            // Ignore localStorage and info retrieval failures.
+        }
+    }
+
+    /**
+     * Selects a reconnect candidate from already granted ports.
+     * @param {SerialPort[]} grantedPorts
+     * @returns {SerialPort | null}
+     */
+    #selectReconnectPort(grantedPorts) {
+        if (!Array.isArray(grantedPorts) || !grantedPorts.length) {
+            return null
+        }
+
+        const hint = this.#loadPortHint()
+        if (hint) {
+            const matchedPorts = grantedPorts.filter((port) => this.#portMatchesHint(port, hint))
+            if (matchedPorts.length === 1) {
+                return matchedPorts[0]
+            }
+            if (matchedPorts.length > 1) {
+                return null
+            }
+        }
+
+        return grantedPorts.length === 1 ? grantedPorts[0] : null
+    }
+
+    /**
+     * Returns true if a port matches a persisted USB hint.
+     * @param {SerialPort} port
+     * @param {{ usbVendorId: number, usbProductId: number }} hint
+     * @returns {boolean}
+     */
+    #portMatchesHint(port, hint) {
+        try {
+            if (!port?.getInfo) return false
+            const info = port.getInfo()
+            return Number(info?.usbVendorId) === hint.usbVendorId && Number(info?.usbProductId) === hint.usbProductId
+        } catch (_error) {
+            return false
+        }
+    }
+
+    /**
+     * Validates a persisted USB vendor/product hint payload.
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    #isValidPortHint(value) {
+        if (!value || typeof value !== 'object') return false
+        const candidate = /** @type {{ usbVendorId?: unknown, usbProductId?: unknown }} */ (value)
+        const vendorId = Number(candidate.usbVendorId)
+        const productId = Number(candidate.usbProductId)
+        return Number.isInteger(vendorId) && vendorId > 0 && Number.isInteger(productId) && productId > 0
     }
 
     /**

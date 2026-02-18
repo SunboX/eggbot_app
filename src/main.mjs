@@ -1,8 +1,11 @@
 import { AppElements } from './AppElements.mjs'
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
+import { AppVersion } from './AppVersion.mjs'
 import { ImportedPatternScaleUtils } from './ImportedPatternScaleUtils.mjs'
 import { PatternGenerator } from './PatternGenerator.mjs'
 import { PatternRenderer2D } from './PatternRenderer2D.mjs'
+import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
+import { PatternSvgExportUtils } from './PatternSvgExportUtils.mjs'
 import { EggScene } from './EggScene.mjs'
 import { EggBotSerial } from './EggBotSerial.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
@@ -12,6 +15,8 @@ import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
 import { PatternImportControlUtils } from './PatternImportControlUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
 const IMPORT_HEIGHT_REFERENCE = 800
+const SVG_EXPORT_WIDTH = 2048
+const SVG_EXPORT_HEIGHT = 1024
 /**
  * App orchestration for controls, rendering, persistence, and EggBot drawing.
  */
@@ -39,6 +44,9 @@ class AppController {
             this.els.symmetry,
             this.els.density,
             this.els.bands,
+            this.els.ornamentSize,
+            this.els.ornamentCount,
+            this.els.ornamentDistribution,
             this.els.showHorizontalLines,
             this.els.motifDots,
             this.els.motifRays,
@@ -54,9 +62,11 @@ class AppController {
      */
     async init() {
         this.#applyLocaleToUi()
+        this.#renderAppVersion()
         this.#syncControlsFromState()
         this.#applyProjectFromUrl()
         this.#bindEvents()
+        this.#bindSerialLifecycleEvents()
         this.els.textureCanvas.addEventListener('pattern-rendered', () => this.eggScene.updateTexture(this.els.textureCanvas))
         this.#refreshSavedProjectsSelect()
         this.#renderPattern()
@@ -81,6 +91,12 @@ class AppController {
         if (this.els.localeSelect) {
             this.els.localeSelect.value = this.i18n.locale
         }
+    }
+    /**
+     * Renders application version in the footer.
+     */
+    #renderAppVersion() {
+        this.els.appVersion.textContent = AppVersion.get()
     }
     /**
      * Clears imported pattern mode and returns true if one was active.
@@ -171,6 +187,30 @@ class AppController {
             this.els.bandsLabel.textContent = String(this.state.bands)
             this.#scheduleRender()
         })
+        this.els.ornamentSize.addEventListener('input', () => {
+            this.#clearImportedPattern()
+            const nextValue = AppController.#parseFloat(this.els.ornamentSize.value, this.state.ornamentSize)
+            this.state.ornamentSize = Math.max(0.5, Math.min(2, nextValue))
+            this.els.ornamentSizeLabel.textContent = this.state.ornamentSize.toFixed(2)
+            this.#scheduleRender()
+        })
+        this.els.ornamentCount.addEventListener('input', () => {
+            this.#clearImportedPattern()
+            const nextValue = AppController.#parseFloat(this.els.ornamentCount.value, this.state.ornamentCount)
+            this.state.ornamentCount = Math.max(0.5, Math.min(2, nextValue))
+            this.els.ornamentCountLabel.textContent = this.state.ornamentCount.toFixed(2)
+            this.#scheduleRender()
+        })
+        this.els.ornamentDistribution.addEventListener('input', () => {
+            this.#clearImportedPattern()
+            const nextValue = AppController.#parseFloat(
+                this.els.ornamentDistribution.value,
+                this.state.ornamentDistribution
+            )
+            this.state.ornamentDistribution = Math.max(0.6, Math.min(1.6, nextValue))
+            this.els.ornamentDistributionLabel.textContent = this.state.ornamentDistribution.toFixed(2)
+            this.#scheduleRender()
+        })
         this.els.lineWidth.addEventListener('input', () => {
             this.state.lineWidth = AppController.#parseFloat(this.els.lineWidth.value, this.state.lineWidth)
             this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
@@ -180,9 +220,7 @@ class AppController {
             const nextValue = AppController.#parseFloat(this.els.importHeightScale.value, this.state.importHeightScale)
             this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(nextValue)
             this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
-            if (this.importedPattern?.svgText) {
-                this.#scheduleRender()
-            }
+            this.#scheduleRender()
         })
         this.els.importHeightScale.addEventListener('change', async () => {
             if (!this.importedPattern?.svgText || this.isPatternImporting) return
@@ -305,6 +343,7 @@ class AppController {
             this.#setStatus(this.#t('messages.stopRequested'), 'info')
         })
         this.els.saveProject.addEventListener('click', () => this.#saveProjectToFile())
+        this.els.exportSvg.addEventListener('click', () => this.#exportPatternToSvg())
         this.els.loadProject.addEventListener('click', () => this.#loadProjectFromFile())
         this.els.shareProject.addEventListener('click', () => this.#shareProjectUrl())
         if (this.els.storeLocal) {
@@ -315,6 +354,41 @@ class AppController {
         }
         if (this.els.deleteLocal) {
             this.els.deleteLocal.addEventListener('click', () => this.#deleteSelectedLocalProject())
+        }
+    }
+
+    /**
+     * Binds Web Serial lifecycle listeners.
+     */
+    #bindSerialLifecycleEvents() {
+        if (!('serial' in navigator) || typeof navigator.serial?.addEventListener !== 'function') {
+            return
+        }
+
+        navigator.serial.addEventListener('disconnect', (event) => {
+            this.#handleSerialDisconnect(event)
+        })
+    }
+
+    /**
+     * Handles browser-level serial disconnect events for the active port.
+     * @param {SerialConnectionEvent} event
+     * @returns {Promise<void>}
+     */
+    async #handleSerialDisconnect(event) {
+        const disconnectedPort = event?.port || null
+        if (!this.serial.isCurrentPort(disconnectedPort)) {
+            return
+        }
+
+        try {
+            await this.serial.disconnect()
+            this.isDrawing = false
+            this.#setStatus(this.#t('messages.eggbotDisconnected'), 'info')
+        } catch (error) {
+            this.#setStatus(this.#t('messages.disconnectFailed', { message: error.message }), 'error')
+        } finally {
+            this.#syncConnectionUi()
         }
     }
     /**
@@ -328,31 +402,51 @@ class AppController {
         const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
         this.#refreshSavedProjectsSelect(selectedLocalProjectId)
     }
+
+    /**
+     * Resolves currently active render height ratio.
+     * @returns {number}
+     */
+    #resolveActiveRenderHeightRatio() {
+        if (!this.importedPattern) {
+            return PatternStrokeScaleUtils.clampRatio(this.state.importHeightScale)
+        }
+        return ImportedPatternScaleUtils.resolvePreviewHeightRatio({
+            parsedHeightRatio: this.importedPattern.heightRatio,
+            parsedHeightScale: this.importedPattern.heightScale,
+            activeHeightScale: this.state.importHeightScale
+        })
+    }
+
+    /**
+     * Builds the final stroke list that preview, draw, and export all share.
+     * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>}
+     */
+    #buildRenderedStrokes() {
+        const activeHeightRatio = this.#resolveActiveRenderHeightRatio()
+        if (this.importedPattern) {
+            const sourceHeightRatio = PatternStrokeScaleUtils.clampRatio(this.importedPattern.heightRatio)
+            return PatternStrokeScaleUtils.rescaleStrokes(this.importedPattern.strokes, sourceHeightRatio, activeHeightRatio)
+        }
+        const generated = PatternGenerator.generate(this.state)
+        return PatternStrokeScaleUtils.rescaleStrokes(generated, 1, activeHeightRatio)
+    }
+
     /**
      * Regenerates the pattern and updates 2D/3D output.
      * @param {{ skipImportedStatus?: boolean }} [options]
      */
     #renderPattern(options = {}) {
         const skipImportedStatus = Boolean(options.skipImportedStatus)
-        this.state.strokes = this.importedPattern ? this.importedPattern.strokes : PatternGenerator.generate(this.state)
         const importedSvgText = this.importedPattern ? String(this.importedPattern.svgText || '') : ''
-        const importedSvgParsedHeightRatio = this.importedPattern
-            ? Math.max(0.02, Math.min(3, Number(this.importedPattern.heightRatio) || 1))
-            : 1
-        const importedSvgHeightRatio = this.importedPattern
-            ? ImportedPatternScaleUtils.resolvePreviewHeightRatio({
-                  parsedHeightRatio: this.importedPattern.heightRatio,
-                  parsedHeightScale: this.importedPattern.heightScale,
-                  activeHeightScale: this.state.importHeightScale
-              })
-            : 1
+        const importedSvgHeightRatio = this.#resolveActiveRenderHeightRatio()
+        this.state.strokes = this.#buildRenderedStrokes()
         this.renderer2d.render({
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
             palette: this.state.palette,
             strokes: this.state.strokes,
             importedSvgText,
-            importedSvgParsedHeightRatio,
             importedSvgHeightRatio
         })
         if (!importedSvgText) {
@@ -436,10 +530,22 @@ class AppController {
         this.els.densityLabel.textContent = this.state.density.toFixed(2)
         this.els.bands.value = String(this.state.bands)
         this.els.bandsLabel.textContent = String(this.state.bands)
+        this.state.ornamentSize = Math.max(0.5, Math.min(2, AppController.#parseFloat(this.state.ornamentSize, 1)))
+        this.els.ornamentSize.value = String(this.state.ornamentSize)
+        this.els.ornamentSizeLabel.textContent = this.state.ornamentSize.toFixed(2)
+        this.state.ornamentCount = Math.max(0.5, Math.min(2, AppController.#parseFloat(this.state.ornamentCount, 1)))
+        this.els.ornamentCount.value = String(this.state.ornamentCount)
+        this.els.ornamentCountLabel.textContent = this.state.ornamentCount.toFixed(2)
+        this.state.ornamentDistribution = Math.max(
+            0.6,
+            Math.min(1.6, AppController.#parseFloat(this.state.ornamentDistribution, 1))
+        )
+        this.els.ornamentDistribution.value = String(this.state.ornamentDistribution)
+        this.els.ornamentDistributionLabel.textContent = this.state.ornamentDistribution.toFixed(2)
         this.els.lineWidth.value = String(this.state.lineWidth)
         this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
         this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(
-            AppController.#parseFloat(this.state.importHeightScale, 1)
+            AppController.#parseFloat(this.state.importHeightScale, 0.85)
         )
         this.els.importHeightScale.value = String(this.state.importHeightScale)
         this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
@@ -537,20 +643,35 @@ class AppController {
             this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
             return
         }
-        if (!this.serial.isConnected) {
-            this.#setStatus(this.#t('messages.connectBeforeDraw'), 'error')
+        if (this.isDrawing) {
             return
         }
+
+        let connectingBeforeDraw = false
         this.isDrawing = true
         this.#syncConnectionUi()
+
         try {
+            if (!this.serial.isConnected) {
+                connectingBeforeDraw = true
+                this.#setStatus(this.#t('messages.connectingBeforeDraw'), 'loading')
+                const version = await this.serial.connectForDraw()
+                connectingBeforeDraw = false
+                this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
+                this.#syncConnectionUi()
+            }
+
             await this.serial.drawStrokes(this.state.strokes, this.state.drawConfig, {
                 onStatus: (text) => this.#setStatus(text, 'info'),
                 onProgress: (done, total) => this.#setStatus(this.#t('messages.drawingProgress', { done, total }), 'info')
             })
             this.#setStatus(this.#t('messages.drawCompleted'), 'success')
         } catch (error) {
-            this.#setStatus(this.#t('messages.drawFailed', { message: error.message }), 'error')
+            if (connectingBeforeDraw) {
+                this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            } else {
+                this.#setStatus(this.#t('messages.drawFailed', { message: error.message }), 'error')
+            }
         } finally {
             this.isDrawing = false
             this.#syncConnectionUi()
@@ -560,11 +681,12 @@ class AppController {
      * Syncs machine control button enabled states.
      */
     #syncConnectionUi() {
+        const serialSupported = 'serial' in navigator
         const connected = this.serial.isConnected
-        this.els.serialConnect.disabled = connected || this.isDrawing
+        this.els.serialConnect.disabled = connected || this.isDrawing || !serialSupported
         this.els.serialDisconnect.disabled = !connected || this.isDrawing
-        this.els.drawButton.disabled = !connected || this.isDrawing
-        this.els.stopButton.disabled = !this.isDrawing
+        this.els.drawButton.disabled = this.isDrawing || !serialSupported
+        this.els.stopButton.disabled = !this.isDrawing || !connected
     }
     /**
      * Syncs pattern import loading controls.
@@ -750,6 +872,93 @@ class AppController {
             this.#setStatus(this.#t('messages.saveFailed', { message: error.message }), 'error')
         }
     }
+
+    /**
+     * Exports the visible pattern as an SVG file.
+     * @returns {Promise<void>}
+     */
+    async #exportPatternToSvg() {
+        if (!this.state.strokes.length) {
+            this.#renderPattern({ skipImportedStatus: true })
+        }
+        if (!this.state.strokes.length) {
+            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
+            return
+        }
+
+        const fileStem = (this.state.projectName || this.#t('project.defaultFileStem')).replace(/\s+/g, '-').toLowerCase()
+        const suggestedName = `${fileStem}.svg`
+        const editorName = String(document?.title || 'eggbot-app').trim() || 'eggbot-app'
+        const editorUrl = String(window?.location?.href || '').trim()
+        const metadataTitle = String(this.state.projectName || this.#t('project.defaultFileStem')).trim() || 'Sorbian egg composition'
+        const metadataDate = new Date().toISOString()
+        const browserLanguage = typeof navigator !== 'undefined' ? String(navigator.language || '').trim() : ''
+        const metadataLanguage = String(this.i18n?.locale || browserLanguage || 'en').trim() || 'en'
+        const metadataRights = 'Copyright 2026 André Fiedler'
+        const version = String(AppVersion.get() || '').trim() || '0.0.0'
+        const contents = PatternSvgExportUtils.buildSvg({
+            strokes: this.state.strokes,
+            palette: this.state.palette,
+            baseColor: this.state.baseColor,
+            lineWidth: this.state.lineWidth * 2.4,
+            width: SVG_EXPORT_WIDTH,
+            height: SVG_EXPORT_HEIGHT,
+            editorName,
+            editorUrl,
+            metadata: {
+                title: metadataTitle,
+                date: metadataDate,
+                creator: editorName,
+                rights: metadataRights,
+                publisher: editorName,
+                identifier: `${fileStem}-${version}`,
+                source: editorUrl || editorName,
+                relation: editorUrl || editorName,
+                language: metadataLanguage,
+                keywords: ['sorbian', 'eggbot', 'ornament', `version-${version}`],
+                coverage: `${SVG_EXPORT_WIDTH}x${SVG_EXPORT_HEIGHT}px`,
+                description: `Generated with ${editorName} using eggbot-app ${version}`,
+                contributors: [editorName]
+            }
+        })
+
+        try {
+            if (window.showSaveFilePicker) {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName,
+                    types: [
+                        {
+                            description: this.#t('messages.svgFileDescription'),
+                            accept: { 'image/svg+xml': ['.svg'] }
+                        }
+                    ]
+                })
+                const writable = await handle.createWritable()
+                await writable.write(contents)
+                await writable.close()
+                this.#setStatus(this.#t('messages.svgExported', { name: handle.name || suggestedName }), 'success')
+                return
+            }
+
+            const blob = new Blob([contents], { type: 'image/svg+xml;charset=utf-8' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = suggestedName
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            this.#setStatus(this.#t('messages.svgDownloaded', { name: suggestedName }), 'success')
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                this.#setStatus(this.#t('messages.svgExportCanceled'), 'info')
+                return
+            }
+            this.#setStatus(this.#t('messages.svgExportFailed', { message: error.message }), 'error')
+        }
+    }
+
     /**
      * Loads a project JSON file.
      * @returns {Promise<void>}

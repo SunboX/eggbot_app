@@ -7,7 +7,9 @@ Live app: [https://eggbot.app/](https://eggbot.app/)
 - configurable motifs and complexity
 - configurable color count and palette
 - deterministic auto-generation with seed control
+- adjustable drawable zone (safe top/bottom margins)
 - project save/load/share
+- SVG export of current visible pattern
 - local project storage
 - rotatable 3D egg preview
 - direct EggBot drawing via Web Serial (EBB command stream)
@@ -35,9 +37,10 @@ Open [http://localhost:3000/](http://localhost:3000/).
 1. Select a pattern preset.
 2. Adjust settings and color palette.
 3. Re-generate until design fits.
-4. Inspect the texture on the 3D egg.
-5. Save/store/share project.
-6. Connect EggBot and draw.
+4. Adjust pattern height/drawable zone for your egg geometry.
+5. Inspect the texture on the 3D egg.
+6. Save/store/share project or export SVG.
+7. Connect EggBot and draw.
 
 ## EggBot Notes
 

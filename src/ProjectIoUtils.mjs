@@ -1,4 +1,5 @@
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
+import { AppVersion } from './AppVersion.mjs'
 
 /**
  * Project serialization and normalization helpers.
@@ -48,15 +49,19 @@ export class ProjectIoUtils {
      */
     static buildProjectPayload(state) {
         return {
-            version: 1,
+            version: AppVersion.get(),
+            schemaVersion: 1,
             projectName: String(state.projectName || '').trim() || 'Sorbische Komposition',
             preset: String(state.preset || 'traditional-mix'),
             seed: Math.trunc(ProjectIoUtils.#toNumber(state.seed, 1)),
             symmetry: Math.max(2, Math.min(24, Math.trunc(ProjectIoUtils.#toNumber(state.symmetry, 8)))),
             density: Math.max(0.05, Math.min(1, ProjectIoUtils.#toNumber(state.density, 0.58))),
             bands: Math.max(1, Math.min(16, Math.trunc(ProjectIoUtils.#toNumber(state.bands, 6)))),
+            ornamentSize: Math.max(0.5, Math.min(2, ProjectIoUtils.#toNumber(state.ornamentSize, 1))),
+            ornamentCount: Math.max(0.5, Math.min(2, ProjectIoUtils.#toNumber(state.ornamentCount, 1))),
+            ornamentDistribution: Math.max(0.6, Math.min(1.6, ProjectIoUtils.#toNumber(state.ornamentDistribution, 1))),
             lineWidth: Math.max(0.5, Math.min(4, ProjectIoUtils.#toNumber(state.lineWidth, 1.8))),
-            importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 1))),
+            importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 0.85))),
             showHorizontalLines: ProjectIoUtils.#toBoolean(state.showHorizontalLines, true),
             baseColor: String(state.baseColor || '#efe7ce'),
             palette: Array.isArray(state.palette)

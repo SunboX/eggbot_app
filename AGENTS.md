@@ -41,6 +41,7 @@
 
 ## Commit & Pull Request Guidelines
 - Commit messages should start with prefixes like `feature:`, `fix:`, or `chore:` followed by a short imperative summary.
+- With every change or update, increment the app version in `package.json`.
 - Include affected areas and test results in merge request summaries.
 - Attach screenshots for visible UI changes.
 
