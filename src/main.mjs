@@ -8,6 +8,7 @@ import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
 import { PatternSvgExportUtils } from './PatternSvgExportUtils.mjs'
 import { EggScene } from './EggScene.mjs'
 import { EggBotSerial } from './EggBotSerial.mjs'
+import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
@@ -836,7 +837,12 @@ class AppController {
     async #saveProjectToFile() {
         const payload = ProjectIoUtils.buildProjectPayload(this.state)
         const contents = JSON.stringify(payload, null, 2)
-        const suggestedName = `${(this.state.projectName || this.#t('project.defaultFileStem')).replace(/\s+/g, '-').toLowerCase()}.json`
+        const suggestedName = ProjectFilenameUtils.buildFileName(
+            this.state.projectName,
+            this.#t('project.defaultFileStem'),
+            this.state.seed,
+            'json'
+        )
         try {
             if (window.showSaveFilePicker) {
                 const handle = await window.showSaveFilePicker({
@@ -886,8 +892,17 @@ class AppController {
             return
         }
 
-        const fileStem = (this.state.projectName || this.#t('project.defaultFileStem')).replace(/\s+/g, '-').toLowerCase()
-        const suggestedName = `${fileStem}.svg`
+        const fileStem = ProjectFilenameUtils.buildFileStem(
+            this.state.projectName,
+            this.#t('project.defaultFileStem'),
+            this.state.seed
+        )
+        const suggestedName = ProjectFilenameUtils.buildFileName(
+            this.state.projectName,
+            this.#t('project.defaultFileStem'),
+            this.state.seed,
+            'svg'
+        )
         const editorName = String(document?.title || 'eggbot-app').trim() || 'eggbot-app'
         const editorUrl = String(window?.location?.href || '').trim()
         const metadataTitle = String(this.state.projectName || this.#t('project.defaultFileStem')).trim() || 'Sorbian egg composition'
