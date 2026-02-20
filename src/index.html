@@ -332,6 +332,84 @@
             </footer>
         </div>
 
+        <div class="webmcp-declarative" aria-hidden="true">
+            <form
+                data-webmcp-form-design
+                toolname="eggbot_form_apply_design"
+                tooldescription="Apply EggBot design settings."
+                toolautosubmit
+            >
+                <input type="number" name="seed" />
+                <input type="text" name="preset" />
+                <input type="number" name="symmetry" />
+                <input type="number" step="0.01" name="density" />
+                <input type="number" name="bands" />
+                <input type="number" step="0.01" name="ornamentSize" />
+                <input type="number" step="0.01" name="ornamentCount" />
+                <input type="number" step="0.01" name="ornamentDistribution" />
+                <input type="number" step="0.1" name="lineWidth" />
+                <input type="number" step="0.05" name="importHeightScale" />
+                <input type="checkbox" name="showHorizontalLines" value="true" />
+                <input type="checkbox" name="rerollSeed" value="true" />
+                <input type="checkbox" name="regenerate" value="true" />
+                <button type="submit">Apply design</button>
+            </form>
+
+            <form
+                data-webmcp-form-project
+                toolname="eggbot_form_apply_project_json"
+                tooldescription="Apply EggBot project JSON."
+                toolautosubmit
+            >
+                <textarea name="project"></textarea>
+                <button type="submit">Apply project</button>
+            </form>
+
+            <form
+                data-webmcp-form-machine
+                toolname="eggbot_form_machine_action"
+                tooldescription="Run EggBot machine action."
+                toolautosubmit
+            >
+                <select name="action">
+                    <option value="connect">connect</option>
+                    <option value="disconnect">disconnect</option>
+                    <option value="draw">draw</option>
+                    <option value="stop">stop</option>
+                </select>
+                <input type="checkbox" name="confirm" value="true" />
+                <button type="submit">Run machine action</button>
+            </form>
+
+            <form
+                data-webmcp-form-local
+                toolname="eggbot_form_local_project_action"
+                tooldescription="Run local project storage action."
+                toolautosubmit
+            >
+                <select name="action">
+                    <option value="list">list</option>
+                    <option value="store">store</option>
+                    <option value="load">load</option>
+                    <option value="delete">delete</option>
+                </select>
+                <input type="text" name="name" />
+                <input type="text" name="id" />
+                <input type="checkbox" name="confirm" value="true" />
+                <button type="submit">Run local action</button>
+            </form>
+        </div>
+
+        <script>
+            window.__webModelContextOptions = {
+                transport: {
+                    tabServer: {
+                        allowedOrigins: ['*']
+                    }
+                }
+            }
+        </script>
+        <script src="/node_modules/@mcp-b/global/dist/index.iife.js"></script>
         <script type="importmap">
             {
                 "imports": {

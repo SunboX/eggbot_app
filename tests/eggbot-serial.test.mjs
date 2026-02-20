@@ -131,6 +131,41 @@ function createMockPort(info = {}, versionLine = 'EBBv3.0') {
     }
 }
 
+/**
+ * Installs a minimal fast-timer window mock for draw-loop tests.
+ * @returns {() => void}
+ */
+function installFastWindowTimers() {
+    const originalWindow = globalThis.window
+    globalThis.window = {
+        setTimeout: (callback) => {
+            queueMicrotask(callback)
+            return 1
+        },
+        clearTimeout: () => {},
+        localStorage: createLocalStorageMock()
+    }
+    return () => {
+        globalThis.window = originalWindow
+    }
+}
+
+/**
+ * Creates a connected serial instance with command capture hooks.
+ * @returns {{ serial: EggBotSerial, commands: string[] }}
+ */
+function createConnectedDrawSerial() {
+    const serial = new EggBotSerial()
+    const commands = []
+    serial.port = /** @type {SerialPort} */ ({})
+    serial.writer = /** @type {WritableStreamDefaultWriter<Uint8Array>} */ ({})
+    serial.sendCommand = async (command) => {
+        commands.push(command)
+        return ''
+    }
+    return { serial, commands }
+}
+
 test('EggBotSerial.connectForDraw should use remembered granted port without chooser', async () => {
     const rememberedPort = createMockPort({ usbVendorId: 0x1234, usbProductId: 0x5678 })
     const mockedBrowser = installBrowserMocks({
@@ -231,5 +266,161 @@ test('EggBotSerial.isCurrentPort should only match the active connected port', a
         assert.equal(serial.isCurrentPort(activePort), false)
     } finally {
         mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.drawStrokes should preserve command ordering and progress with worker-prepared paths', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+    const statuses = []
+    const progress = []
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 48, y: 0 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                msPerStep: 1,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false
+            },
+            {
+                onStatus: (text) => statuses.push(text),
+                onProgress: (done, total) => progress.push({ done, total })
+            }
+        )
+
+        assert.equal(commands[0], 'SC,4,12000')
+        assert.equal(commands[1], 'SC,5,17000')
+        assert.equal(commands[2], 'EM,1,1')
+        assert.equal(commands.some((command) => command.startsWith('SM,')), true)
+        assert.equal(commands[commands.length - 1], 'EM,0,0')
+        assert.deepEqual(progress, [{ done: 1, total: 1 }])
+        assert.equal(statuses.includes('Draw finished.'), true)
+    } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should abort cleanly when stop is requested during path preprocessing', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+    const statuses = []
+    let resolvePathPrep = null
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return new Promise((resolve) => {
+                resolvePathPrep = resolve
+            })
+        }
+    }
+
+    try {
+        const drawPromise = serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.2, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                msPerStep: 1,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false
+            },
+            {
+                onStatus: (text) => statuses.push(text)
+            }
+        )
+        serial.stop()
+        resolvePathPrep({
+            strokes: [
+                [
+                    { x: 0, y: 0 },
+                    { x: 40, y: 0 }
+                ]
+            ]
+        })
+        await drawPromise
+
+        assert.deepEqual(commands, [])
+        assert.equal(statuses.includes('Draw aborted by user.'), true)
+    } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should fallback to synchronous preprocessing when path worker fails', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+    const originalWarn = console.warn
+    console.warn = () => {}
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            throw new Error('synthetic path worker failure')
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.12, v: 0.52 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                msPerStep: 1,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false
+            }
+        )
+
+        assert.equal(serial.disablePathWorker, true)
+        assert.equal(commands.some((command) => command.startsWith('SM,')), true)
+        assert.equal(commands[commands.length - 1], 'EM,0,0')
+    } finally {
+        console.warn = originalWarn
+        restoreTimers()
     }
 })

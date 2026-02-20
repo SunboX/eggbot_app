@@ -1,3 +1,6 @@
+import { EggBotPathComputeTasks } from './EggBotPathComputeTasks.mjs'
+import { EggBotPathWorkerClient } from './EggBotPathWorkerClient.mjs'
+
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
 
 /**
@@ -23,6 +26,8 @@ export class EggBotSerial {
         this.readLoopAbort = false
         this.drawing = false
         this.abortDrawing = false
+        this.pathWorker = new EggBotPathWorkerClient()
+        this.disablePathWorker = false
     }
 
     /**
@@ -83,6 +88,22 @@ export class EggBotSerial {
     async disconnect() {
         this.abortDrawing = true
         await this.#releaseConnectionResources()
+    }
+
+    /**
+     * Pre-initializes the draw-path worker.
+     */
+    warmupPathWorker() {
+        if (this.disablePathWorker) return
+        this.pathWorker.warmup()
+    }
+
+    /**
+     * Disposes draw-path worker resources.
+     */
+    disposePathWorker() {
+        this.pathWorker.dispose()
+        this.disablePathWorker = true
     }
 
     /**
@@ -337,37 +358,41 @@ export class EggBotSerial {
 
         this.abortDrawing = false
         this.drawing = true
-        onStatus('Configuring EBB...')
-
         const current = { x: 0, y: 0 }
+        let drawCommandsIssued = false
 
         try {
+            onStatus('Preparing draw path...')
+            const drawableStrokes = await this.#prepareDrawableStrokes(strokes, cfg, current.x)
+            if (this.abortDrawing) {
+                onStatus('Draw aborted by user.')
+                return
+            }
+
+            onStatus('Configuring EBB...')
             await this.sendCommand(`SC,4,${cfg.servoUp}`)
             await this.sendCommand(`SC,5,${cfg.servoDown}`)
             await this.sendCommand('EM,1,1')
+            drawCommandsIssued = true
             await this.#setPen(false, cfg)
 
-            const drawableStrokes = strokes.filter((stroke) => Array.isArray(stroke?.points) && stroke.points.length > 1)
             const total = drawableStrokes.length
 
             for (let strokeIndex = 0; strokeIndex < total; strokeIndex += 1) {
                 if (this.abortDrawing) break
 
-                const stroke = drawableStrokes[strokeIndex]
-                const scaled = this.#unwrapAndScaleStroke(stroke.points, cfg)
-                const aligned = this.#alignStrokeXToCurrent(scaled, current.x, cfg.stepsPerTurn)
-
-                if (aligned.length < 2) continue
+                const preparedStroke = drawableStrokes[strokeIndex]
+                if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: moving to start`)
-                await this.#moveTo(aligned[0], current, cfg)
+                await this.#moveTo(preparedStroke[0], current, cfg)
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: pen down`)
                 await this.#setPen(true, cfg)
 
-                for (let pointIndex = 1; pointIndex < aligned.length; pointIndex += 1) {
+                for (let pointIndex = 1; pointIndex < preparedStroke.length; pointIndex += 1) {
                     if (this.abortDrawing) break
-                    await this.#moveTo(aligned[pointIndex], current, cfg)
+                    await this.#moveTo(preparedStroke[pointIndex], current, cfg)
                 }
 
                 await this.#setPen(false, cfg)
@@ -380,15 +405,17 @@ export class EggBotSerial {
                 onStatus('Draw finished.')
             }
         } finally {
-            try {
-                await this.#setPen(false, cfg)
-            } catch (_error) {
-                // Ignore cleanup failures.
-            }
-            try {
-                await this.sendCommand('EM,0,0')
-            } catch (_error) {
-                // Ignore cleanup failures.
+            if (drawCommandsIssued) {
+                try {
+                    await this.#setPen(false, cfg)
+                } catch (_error) {
+                    // Ignore cleanup failures.
+                }
+                try {
+                    await this.sendCommand('EM,0,0')
+                } catch (_error) {
+                    // Ignore cleanup failures.
+                }
             }
             this.drawing = false
         }
@@ -485,63 +512,36 @@ export class EggBotSerial {
     }
 
     /**
-     * Converts wrapped UV points to step coordinates.
-     * @param {Array<{u:number,v:number}>} points
+     * Prepares all drawable strokes with worker-first fallback behavior.
+     * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
      * @param {{ stepsPerTurn: number, penRangeSteps: number }} cfg
-     * @returns {Array<{x:number,y:number}>}
+     * @param {number} startX
+     * @returns {Promise<Array<Array<{x:number,y:number}>>>}
      */
-    #unwrapAndScaleStroke(points, cfg) {
-        if (!points.length) return []
-
-        const unwrapped = [
-            {
-                u: points[0].u,
-                v: points[0].v
-            }
-        ]
-
-        for (let index = 1; index < points.length; index += 1) {
-            const prev = unwrapped[index - 1]
-            const current = points[index]
-            const options = [current.u - 1, current.u, current.u + 1]
-            let selected = options[0]
-            let distance = Math.abs(options[0] - prev.u)
-            for (let optionIndex = 1; optionIndex < options.length; optionIndex += 1) {
-                const candidate = options[optionIndex]
-                const candidateDistance = Math.abs(candidate - prev.u)
-                if (candidateDistance < distance) {
-                    distance = candidateDistance
-                    selected = candidate
-                }
-            }
-            unwrapped.push({
-                u: selected,
-                v: current.v
-            })
+    async #prepareDrawableStrokes(strokes, cfg, startX) {
+        const payload = {
+            strokes: Array.isArray(strokes) ? strokes : [],
+            drawConfig: {
+                stepsPerTurn: cfg.stepsPerTurn,
+                penRangeSteps: cfg.penRangeSteps
+            },
+            startX
         }
 
-        const maxY = cfg.penRangeSteps / 2
-        return unwrapped.map((point) => ({
-            x: Math.round(point.u * cfg.stepsPerTurn),
-            y: Math.max(-maxY, Math.min(maxY, Math.round((0.5 - point.v) * cfg.penRangeSteps)))
-        }))
-    }
+        if (!this.disablePathWorker) {
+            try {
+                const result = await this.pathWorker.prepareDrawStrokes(payload)
+                if (this.abortDrawing) return []
+                return Array.isArray(result?.strokes) ? result.strokes : []
+            } catch (error) {
+                this.disablePathWorker = true
+                console.warn('EggBot path worker failed; falling back to main-thread preprocessing.', error)
+            }
+        }
 
-    /**
-     * Aligns a stroke along X to minimize travel from current position.
-     * @param {Array<{x:number,y:number}>} points
-     * @param {number} currentX
-     * @param {number} stepsPerTurn
-     * @returns {Array<{x:number,y:number}>}
-     */
-    #alignStrokeXToCurrent(points, currentX, stepsPerTurn) {
-        if (!points.length) return []
-        const shiftTurns = Math.round((currentX - points[0].x) / stepsPerTurn)
-        const shift = shiftTurns * stepsPerTurn
-        return points.map((point) => ({
-            x: point.x + shift,
-            y: point.y
-        }))
+        if (this.abortDrawing) return []
+        const fallback = EggBotPathComputeTasks.prepareDrawStrokes(payload)
+        return Array.isArray(fallback?.strokes) ? fallback.strokes : []
     }
 
     /**
