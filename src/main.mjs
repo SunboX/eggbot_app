@@ -12,12 +12,24 @@ import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
+import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
+import { PatternRenderWorkerClient } from './PatternRenderWorkerClient.mjs'
 import { PatternImportControlUtils } from './PatternImportControlUtils.mjs'
+import { WebMcpBridge } from './WebMcpBridge.mjs'
+import { IdleScheduler } from './IdleScheduler.mjs'
+import { SvgProjectNameUtils } from './SvgProjectNameUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
 const IMPORT_HEIGHT_REFERENCE = 800
 const SVG_EXPORT_WIDTH = 2048
 const SVG_EXPORT_HEIGHT = 1024
+const IDLE_TIMEOUT_STARTUP_LOCAL_PROJECTS_MS = 500
+const IDLE_TIMEOUT_STARTUP_WEBMCP_MS = 900
+const IDLE_TIMEOUT_STARTUP_WORKERS_MS = 1500
+const IDLE_TIMEOUT_PROJECT_ARTIFACTS_MS = 1000
+const IDLE_TIMEOUT_LOCAL_PROJECT_RENDER_MS = 800
+const LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE = 30
+const LOCAL_PROJECT_RENDER_IDLE_THRESHOLD = 100
 /**
  * App orchestration for controls, rendering, persistence, and EggBot drawing.
  */
@@ -30,14 +42,33 @@ class AppController {
         this.state = AppRuntimeConfig.createDefaultState()
         this.state.strokes = []
         this.renderDebounceTimer = 0
-        this.renderer2d = new PatternRenderer2D(this.els.textureCanvas)
+        this.renderer2d = null
+        this.fallbackRenderCanvas = null
+        this.activeTextureCanvas = this.els.textureCanvas
+        this.renderBackendMode = 'main'
         this.eggScene = new EggScene(this.els.eggCanvas)
         this.serial = new EggBotSerial()
+        this.patternComputeWorker = new PatternComputeWorkerClient()
         this.patternImportWorker = new PatternImportWorkerClient()
+        this.patternRenderWorker = new PatternRenderWorkerClient()
+        this.renderToken = 0
+        this.pendingGeneratedRenderPromise = null
+        this.disableComputeWorker = false
+        this.disableRenderWorker = false
+        this.textureCanvasTransferredToWorker = false
         this.isDrawing = false
         this.isPatternImporting = false
+        this.idleTasks = new Map()
+        this.hasDeferredStartupTasksScheduled = false
+        this.projectArtifactsDirty = true
+        this.projectArtifactsRevision = 0
+        this.projectArtifactsCachedRevision = -1
+        this.cachedProjectPayload = null
+        this.cachedProjectShareUrl = ''
+        this.pendingSavedProjectsSelectRender = null
         this.i18n = i18n
         this.importedPattern = null
+        this.webMcpBridge = null
         this.autoGenerateOrnamentControls = [
             this.els.preset,
             this.els.seed,
@@ -68,12 +99,16 @@ class AppController {
         this.#applyProjectFromUrl()
         this.#bindEvents()
         this.#bindSerialLifecycleEvents()
-        this.els.textureCanvas.addEventListener('pattern-rendered', () => this.eggScene.updateTexture(this.els.textureCanvas))
-        this.#refreshSavedProjectsSelect()
+        this.#initializeRenderBackend()
+        window.addEventListener('beforeunload', () => this.#disposeBackgroundWorkers(), { once: true })
+        this.els.textureCanvas.addEventListener('pattern-rendered', () =>
+            this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
+        )
         this.#renderPattern()
         this.#syncConnectionUi()
         this.#syncPatternImportUi()
         this.#syncAutoGenerateOrnamentControlsUi()
+        this.#scheduleProjectArtifactsRefreshIdle()
     }
     /**
      * Resolves translated text.
@@ -121,6 +156,297 @@ class AppController {
         this.els.status.textContent = text
         this.els.status.dataset.type = type
     }
+
+    /**
+     * Schedules one deferred startup pass after first visible render.
+     */
+    #scheduleDeferredStartupTasks() {
+        if (this.hasDeferredStartupTasksScheduled) return
+        this.hasDeferredStartupTasksScheduled = true
+        this.#scheduleIdleTask(
+            'startup-local-projects',
+            () => this.#refreshSavedProjectsSelect('', { preferIdle: true }),
+            IDLE_TIMEOUT_STARTUP_LOCAL_PROJECTS_MS
+        )
+        this.#scheduleIdleTask('startup-webmcp', () => this.#initWebMcpBridge(), IDLE_TIMEOUT_STARTUP_WEBMCP_MS)
+        this.#scheduleIdleTask('startup-workers', () => this.#warmupBackgroundWorkers(), IDLE_TIMEOUT_STARTUP_WORKERS_MS)
+    }
+
+    /**
+     * Warms background workers so the first real task starts faster.
+     */
+    #warmupBackgroundWorkers() {
+        try {
+            this.patternComputeWorker.warmup()
+        } catch (error) {
+            console.warn('Pattern compute worker warmup failed:', error)
+        }
+        try {
+            this.patternImportWorker.warmup()
+        } catch (error) {
+            console.warn('Pattern import worker warmup failed:', error)
+        }
+        if (!this.disableRenderWorker && this.renderBackendMode === 'worker') {
+            try {
+                this.patternRenderWorker.warmup()
+            } catch (error) {
+                console.warn('Pattern render worker warmup failed:', error)
+            }
+        }
+        try {
+            this.serial.warmupPathWorker()
+        } catch (error) {
+            console.warn('EggBot path worker warmup failed:', error)
+        }
+    }
+
+    /**
+     * Initializes texture render backend with worker-first fallback.
+     */
+    #initializeRenderBackend() {
+        if (this.disableRenderWorker) {
+            this.renderBackendMode = 'main'
+            this.#ensureMainThreadRenderer(false)
+            return
+        }
+        if (!PatternRenderWorkerClient.isSupported(this.els.textureCanvas)) {
+            this.disableRenderWorker = true
+            this.renderBackendMode = 'main'
+            this.#ensureMainThreadRenderer(false)
+            return
+        }
+        try {
+            this.patternRenderWorker.init(this.els.textureCanvas)
+            this.textureCanvasTransferredToWorker = true
+            this.activeTextureCanvas = this.els.textureCanvas
+            this.renderBackendMode = 'worker'
+        } catch (error) {
+            this.disableRenderWorker = true
+            this.renderBackendMode = 'main'
+            console.warn('Pattern render worker unavailable; falling back to main-thread renderer.', error)
+            this.#ensureMainThreadRenderer(false)
+        }
+    }
+
+    /**
+     * Creates a main-thread renderer instance on DOM or detached fallback canvas.
+     * @param {boolean} useFallbackCanvas
+     */
+    #ensureMainThreadRenderer(useFallbackCanvas) {
+        const targetCanvas = this.#resolveMainThreadRenderCanvas(useFallbackCanvas)
+        if (this.renderer2d?.canvas === targetCanvas) {
+            this.activeTextureCanvas = targetCanvas
+            return
+        }
+        this.renderer2d = new PatternRenderer2D(targetCanvas)
+        this.activeTextureCanvas = targetCanvas
+    }
+
+    /**
+     * Resolves the canvas used for main-thread texture rendering.
+     * @param {boolean} useFallbackCanvas
+     * @returns {HTMLCanvasElement}
+     */
+    #resolveMainThreadRenderCanvas(useFallbackCanvas) {
+        if (!useFallbackCanvas) {
+            return this.els.textureCanvas
+        }
+        if (!this.fallbackRenderCanvas) {
+            this.fallbackRenderCanvas = document.createElement('canvas')
+            this.fallbackRenderCanvas.width = this.els.textureCanvas.width
+            this.fallbackRenderCanvas.height = this.els.textureCanvas.height
+        }
+        return this.fallbackRenderCanvas
+    }
+
+    /**
+     * Switches to permanent main-thread render mode after worker failure.
+     */
+    #switchToMainThreadRenderBackend() {
+        this.disableRenderWorker = true
+        this.renderBackendMode = 'main'
+        try {
+            this.patternRenderWorker.dispose()
+        } catch (_error) {
+            // Ignore disposal races.
+        }
+        this.#ensureMainThreadRenderer(this.textureCanvasTransferredToWorker)
+    }
+
+    /**
+     * Returns the currently active texture canvas for 3D updates.
+     * @returns {HTMLCanvasElement}
+     */
+    #resolveActiveTextureCanvas() {
+        return this.activeTextureCanvas || this.els.textureCanvas
+    }
+
+    /**
+     * Schedules one named idle task and replaces any previous one with the same name.
+     * @param {string} name
+     * @param {(deadline: { didTimeout: boolean, timeRemaining: () => number }) => void} callback
+     * @param {number} timeoutMs
+     */
+    #scheduleIdleTask(name, callback, timeoutMs) {
+        this.#cancelIdleTask(name)
+        let handle = null
+        handle = IdleScheduler.schedule((deadline) => {
+            if (this.idleTasks.get(name) !== handle) return
+            this.idleTasks.delete(name)
+            callback(deadline)
+        }, { timeout: timeoutMs })
+        this.idleTasks.set(name, handle)
+    }
+
+    /**
+     * Cancels one pending named idle task.
+     * @param {string} name
+     */
+    #cancelIdleTask(name) {
+        const handle = this.idleTasks.get(name)
+        if (!handle) return
+        handle.cancel()
+        this.idleTasks.delete(name)
+    }
+
+    /**
+     * Cancels all pending idle tasks.
+     */
+    #cancelAllIdleTasks() {
+        this.idleTasks.forEach((handle) => handle.cancel())
+        this.idleTasks.clear()
+    }
+
+    /**
+     * Marks project export/share artifacts as stale and schedules idle refresh.
+     */
+    #markProjectArtifactsDirty() {
+        this.projectArtifactsRevision += 1
+        this.projectArtifactsDirty = true
+        this.#scheduleProjectArtifactsRefreshIdle()
+    }
+
+    /**
+     * Schedules idle refresh for cached project artifacts.
+     */
+    #scheduleProjectArtifactsRefreshIdle() {
+        const revision = this.projectArtifactsRevision
+        this.#scheduleIdleTask(
+            'project-artifacts-refresh',
+            () => {
+                if (revision !== this.projectArtifactsRevision) {
+                    this.#scheduleProjectArtifactsRefreshIdle()
+                    return
+                }
+                this.#refreshProjectArtifactsCache(revision)
+            },
+            IDLE_TIMEOUT_PROJECT_ARTIFACTS_MS
+        )
+    }
+
+    /**
+     * Rebuilds cached project payload and share URL.
+     * @param {number} revision
+     */
+    #refreshProjectArtifactsCache(revision) {
+        const payload = ProjectIoUtils.buildProjectPayload(this.state)
+        this.cachedProjectPayload = payload
+        this.cachedProjectShareUrl = this.#buildProjectShareUrlFromPayload(payload)
+        this.projectArtifactsCachedRevision = revision
+        this.projectArtifactsDirty = false
+    }
+
+    /**
+     * Returns the latest normalized project payload with sync fallback.
+     * @returns {Record<string, any>}
+     */
+    #getProjectPayload() {
+        if (
+            !this.projectArtifactsDirty &&
+            this.cachedProjectPayload &&
+            this.projectArtifactsCachedRevision === this.projectArtifactsRevision
+        ) {
+            return this.cachedProjectPayload
+        }
+        this.#cancelIdleTask('project-artifacts-refresh')
+        this.#refreshProjectArtifactsCache(this.projectArtifactsRevision)
+        return this.cachedProjectPayload
+    }
+
+    /**
+     * Returns cached share URL with sync fallback.
+     * @returns {string}
+     */
+    #getShareUrlCached() {
+        if (
+            !this.projectArtifactsDirty &&
+            this.cachedProjectShareUrl &&
+            this.projectArtifactsCachedRevision === this.projectArtifactsRevision
+        ) {
+            return this.cachedProjectShareUrl
+        }
+        const payload = this.#getProjectPayload()
+        this.cachedProjectShareUrl = this.#buildProjectShareUrlFromPayload(payload)
+        return this.cachedProjectShareUrl
+    }
+
+    /**
+     * Builds share URL using a prebuilt project payload.
+     * @param {Record<string, any>} payload
+     * @returns {string}
+     */
+    #buildProjectShareUrlFromPayload(payload) {
+        const encoded = ProjectUrlUtils.encodeProjectPayloadParam(payload)
+        const url = new URL(window.location.href)
+        url.searchParams.set(ProjectUrlUtils.PROJECT_PARAM, encoded)
+        return url.toString()
+    }
+
+    /**
+     * Initializes WebMCP bridge registration with app command callbacks.
+     */
+    #initWebMcpBridge() {
+        if (this.webMcpBridge) return
+        try {
+            this.webMcpBridge = new WebMcpBridge({
+                commands: this.#createWebMcpCommands(),
+                root: document
+            })
+            this.webMcpBridge.init()
+        } catch (error) {
+            console.error('WebMCP initialization failed:', error)
+        }
+    }
+
+    /**
+     * Builds command callbacks consumed by `WebMcpBridge`.
+     * @returns {Record<string, (...args: any[]) => Promise<Record<string, any>> | Record<string, any>>}
+     */
+    #createWebMcpCommands() {
+        return {
+            getState: () => this.#webMcpGetState(),
+            setDesignSettings: (args) => this.#webMcpSetDesignSettings(args),
+            setColorSettings: (args) => this.#webMcpSetColorSettings(args),
+            setMotifSettings: (args) => this.#webMcpSetMotifSettings(args),
+            setDrawConfig: (args) => this.#webMcpSetDrawConfig(args),
+            rerollSeed: () => this.#webMcpRerollSeed(),
+            regeneratePattern: () => this.#webMcpRegeneratePattern(),
+            importSvgText: (args) => this.#webMcpImportSvgText(args),
+            applyProjectJson: (args) => this.#webMcpApplyProjectJson(args),
+            getProjectJson: () => this.#webMcpGetProjectJson(),
+            getShareUrl: () => this.#webMcpGetShareUrl(),
+            buildExportSvg: () => this.#webMcpBuildExportSvg(),
+            localProjectsList: () => this.#webMcpLocalProjectsList(),
+            localProjectStore: (args) => this.#webMcpLocalProjectStore(args),
+            localProjectLoad: (args) => this.#webMcpLocalProjectLoad(args),
+            localProjectDelete: (args) => this.#webMcpLocalProjectDelete(args),
+            serialConnect: () => this.#webMcpSerialConnect(),
+            serialDisconnect: () => this.#webMcpSerialDisconnect(),
+            serialDraw: () => this.#webMcpSerialDraw(),
+            serialStop: () => this.#webMcpSerialStop(),
+            setLocale: (args) => this.#webMcpSetLocale(args)
+        }
+    }
     /**
      * Applies URL-embedded project if present.
      */
@@ -132,6 +458,7 @@ class AppController {
             this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(payload)
             this.state.strokes = []
+            this.#markProjectArtifactsDirty()
             this.#syncControlsFromState()
             this.#setStatus(this.#t('messages.loadedFromSharedUrl'), 'success')
         } catch (error) {
@@ -147,6 +474,7 @@ class AppController {
         })
         this.els.projectName.addEventListener('input', () => {
             this.state.projectName = this.els.projectName.value.trim() || this.#t('project.defaultName')
+            this.#markProjectArtifactsDirty()
         })
         this.els.preset.addEventListener('change', () => {
             this.#clearImportedPattern()
@@ -307,33 +635,39 @@ class AppController {
                 this.els.stepsPerTurn.value,
                 this.state.drawConfig.stepsPerTurn
             )
+            this.#markProjectArtifactsDirty()
         })
         this.els.penRangeSteps.addEventListener('change', () => {
             this.state.drawConfig.penRangeSteps = AppController.#parseInteger(
                 this.els.penRangeSteps.value,
                 this.state.drawConfig.penRangeSteps
             )
+            this.#markProjectArtifactsDirty()
         })
         this.els.msPerStep.addEventListener('change', () => {
             this.state.drawConfig.msPerStep = AppController.#parseFloat(
                 this.els.msPerStep.value,
                 this.state.drawConfig.msPerStep
             )
+            this.#markProjectArtifactsDirty()
         })
         this.els.servoUp.addEventListener('change', () => {
             this.state.drawConfig.servoUp = AppController.#parseInteger(
                 this.els.servoUp.value,
                 this.state.drawConfig.servoUp
             )
+            this.#markProjectArtifactsDirty()
         })
         this.els.servoDown.addEventListener('change', () => {
             this.state.drawConfig.servoDown = AppController.#parseInteger(
                 this.els.servoDown.value,
                 this.state.drawConfig.servoDown
             )
+            this.#markProjectArtifactsDirty()
         })
         this.els.invertPen.addEventListener('change', () => {
             this.state.drawConfig.invertPen = this.els.invertPen.checked
+            this.#markProjectArtifactsDirty()
         })
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
@@ -349,6 +683,10 @@ class AppController {
         this.els.shareProject.addEventListener('click', () => this.#shareProjectUrl())
         if (this.els.storeLocal) {
             this.els.storeLocal.addEventListener('click', () => this.#storeProjectLocally())
+        }
+        if (this.els.localPatterns) {
+            this.els.localPatterns.addEventListener('focus', () => this.#flushPendingSavedProjectsSelectRender())
+            this.els.localPatterns.addEventListener('pointerdown', () => this.#flushPendingSavedProjectsSelectRender())
         }
         if (this.els.loadLocal) {
             this.els.loadLocal.addEventListener('click', () => this.#loadSelectedLocalProject())
@@ -369,6 +707,18 @@ class AppController {
         navigator.serial.addEventListener('disconnect', (event) => {
             this.#handleSerialDisconnect(event)
         })
+    }
+
+    /**
+     * Disposes all background worker resources.
+     */
+    #disposeBackgroundWorkers() {
+        this.#cancelAllIdleTasks()
+        this.pendingSavedProjectsSelectRender = null
+        this.patternComputeWorker.dispose()
+        this.patternImportWorker.dispose()
+        this.patternRenderWorker.dispose()
+        this.serial.disposePathWorker()
     }
 
     /**
@@ -401,7 +751,7 @@ class AppController {
         this.#applyLocaleToUi()
         this.#renderPaletteControls()
         const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
-        this.#refreshSavedProjectsSelect(selectedLocalProjectId)
+        this.#refreshSavedProjectsSelect(selectedLocalProjectId, { preferIdle: false })
     }
 
     /**
@@ -417,6 +767,33 @@ class AppController {
             parsedHeightScale: this.importedPattern.heightScale,
             activeHeightScale: this.state.importHeightScale
         })
+    }
+
+    /**
+     * Builds one worker-safe snapshot of generation settings.
+     * @returns {Record<string, any>}
+     */
+    #buildGeneratedPatternWorkerState() {
+        return {
+            seed: this.state.seed,
+            preset: this.state.preset,
+            symmetry: this.state.symmetry,
+            density: this.state.density,
+            bands: this.state.bands,
+            ornamentSize: this.state.ornamentSize,
+            ornamentCount: this.state.ornamentCount,
+            ornamentDistribution: this.state.ornamentDistribution,
+            showHorizontalLines: this.state.showHorizontalLines,
+            palette: Array.isArray(this.state.palette) ? [...this.state.palette] : [],
+            motifs: {
+                dots: Boolean(this.state?.motifs?.dots),
+                rays: Boolean(this.state?.motifs?.rays),
+                honeycomb: Boolean(this.state?.motifs?.honeycomb),
+                wolfTeeth: Boolean(this.state?.motifs?.wolfTeeth),
+                pineBranch: Boolean(this.state?.motifs?.pineBranch),
+                diamonds: Boolean(this.state?.motifs?.diamonds)
+            }
+        }
     }
 
     /**
@@ -441,19 +818,94 @@ class AppController {
         const skipImportedStatus = Boolean(options.skipImportedStatus)
         const importedSvgText = this.importedPattern ? String(this.importedPattern.svgText || '') : ''
         const importedSvgHeightRatio = this.#resolveActiveRenderHeightRatio()
-        this.state.strokes = this.#buildRenderedStrokes()
-        this.renderer2d.render({
+        this.renderToken += 1
+        const token = this.renderToken
+
+        if (this.importedPattern || this.disableComputeWorker) {
+            this.pendingGeneratedRenderPromise = null
+            this.state.strokes = this.#buildRenderedStrokes()
+            void this.#renderComputedPattern({
+                token,
+                importedSvgText,
+                importedSvgHeightRatio,
+                skipImportedStatus
+            })
+            return
+        }
+
+        const pending = this.#renderGeneratedPatternWithWorker({
+            token,
+            importedSvgText,
+            importedSvgHeightRatio,
+            skipImportedStatus
+        })
+        this.pendingGeneratedRenderPromise = pending
+        pending.finally(() => {
+            if (this.pendingGeneratedRenderPromise === pending) {
+                this.pendingGeneratedRenderPromise = null
+            }
+        })
+    }
+
+    /**
+     * Renders generated strokes through worker thread and ignores stale responses.
+     * @param {{ token: number, importedSvgText: string, importedSvgHeightRatio: number, skipImportedStatus: boolean }} config
+     * @returns {Promise<void>}
+     */
+    async #renderGeneratedPatternWithWorker(config) {
+        try {
+            const result = await this.patternComputeWorker.computeGeneratedRenderedStrokes({
+                state: this.#buildGeneratedPatternWorkerState(),
+                activeHeightRatio: config.importedSvgHeightRatio
+            })
+            if (config.token !== this.renderToken) return
+            this.state.strokes = Array.isArray(result?.strokes) ? result.strokes : []
+        } catch (error) {
+            this.disableComputeWorker = true
+            console.error('Pattern compute worker failed; falling back to main-thread compute.', error)
+            if (config.token !== this.renderToken) return
+            this.state.strokes = this.#buildRenderedStrokes()
+        }
+
+        if (config.token !== this.renderToken) return
+        await this.#renderComputedPattern(config)
+    }
+
+    /**
+     * Renders current stroke state into 2D + 3D output and updates status.
+     * @param {{ token: number, importedSvgText: string, importedSvgHeightRatio: number, skipImportedStatus: boolean }} config
+     * @returns {Promise<void>}
+     */
+    async #renderComputedPattern(config) {
+        if (config.token !== this.renderToken) return
+        const renderInput = {
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
             palette: this.state.palette,
             strokes: this.state.strokes,
-            importedSvgText,
-            importedSvgHeightRatio
-        })
-        if (!importedSvgText) {
-            this.eggScene.updateTexture(this.els.textureCanvas)
+            importedSvgText: config.importedSvgText,
+            importedSvgHeightRatio: config.importedSvgHeightRatio
         }
-        if (skipImportedStatus) return
+
+        try {
+            const renderResult = await this.#renderTextureFrame(renderInput, config.token)
+            if (renderResult?.stale || config.token !== this.renderToken) return
+            if (!config.importedSvgText) {
+                this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
+            } else if (renderResult?.dispatchImportedRenderedEvent) {
+                this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
+            }
+        } catch (error) {
+            console.error('Pattern render failed.', error)
+            if (config.importedSvgText && config.token === this.renderToken) {
+                const reason = String(error?.code || error?.message || 'render-error')
+                this.els.textureCanvas.dispatchEvent(new CustomEvent('pattern-render-failed', { detail: { reason } }))
+            }
+            return
+        }
+
+        this.#scheduleDeferredStartupTasks()
+        if (config.skipImportedStatus) return
         if (this.importedPattern) {
             this.#setStatus(
                 this.#t('messages.patternImported', {
@@ -465,6 +917,90 @@ class AppController {
             return
         }
         this.#setStatus(this.#t('messages.patternGenerated', { count: this.state.strokes.length, seed: this.state.seed }), 'success')
+    }
+
+    /**
+     * Renders one texture frame with worker-first fallback behavior.
+     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
+     * @param {number} token
+     * @returns {Promise<{ stale?: boolean, dispatchImportedRenderedEvent?: boolean }>}
+     */
+    async #renderTextureFrame(input, token) {
+        if (this.renderBackendMode === 'worker' && !this.disableRenderWorker) {
+            try {
+                const result = await this.patternRenderWorker.render(input, token)
+                if (result?.stale || Number(result?.token) !== Number(token)) {
+                    return { stale: true }
+                }
+                this.activeTextureCanvas = this.els.textureCanvas
+                return {
+                    dispatchImportedRenderedEvent: Boolean(input.importedSvgText)
+                }
+            } catch (error) {
+                if (error?.code === 'imported-svg-raster-unsupported' && input.importedSvgText) {
+                    console.warn('Render worker cannot rasterize imported SVG in this runtime. Using main-thread fallback for this render.')
+                    return this.#renderWithMainThreadRenderer(input, this.textureCanvasTransferredToWorker)
+                }
+                console.warn('Render worker failed; switching to main-thread renderer.', error)
+                this.#switchToMainThreadRenderBackend()
+            }
+        }
+
+        return this.#renderWithMainThreadRenderer(input, this.textureCanvasTransferredToWorker)
+    }
+
+    /**
+     * Renders one frame on main thread and proxies imported render events when needed.
+     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
+     * @param {boolean} useFallbackCanvas
+     * @returns {Promise<{ dispatchImportedRenderedEvent: boolean }>}
+     */
+    async #renderWithMainThreadRenderer(input, useFallbackCanvas) {
+        this.#ensureMainThreadRenderer(useFallbackCanvas)
+        const rendererCanvas = this.renderer2d.canvas
+        const proxyImportedEvents = rendererCanvas !== this.els.textureCanvas
+        const importedSvgText = String(input.importedSvgText || '').trim()
+        const hasImportedFallbackRaster = Boolean(importedSvgText && (!Array.isArray(input.strokes) || !input.strokes.length))
+
+        if (hasImportedFallbackRaster) {
+            await new Promise((resolve, reject) => {
+                const onRendered = () => {
+                    cleanup()
+                    if (proxyImportedEvents) {
+                        this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
+                    }
+                    resolve()
+                }
+                const onFailed = (event) => {
+                    cleanup()
+                    const reason = String(event?.detail?.reason || 'image-load-error')
+                    if (proxyImportedEvents) {
+                        this.els.textureCanvas.dispatchEvent(
+                            new CustomEvent('pattern-render-failed', { detail: { reason } })
+                        )
+                    }
+                    const error = new Error('preview-render-failed')
+                    error.code = reason
+                    reject(error)
+                }
+                const cleanup = () => {
+                    rendererCanvas.removeEventListener('pattern-rendered', onRendered)
+                    rendererCanvas.removeEventListener('pattern-render-failed', onFailed)
+                }
+                rendererCanvas.addEventListener('pattern-rendered', onRendered, { once: true })
+                rendererCanvas.addEventListener('pattern-render-failed', onFailed, { once: true })
+                this.renderer2d.render(input)
+            })
+            return { dispatchImportedRenderedEvent: false }
+        }
+
+        this.renderer2d.render(input)
+        if (proxyImportedEvents && importedSvgText) {
+            this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
+        }
+        return {
+            dispatchImportedRenderedEvent: false
+        }
     }
     /**
      * Renders imported SVG preview and waits for async image completion.
@@ -503,6 +1039,7 @@ class AppController {
      * Schedules a delayed render for slider/input changes.
      */
     #scheduleRender() {
+        this.#markProjectArtifactsDirty()
         clearTimeout(this.renderDebounceTimer)
         this.renderDebounceTimer = window.setTimeout(() => {
             this.#renderPattern()
@@ -514,6 +1051,7 @@ class AppController {
     #rerollSeed() {
         this.state.seed = Math.floor(Math.random() * 2147483646) + 1
         this.els.seed.value = String(this.state.seed)
+        this.#markProjectArtifactsDirty()
     }
     /**
      * Syncs all controls from the current state.
@@ -640,7 +1178,7 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #drawCurrentPattern() {
-        if (!this.state.strokes.length) {
+        if (!(await this.#ensureRenderedStrokesReady())) {
             this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
             return
         }
@@ -739,8 +1277,12 @@ class AppController {
             const svgText = await file.text()
             this.#setStatus(this.#t('messages.patternImportParsing', { name: fileName }), 'loading')
             const parsed = await this.#parseImportedPattern(svgText)
+            const importedProjectName =
+                SvgProjectNameUtils.resolveProjectName(svgText, fileName) || this.#t('project.defaultName')
+            this.state.projectName = importedProjectName
+            this.els.projectName.value = importedProjectName
             this.importedPattern = {
-                name: file.name,
+                name: importedProjectName,
                 strokes: parsed.strokes,
                 svgText,
                 heightRatio: parsed.heightRatio,
@@ -759,11 +1301,12 @@ class AppController {
             }
             this.els.colorCount.value = String(this.state.palette.length)
             this.#renderPaletteControls()
+            this.#markProjectArtifactsDirty()
             this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: fileName }), 'loading')
             await this.#renderImportedPreviewAndWait()
             this.#setStatus(
                 this.#t('messages.patternImported', {
-                    name: file.name,
+                    name: importedProjectName,
                     count: this.state.strokes.length
                 }),
                 'success'
@@ -835,7 +1378,7 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #saveProjectToFile() {
-        const payload = ProjectIoUtils.buildProjectPayload(this.state)
+        const payload = this.#getProjectPayload()
         const contents = JSON.stringify(payload, null, 2)
         const suggestedName = ProjectFilenameUtils.buildFileName(
             this.state.projectName,
@@ -880,18 +1423,35 @@ class AppController {
     }
 
     /**
-     * Exports the visible pattern as an SVG file.
-     * @returns {Promise<void>}
+     * Ensures a current rendered stroke set exists, including pending async worker runs.
+     * @returns {Promise<boolean>}
      */
-    async #exportPatternToSvg() {
+    async #ensureRenderedStrokesReady() {
+        if (this.pendingGeneratedRenderPromise) {
+            try {
+                await this.pendingGeneratedRenderPromise
+            } catch (error) {
+                console.error('Generated render task failed while waiting for strokes.', error)
+            }
+        }
         if (!this.state.strokes.length) {
             this.#renderPattern({ skipImportedStatus: true })
+            if (this.pendingGeneratedRenderPromise) {
+                try {
+                    await this.pendingGeneratedRenderPromise
+                } catch (error) {
+                    console.error('Generated render task failed while rebuilding strokes.', error)
+                }
+            }
         }
-        if (!this.state.strokes.length) {
-            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
-            return
-        }
+        return this.state.strokes.length > 0
+    }
 
+    /**
+     * Builds SVG export content and default filename for current state.
+     * @returns {Promise<{ contents: string, suggestedName: string }>}
+     */
+    async #buildSvgExportData() {
         const fileStem = ProjectFilenameUtils.buildFileStem(
             this.state.projectName,
             this.#t('project.defaultFileStem'),
@@ -911,7 +1471,7 @@ class AppController {
         const metadataLanguage = String(this.i18n?.locale || browserLanguage || 'en').trim() || 'en'
         const metadataRights = 'Copyright 2026 André Fiedler'
         const version = String(AppVersion.get() || '').trim() || '0.0.0'
-        const contents = PatternSvgExportUtils.buildSvg({
+        const svgInput = {
             strokes: this.state.strokes,
             palette: this.state.palette,
             baseColor: this.state.baseColor,
@@ -935,7 +1495,31 @@ class AppController {
                 description: `Generated with ${editorName} using eggbot-app ${version}`,
                 contributors: [editorName]
             }
-        })
+        }
+        let contents = ''
+        try {
+            const result = await this.patternComputeWorker.buildExportSvg({ svgInput })
+            contents = String(result?.contents || '')
+        } catch (error) {
+            console.warn('SVG export worker build failed; falling back to main-thread build.', error)
+            contents = ''
+        }
+        if (!contents) {
+            contents = PatternSvgExportUtils.buildSvg(svgInput)
+        }
+        return { contents, suggestedName }
+    }
+
+    /**
+     * Exports the visible pattern as an SVG file.
+     * @returns {Promise<void>}
+     */
+    async #exportPatternToSvg() {
+        if (!(await this.#ensureRenderedStrokesReady())) {
+            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
+            return
+        }
+        const { contents, suggestedName } = await this.#buildSvgExportData()
 
         try {
             if (window.showSaveFilePicker) {
@@ -990,8 +1574,10 @@ class AppController {
             this.#clearImportedPattern()
             this.state = ProjectIoUtils.normalizeProjectState(rawProject)
             this.state.strokes = []
+            this.#markProjectArtifactsDirty()
             this.#syncControlsFromState()
-            this.#renderPattern()
+            this.#renderPattern({ skipImportedStatus: true })
+            await this.#ensureRenderedStrokesReady()
             this.#setStatus(this.#t('messages.loadedProject', { name: file.name }), 'success')
         } catch (error) {
             if (error?.name === 'AbortError') {
@@ -1046,11 +1632,7 @@ class AppController {
      */
     async #shareProjectUrl() {
         try {
-            const payload = ProjectIoUtils.buildProjectPayload(this.state)
-            const encoded = ProjectUrlUtils.encodeProjectPayloadParam(payload)
-            const url = new URL(window.location.href)
-            url.searchParams.set(ProjectUrlUtils.PROJECT_PARAM, encoded)
-            const shareUrl = url.toString()
+            const shareUrl = this.#getShareUrlCached()
             if (navigator.share) {
                 await navigator.share({
                     title: this.state.projectName,
@@ -1074,6 +1656,14 @@ class AppController {
             this.#setStatus(this.#t('messages.shareFailed', { message: error.message }), 'error')
         }
     }
+
+    /**
+     * Builds the current share URL with embedded project payload.
+     * @returns {string}
+     */
+    #buildProjectShareUrl() {
+        return this.#getShareUrlCached()
+    }
     /**
      * Stores current project payload in localStorage.
      */
@@ -1086,17 +1676,8 @@ class AppController {
             this.#setStatus(this.#t('messages.storeCanceled'), 'info')
             return
         }
-        const entries = this.#loadSavedProjects()
-        const payload = ProjectIoUtils.buildProjectPayload(this.state)
-        const id = `pattern-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-        entries.push({
-            id,
-            name,
-            updatedAt: new Date().toISOString(),
-            payload
-        })
-        this.#saveSavedProjects(entries)
-        this.#refreshSavedProjectsSelect(id)
+        const entry = this.#storeProjectLocallyByName(name)
+        this.#refreshSavedProjectsSelect(entry.id, { preferIdle: false })
         this.#setStatus(this.#t('messages.storedLocalProject', { name }), 'success')
     }
     /**
@@ -1104,27 +1685,22 @@ class AppController {
      */
     #loadSelectedLocalProject() {
         if (!this.els.localPatterns) return
+        this.#flushPendingSavedProjectsSelectRender()
         const selectedId = this.els.localPatterns.value
         if (!selectedId) {
             this.#setStatus(this.#t('messages.noLocalProjectSelected'), 'info')
             return
         }
-        const entries = this.#loadSavedProjects()
-        const entry = entries.find((candidate) => candidate.id === selectedId)
-        if (!entry) {
-            this.#setStatus(this.#t('messages.localProjectNotFound'), 'error')
-            this.#refreshSavedProjectsSelect()
-            return
-        }
         try {
-            this.#clearImportedPattern()
-            this.state = ProjectIoUtils.normalizeProjectState(entry.payload)
-            this.state.strokes = []
-            this.#syncControlsFromState()
-            this.#renderPattern()
+            const entry = this.#loadLocalProjectById(selectedId)
             this.#setStatus(this.#t('messages.loadedLocalProject', { name: entry.name }), 'success')
         } catch (error) {
-            this.#setStatus(this.#t('messages.localLoadFailed', { message: error.message }), 'error')
+            if (error?.message === 'local-project-not-found') {
+                this.#setStatus(this.#t('messages.localProjectNotFound'), 'error')
+                this.#refreshSavedProjectsSelect('', { preferIdle: false })
+                return
+            }
+            this.#setStatus(this.#t('messages.localLoadFailed', { message: error?.message || String(error) }), 'error')
         }
     }
     /**
@@ -1132,6 +1708,7 @@ class AppController {
      */
     #deleteSelectedLocalProject() {
         if (!this.els.localPatterns) return
+        this.#flushPendingSavedProjectsSelectRender()
         const selectedId = this.els.localPatterns.value
         if (!selectedId) {
             this.#setStatus(this.#t('messages.noLocalProjectSelectedForDelete'), 'info')
@@ -1141,7 +1718,7 @@ class AppController {
         const entry = entries.find((candidate) => candidate.id === selectedId)
         if (!entry) {
             this.#setStatus(this.#t('messages.localProjectNotFound'), 'error')
-            this.#refreshSavedProjectsSelect()
+            this.#refreshSavedProjectsSelect('', { preferIdle: false })
             return
         }
         const confirmed = window.confirm(this.#t('messages.deleteLocalProjectConfirm', { name: entry.name }))
@@ -1149,10 +1726,67 @@ class AppController {
             this.#setStatus(this.#t('messages.deleteCanceled'), 'info')
             return
         }
+        this.#deleteLocalProjectById(selectedId)
+        this.#refreshSavedProjectsSelect('', { preferIdle: false })
+        this.#setStatus(this.#t('messages.deletedLocalProject', { name: entry.name }), 'success')
+    }
+
+    /**
+     * Stores current project payload in localStorage under the provided name.
+     * @param {string} rawName
+     * @returns {{ id: string, name: string, updatedAt: string, payload: Record<string, any> }}
+     */
+    #storeProjectLocallyByName(rawName) {
+        const name = String(rawName || '').trim() || this.state.projectName || this.#t('project.defaultPatternName')
+        const entries = this.#loadSavedProjects()
+        const payload = this.#getProjectPayload()
+        const entry = {
+            id: `pattern-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            updatedAt: new Date().toISOString(),
+            payload
+        }
+        entries.push(entry)
+        this.#saveSavedProjects(entries)
+        return entry
+    }
+
+    /**
+     * Loads one local project entry by id and applies it to app state.
+     * @param {string} projectId
+     * @returns {{ id: string, name: string, updatedAt: string, payload: Record<string, any> }}
+     */
+    #loadLocalProjectById(projectId) {
+        const selectedId = String(projectId || '').trim()
+        const entries = this.#loadSavedProjects()
+        const entry = entries.find((candidate) => candidate.id === selectedId)
+        if (!entry) {
+            throw new Error('local-project-not-found')
+        }
+        this.#clearImportedPattern()
+        this.state = ProjectIoUtils.normalizeProjectState(entry.payload)
+        this.state.strokes = []
+        this.#markProjectArtifactsDirty()
+        this.#syncControlsFromState()
+        this.#renderPattern()
+        return entry
+    }
+
+    /**
+     * Deletes one local project entry by id.
+     * @param {string} projectId
+     * @returns {{ id: string, name: string, updatedAt: string, payload: Record<string, any> }}
+     */
+    #deleteLocalProjectById(projectId) {
+        const selectedId = String(projectId || '').trim()
+        const entries = this.#loadSavedProjects()
+        const entry = entries.find((candidate) => candidate.id === selectedId)
+        if (!entry) {
+            throw new Error('local-project-not-found')
+        }
         const filtered = entries.filter((candidate) => candidate.id !== selectedId)
         this.#saveSavedProjects(filtered)
-        this.#refreshSavedProjectsSelect()
-        this.#setStatus(this.#t('messages.deletedLocalProject', { name: entry.name }), 'success')
+        return entry
     }
     /**
      * Loads localStorage entries.
@@ -1189,12 +1823,16 @@ class AppController {
     /**
      * Refreshes local project select options.
      * @param {string} [preferredId]
+     * @param {{ preferIdle?: boolean }} [options]
      */
-    #refreshSavedProjectsSelect(preferredId = '') {
+    #refreshSavedProjectsSelect(preferredId = '', options = {}) {
         if (!this.els.localPatterns) return
+        const preferIdle = options?.preferIdle !== false
         const entries = this.#loadSavedProjects().sort((left, right) => {
             return right.updatedAt.localeCompare(left.updatedAt)
         })
+        this.#cancelIdleTask('saved-projects-select-render')
+        this.pendingSavedProjectsSelectRender = null
         this.els.localPatterns.innerHTML = ''
         const placeholder = document.createElement('option')
         placeholder.value = ''
@@ -1202,22 +1840,746 @@ class AppController {
             ? this.#t('local.choosePlaceholder')
             : this.#t('local.nonePlaceholder')
         this.els.localPatterns.appendChild(placeholder)
-        entries.forEach((entry) => {
-            const option = document.createElement('option')
-            option.value = entry.id
-            option.textContent = this.#t('local.entryLabel', {
-                name: entry.name,
-                updatedAt: new Date(entry.updatedAt).toLocaleString(this.i18n.locale)
-            })
-            if (preferredId && entry.id === preferredId) {
-                option.selected = true
-            }
-            this.els.localPatterns.appendChild(option)
-        })
-        if (!preferredId) {
+
+        if (!entries.length) {
             this.els.localPatterns.value = ''
+            return
+        }
+
+        const shouldRenderInIdle = preferIdle && entries.length >= LOCAL_PROJECT_RENDER_IDLE_THRESHOLD
+        if (!shouldRenderInIdle) {
+            this.#renderSavedProjectsSelectOptionsSync(entries, preferredId)
+            return
+        }
+
+        this.pendingSavedProjectsSelectRender = {
+            entries,
+            preferredId: String(preferredId || ''),
+            nextIndex: 0
+        }
+        this.#scheduleIdleTask(
+            'saved-projects-select-render',
+            (deadline) => this.#continueSavedProjectsSelectRender(deadline),
+            IDLE_TIMEOUT_LOCAL_PROJECT_RENDER_MS
+        )
+    }
+
+    /**
+     * Flushes a pending chunked local-project select render synchronously.
+     */
+    #flushPendingSavedProjectsSelectRender() {
+        if (!this.pendingSavedProjectsSelectRender || !this.els.localPatterns) return
+        this.#cancelIdleTask('saved-projects-select-render')
+        while (this.pendingSavedProjectsSelectRender) {
+            this.#continueSavedProjectsSelectRender({
+                didTimeout: false,
+                timeRemaining: () => Number.POSITIVE_INFINITY
+            })
         }
     }
+
+    /**
+     * Continues idle chunk rendering for local project options.
+     * @param {{ didTimeout: boolean, timeRemaining: () => number }} deadline
+     */
+    #continueSavedProjectsSelectRender(deadline) {
+        if (!this.pendingSavedProjectsSelectRender || !this.els.localPatterns) return
+        const state = this.pendingSavedProjectsSelectRender
+        const fragment = document.createDocumentFragment()
+        let renderedInThisPass = 0
+        while (state.nextIndex < state.entries.length) {
+            if (renderedInThisPass >= LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE) {
+                break
+            }
+            if (!deadline.didTimeout && deadline.timeRemaining() <= 1) {
+                break
+            }
+            fragment.appendChild(this.#buildSavedProjectsSelectOption(state.entries[state.nextIndex]))
+            state.nextIndex += 1
+            renderedInThisPass += 1
+        }
+        this.els.localPatterns.appendChild(fragment)
+
+        if (state.nextIndex >= state.entries.length) {
+            const preferredId = state.preferredId
+            this.pendingSavedProjectsSelectRender = null
+            if (preferredId) {
+                this.els.localPatterns.value = preferredId
+            } else {
+                this.els.localPatterns.value = ''
+            }
+            return
+        }
+
+        this.#scheduleIdleTask(
+            'saved-projects-select-render',
+            (nextDeadline) => this.#continueSavedProjectsSelectRender(nextDeadline),
+            IDLE_TIMEOUT_LOCAL_PROJECT_RENDER_MS
+        )
+    }
+
+    /**
+     * Renders all local project options synchronously.
+     * @param {Array<{id: string, name: string, updatedAt: string, payload: Record<string, any>}>} entries
+     * @param {string} preferredId
+     */
+    #renderSavedProjectsSelectOptionsSync(entries, preferredId) {
+        const fragment = document.createDocumentFragment()
+        entries.forEach((entry) => {
+            fragment.appendChild(this.#buildSavedProjectsSelectOption(entry))
+        })
+        this.els.localPatterns.appendChild(fragment)
+        if (preferredId) {
+            this.els.localPatterns.value = preferredId
+            return
+        }
+        this.els.localPatterns.value = ''
+    }
+
+    /**
+     * Builds one local project select option.
+     * @param {{ id: string, name: string, updatedAt: string }} entry
+     * @returns {HTMLOptionElement}
+     */
+    #buildSavedProjectsSelectOption(entry) {
+        const option = document.createElement('option')
+        option.value = entry.id
+        option.textContent = this.#t('local.entryLabel', {
+            name: entry.name,
+            updatedAt: new Date(entry.updatedAt).toLocaleString(this.i18n.locale)
+        })
+        return option
+    }
+
+    /**
+     * Returns a normalized snapshot for WebMCP tools.
+     * @returns {Record<string, any>}
+     */
+    #webMcpStateSnapshot() {
+        const project = this.#getProjectPayload()
+        return {
+            ...project,
+            strokesCount: Array.isArray(this.state.strokes) ? this.state.strokes.length : 0,
+            serialConnected: Boolean(this.serial?.isConnected),
+            isDrawing: Boolean(this.isDrawing),
+            importedPatternActive: Boolean(this.importedPattern),
+            importedPatternName: this.importedPattern ? String(this.importedPattern.name || '') : '',
+            locale: this.i18n.locale,
+            appVersion: AppVersion.get()
+        }
+    }
+
+    /**
+     * Reads current state for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpGetState() {
+        return this.#webMcpStateSnapshot()
+    }
+
+    /**
+     * Applies design setting patches from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpSetDesignSettings(args) {
+        const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+        let shouldRender = false
+        let didMutateState = false
+        const shouldRerollSeed = AppController.#parseBoolean(patch.rerollSeed, false)
+        const shouldRegenerate = AppController.#parseBoolean(patch.regenerate, false)
+        const hasGenerationPatch =
+            Object.hasOwn(patch, 'preset') ||
+            Object.hasOwn(patch, 'seed') ||
+            Object.hasOwn(patch, 'symmetry') ||
+            Object.hasOwn(patch, 'density') ||
+            Object.hasOwn(patch, 'bands') ||
+            Object.hasOwn(patch, 'ornamentSize') ||
+            Object.hasOwn(patch, 'ornamentCount') ||
+            Object.hasOwn(patch, 'ornamentDistribution')
+
+        if (hasGenerationPatch) {
+            this.#clearImportedPattern()
+        }
+
+        if (Object.hasOwn(patch, 'preset')) {
+            this.state.preset = String(patch.preset || this.state.preset)
+            this.state.motifs = AppRuntimeConfig.presetMotifs(this.state.preset)
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'seed')) {
+            this.state.seed = AppController.#parseInteger(patch.seed, this.state.seed)
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'symmetry')) {
+            this.state.symmetry = Math.max(2, Math.min(24, AppController.#parseInteger(patch.symmetry, this.state.symmetry)))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'density')) {
+            this.state.density = Math.max(0.05, Math.min(1, AppController.#parseFloat(patch.density, this.state.density)))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'bands')) {
+            this.state.bands = Math.max(1, Math.min(16, AppController.#parseInteger(patch.bands, this.state.bands)))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'ornamentSize')) {
+            const nextValue = AppController.#parseFloat(patch.ornamentSize, this.state.ornamentSize)
+            this.state.ornamentSize = Math.max(0.5, Math.min(2, nextValue))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'ornamentCount')) {
+            const nextValue = AppController.#parseFloat(patch.ornamentCount, this.state.ornamentCount)
+            this.state.ornamentCount = Math.max(0.5, Math.min(2, nextValue))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'ornamentDistribution')) {
+            const nextValue = AppController.#parseFloat(patch.ornamentDistribution, this.state.ornamentDistribution)
+            this.state.ornamentDistribution = Math.max(0.6, Math.min(1.6, nextValue))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'lineWidth')) {
+            this.state.lineWidth = Math.max(0.5, Math.min(4, AppController.#parseFloat(patch.lineWidth, this.state.lineWidth)))
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'importHeightScale')) {
+            this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(
+                AppController.#parseFloat(patch.importHeightScale, this.state.importHeightScale)
+            )
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'showHorizontalLines')) {
+            this.state.showHorizontalLines = AppController.#parseBoolean(patch.showHorizontalLines, this.state.showHorizontalLines)
+            shouldRender = true
+            didMutateState = true
+        }
+
+        if (shouldRerollSeed) {
+            this.#clearImportedPattern()
+            this.#rerollSeed()
+            shouldRender = true
+        }
+        if (shouldRegenerate) {
+            shouldRender = true
+        }
+
+        if (didMutateState && !shouldRerollSeed) {
+            this.#markProjectArtifactsDirty()
+        }
+        this.#syncControlsFromState()
+        if (shouldRender) {
+            this.#renderPattern()
+        }
+
+        return {
+            message: 'Design settings updated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Applies color settings from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpSetColorSettings(args) {
+        const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+        let shouldRender = false
+
+        if (Object.hasOwn(patch, 'baseColor')) {
+            this.state.baseColor = String(patch.baseColor || this.state.baseColor)
+            shouldRender = true
+        }
+        if (Array.isArray(patch.palette) && patch.palette.length) {
+            const normalizedPalette = patch.palette
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+                .slice(0, 6)
+            if (normalizedPalette.length) {
+                this.state.palette = normalizedPalette
+                this.#normalizePaletteLength(normalizedPalette.length)
+                shouldRender = true
+            }
+        }
+
+        if (shouldRender) {
+            this.#markProjectArtifactsDirty()
+        }
+        this.#syncControlsFromState()
+        if (shouldRender) {
+            this.#renderPattern()
+        }
+
+        return {
+            message: 'Color settings updated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Applies motif toggle settings from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpSetMotifSettings(args) {
+        const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+        let shouldRender = false
+        const motifPatchKeys = ['dots', 'rays', 'honeycomb', 'wolfTeeth', 'pineBranch', 'diamonds']
+        if (motifPatchKeys.some((key) => Object.hasOwn(patch, key))) {
+            this.#clearImportedPattern()
+        }
+
+        if (Object.hasOwn(patch, 'dots')) {
+            this.state.motifs.dots = AppController.#parseBoolean(patch.dots, this.state.motifs.dots)
+            shouldRender = true
+        }
+        if (Object.hasOwn(patch, 'rays')) {
+            this.state.motifs.rays = AppController.#parseBoolean(patch.rays, this.state.motifs.rays)
+            shouldRender = true
+        }
+        if (Object.hasOwn(patch, 'honeycomb')) {
+            this.state.motifs.honeycomb = AppController.#parseBoolean(patch.honeycomb, this.state.motifs.honeycomb)
+            shouldRender = true
+        }
+        if (Object.hasOwn(patch, 'wolfTeeth')) {
+            this.state.motifs.wolfTeeth = AppController.#parseBoolean(patch.wolfTeeth, this.state.motifs.wolfTeeth)
+            shouldRender = true
+        }
+        if (Object.hasOwn(patch, 'pineBranch')) {
+            this.state.motifs.pineBranch = AppController.#parseBoolean(patch.pineBranch, this.state.motifs.pineBranch)
+            shouldRender = true
+        }
+        if (Object.hasOwn(patch, 'diamonds')) {
+            this.state.motifs.diamonds = AppController.#parseBoolean(patch.diamonds, this.state.motifs.diamonds)
+            shouldRender = true
+        }
+
+        if (shouldRender) {
+            this.#markProjectArtifactsDirty()
+        }
+        this.#syncControlsFromState()
+        if (shouldRender) {
+            this.#renderPattern()
+        }
+
+        return {
+            message: 'Motif settings updated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Applies draw configuration settings from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpSetDrawConfig(args) {
+        const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+        let didMutateState = false
+
+        if (Object.hasOwn(patch, 'stepsPerTurn')) {
+            this.state.drawConfig.stepsPerTurn = Math.max(
+                100,
+                AppController.#parseInteger(patch.stepsPerTurn, this.state.drawConfig.stepsPerTurn)
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penRangeSteps')) {
+            this.state.drawConfig.penRangeSteps = Math.max(
+                100,
+                AppController.#parseInteger(patch.penRangeSteps, this.state.drawConfig.penRangeSteps)
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'msPerStep')) {
+            const nextValue = AppController.#parseFloat(patch.msPerStep, this.state.drawConfig.msPerStep)
+            this.state.drawConfig.msPerStep = Math.max(0.2, Math.min(20, nextValue))
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'servoUp')) {
+            this.state.drawConfig.servoUp = Math.max(0, AppController.#parseInteger(patch.servoUp, this.state.drawConfig.servoUp))
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'servoDown')) {
+            this.state.drawConfig.servoDown = Math.max(
+                0,
+                AppController.#parseInteger(patch.servoDown, this.state.drawConfig.servoDown)
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'invertPen')) {
+            this.state.drawConfig.invertPen = AppController.#parseBoolean(patch.invertPen, this.state.drawConfig.invertPen)
+            didMutateState = true
+        }
+
+        if (didMutateState) {
+            this.#markProjectArtifactsDirty()
+        }
+
+        this.#syncControlsFromState()
+        return {
+            message: 'Draw configuration updated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Rerolls seed and renders for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpRerollSeed() {
+        this.#clearImportedPattern()
+        this.#rerollSeed()
+        this.#renderPattern()
+        return {
+            message: 'Seed rerolled and pattern regenerated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Re-renders pattern for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpRegeneratePattern() {
+        this.#renderPattern()
+        return {
+            message: 'Pattern regenerated.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Imports SVG text from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Promise<Record<string, any>>}
+     */
+    async #webMcpImportSvgText(args) {
+        const svgText = String(args?.svgText || '').trim()
+        if (!svgText) {
+            throw new Error('Missing svgText.')
+        }
+        const fileName = String(args?.fileName || 'webmcp-import.svg')
+        const importedProjectName = SvgProjectNameUtils.resolveProjectName(svgText, fileName) || this.#t('project.defaultName')
+        if (Object.hasOwn(args || {}, 'importHeightScale')) {
+            const nextScale = AppController.#parseFloat(args.importHeightScale, this.state.importHeightScale)
+            this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(nextScale)
+            this.#markProjectArtifactsDirty()
+        }
+
+        this.isPatternImporting = true
+        this.#syncPatternImportUi()
+        this.#setStatus(this.#t('messages.patternImportParsing', { name: fileName }), 'loading')
+        try {
+            const parsed = await this.#parseImportedPattern(svgText)
+            this.state.projectName = importedProjectName
+            this.importedPattern = {
+                name: importedProjectName,
+                strokes: parsed.strokes,
+                svgText,
+                heightRatio: parsed.heightRatio,
+                heightScale: this.state.importHeightScale
+            }
+            this.#syncAutoGenerateOrnamentControlsUi()
+            if (parsed.palette.length) {
+                this.#normalizePaletteLength(Math.max(1, Math.min(6, parsed.palette.length)))
+                parsed.palette.slice(0, this.state.palette.length).forEach((color, index) => {
+                    this.state.palette[index] = color
+                })
+            }
+            if (parsed.baseColor) {
+                this.state.baseColor = parsed.baseColor
+            }
+            this.#markProjectArtifactsDirty()
+            this.#syncControlsFromState()
+            this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: fileName }), 'loading')
+            await this.#renderImportedPreviewAndWait()
+            this.#setStatus(
+                this.#t('messages.patternImported', {
+                    name: fileName,
+                    count: this.state.strokes.length
+                }),
+                'success'
+            )
+            return {
+                message: `Imported SVG pattern: ${fileName}.`,
+                data: {
+                    fileName,
+                    projectName: importedProjectName,
+                    strokeCount: this.state.strokes.length
+                },
+                state: this.#webMcpStateSnapshot()
+            }
+        } finally {
+            this.isPatternImporting = false
+            this.#syncPatternImportUi()
+        }
+    }
+
+    /**
+     * Applies project JSON content from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpApplyProjectJson(args) {
+        const candidate = args?.project
+        let projectValue = candidate
+        if (typeof candidate === 'string') {
+            const text = candidate.trim()
+            if (!text) {
+                throw new Error('Project JSON text is empty.')
+            }
+            projectValue = JSON.parse(text)
+        }
+        this.#clearImportedPattern()
+        this.state = ProjectIoUtils.normalizeProjectState(projectValue)
+        this.state.strokes = []
+        this.#markProjectArtifactsDirty()
+        this.#syncControlsFromState()
+        this.#renderPattern()
+        return {
+            message: 'Project applied from JSON.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Returns normalized project JSON payload for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpGetProjectJson() {
+        const payload = this.#getProjectPayload()
+        const suggestedName = ProjectFilenameUtils.buildFileName(
+            this.state.projectName,
+            this.#t('project.defaultFileStem'),
+            this.state.seed,
+            'json'
+        )
+        return {
+            message: 'Project JSON payload ready.',
+            data: {
+                project: payload,
+                jsonText: JSON.stringify(payload, null, 2),
+                suggestedName
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Returns share URL for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpGetShareUrl() {
+        const shareUrl = this.#buildProjectShareUrl()
+        return {
+            message: 'Share URL ready.',
+            data: {
+                shareUrl
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Returns SVG export text for WebMCP.
+     * @returns {Promise<Record<string, any>>}
+     */
+    async #webMcpBuildExportSvg() {
+        if (!(await this.#ensureRenderedStrokesReady())) {
+            throw new Error('No pattern available to export.')
+        }
+        const { contents, suggestedName } = await this.#buildSvgExportData()
+        return {
+            message: 'SVG export payload ready.',
+            data: {
+                svgText: contents,
+                suggestedName
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Lists local projects for WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpLocalProjectsList() {
+        const entries = this.#loadSavedProjects()
+            .slice()
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+            .map((entry) => ({
+                id: entry.id,
+                name: entry.name,
+                updatedAt: entry.updatedAt
+            }))
+        return {
+            message: `Loaded ${entries.length} local project entries.`,
+            data: {
+                entries
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Stores current project in local storage for WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpLocalProjectStore(args) {
+        const name = String(args?.name || '').trim()
+        if (!name) {
+            throw new Error('Missing local project name.')
+        }
+        const entry = this.#storeProjectLocallyByName(name)
+        this.#refreshSavedProjectsSelect(entry.id, { preferIdle: false })
+        return {
+            message: `Stored local project: ${entry.name}.`,
+            data: {
+                id: entry.id,
+                name: entry.name
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Loads one local project for WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpLocalProjectLoad(args) {
+        const id = String(args?.id || '').trim()
+        if (!id) {
+            throw new Error('Missing local project id.')
+        }
+        let entry
+        try {
+            entry = this.#loadLocalProjectById(id)
+        } catch (error) {
+            if (error?.message === 'local-project-not-found') {
+                throw new Error('Local project not found.')
+            }
+            throw error
+        }
+        this.#refreshSavedProjectsSelect(id, { preferIdle: false })
+        return {
+            message: `Loaded local project: ${entry.name}.`,
+            data: {
+                id: entry.id,
+                name: entry.name
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Deletes one local project for WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpLocalProjectDelete(args) {
+        const id = String(args?.id || '').trim()
+        if (!id) {
+            throw new Error('Missing local project id.')
+        }
+        let entry
+        try {
+            entry = this.#deleteLocalProjectById(id)
+        } catch (error) {
+            if (error?.message === 'local-project-not-found') {
+                throw new Error('Local project not found.')
+            }
+            throw error
+        }
+        this.#refreshSavedProjectsSelect('', { preferIdle: false })
+        return {
+            message: `Deleted local project: ${entry.name}.`,
+            data: {
+                id: entry.id,
+                name: entry.name
+            },
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Connects EggBot serial from WebMCP.
+     * @returns {Promise<Record<string, any>>}
+     */
+    async #webMcpSerialConnect() {
+        await this.#connectSerial()
+        return {
+            message: 'Serial connection attempt completed.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Disconnects EggBot serial from WebMCP.
+     * @returns {Promise<Record<string, any>>}
+     */
+    async #webMcpSerialDisconnect() {
+        await this.#disconnectSerial()
+        return {
+            message: 'Serial disconnect attempt completed.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Starts EggBot drawing from WebMCP.
+     * @returns {Promise<Record<string, any>>}
+     */
+    async #webMcpSerialDraw() {
+        await this.#drawCurrentPattern()
+        return {
+            message: 'Draw command completed.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Stops EggBot drawing from WebMCP.
+     * @returns {Record<string, any>}
+     */
+    #webMcpSerialStop() {
+        this.serial.stop()
+        this.#setStatus(this.#t('messages.stopRequested'), 'info')
+        return {
+            message: 'Stop request sent.',
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
+    /**
+     * Updates locale from WebMCP.
+     * @param {Record<string, any>} args
+     * @returns {Record<string, any>}
+     */
+    #webMcpSetLocale(args) {
+        const locale = String(args?.locale || '').trim()
+        if (!locale) {
+            throw new Error('Missing locale value.')
+        }
+        this.#handleLocaleChange(locale)
+        return {
+            message: `Locale set to ${this.i18n.locale}.`,
+            state: this.#webMcpStateSnapshot()
+        }
+    }
+
     /**
      * Parses an integer with fallback.
      * @param {unknown} value
@@ -1237,6 +2599,23 @@ class AppController {
     static #parseFloat(value, fallback) {
         const parsed = Number.parseFloat(String(value))
         return Number.isFinite(parsed) ? parsed : fallback
+    }
+
+    /**
+     * Parses a boolean-like value with fallback.
+     * @param {unknown} value
+     * @param {boolean} fallback
+     * @returns {boolean}
+     */
+    static #parseBoolean(value, fallback) {
+        if (typeof value === 'boolean') return value
+        if (typeof value === 'number') return value !== 0
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase()
+            if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+            if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+        }
+        return fallback
     }
 }
 const i18n = new I18n({

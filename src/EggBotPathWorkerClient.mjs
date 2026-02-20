@@ -1,40 +1,23 @@
 /**
- * Worker transport for loading and parsing imported SVG patterns.
+ * Worker transport for EggBot draw-path preprocessing.
  */
-export class PatternImportWorkerClient {
+export class EggBotPathWorkerClient {
     #worker = null
     #nextRequestId = 1
     #pending = new Map()
     #workerFailed = false
 
     /**
-     * Parses SVG text in the worker thread.
-     * @param {string} svgText
-     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number }} [options]
-     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
+     * Precomputes drawable stroke paths in worker thread.
+     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number }, startX?: number }} payload
+     * @returns {Promise<{ strokes: Array<Array<{x:number,y:number}>> }>}
      */
-    parse(svgText, options = {}) {
-        const worker = this.#ensureWorker()
-        const requestId = this.#nextRequestId
-        this.#nextRequestId += 1
-
-        return new Promise((resolve, reject) => {
-            const timeoutId = window.setTimeout(() => {
-                this.#pending.delete(requestId)
-                reject(PatternImportWorkerClient.#buildError('worker-timeout', 'Worker parsing timed out'))
-            }, 90_000)
-
-            this.#pending.set(requestId, { resolve, reject, timeoutId })
-            worker.postMessage({
-                requestId,
-                svgText: String(svgText || ''),
-                options
-            })
-        })
+    prepareDrawStrokes(payload) {
+        return this.#request('prepare-draw-strokes', payload, 60_000)
     }
 
     /**
-     * Pre-initializes the import worker.
+     * Pre-initializes the path worker.
      */
     warmup() {
         this.#ensureWorker()
@@ -44,12 +27,39 @@ export class PatternImportWorkerClient {
      * Disposes worker resources.
      */
     dispose() {
-        this.#rejectAllPending(PatternImportWorkerClient.#buildError('worker-disposed', 'Worker disposed'))
+        this.#rejectAllPending(EggBotPathWorkerClient.#buildError('worker-disposed', 'Worker disposed'))
         if (this.#worker) {
             this.#worker.terminate()
             this.#worker = null
         }
         this.#workerFailed = true
+    }
+
+    /**
+     * Executes one worker request.
+     * @param {string} op
+     * @param {Record<string, any>} payload
+     * @param {number} timeoutMs
+     * @returns {Promise<Record<string, any>>}
+     */
+    #request(op, payload, timeoutMs) {
+        const worker = this.#ensureWorker()
+        const requestId = this.#nextRequestId
+        this.#nextRequestId += 1
+
+        return new Promise((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                this.#pending.delete(requestId)
+                reject(EggBotPathWorkerClient.#buildError('worker-timeout', 'Worker path preprocessing timed out'))
+            }, timeoutMs)
+
+            this.#pending.set(requestId, { resolve, reject, timeoutId })
+            worker.postMessage({
+                requestId,
+                op,
+                payload: payload && typeof payload === 'object' ? payload : {}
+            })
+        })
     }
 
     /**
@@ -62,11 +72,11 @@ export class PatternImportWorkerClient {
         }
 
         if (this.#workerFailed || typeof Worker !== 'function') {
-            throw PatternImportWorkerClient.#buildError('worker-unavailable', 'Worker not available')
+            throw EggBotPathWorkerClient.#buildError('worker-unavailable', 'Worker not available')
         }
 
         try {
-            const worker = new Worker(new URL('./workers/pattern-import.worker.mjs', import.meta.url), {
+            const worker = new Worker(new URL('./workers/eggbot-path.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))
@@ -75,12 +85,12 @@ export class PatternImportWorkerClient {
             return worker
         } catch (_error) {
             this.#workerFailed = true
-            throw PatternImportWorkerClient.#buildError('worker-unavailable', 'Failed to initialize worker')
+            throw EggBotPathWorkerClient.#buildError('worker-unavailable', 'Failed to initialize worker')
         }
     }
 
     /**
-     * Handles worker messages.
+     * Handles worker responses.
      * @param {MessageEvent} event
      */
     #handleWorkerMessage(event) {
@@ -99,8 +109,8 @@ export class PatternImportWorkerClient {
         }
 
         const code = String(payload?.error?.code || 'worker-error')
-        const message = String(payload?.error?.message || 'Worker parsing failed')
-        pending.reject(PatternImportWorkerClient.#buildError(code, message))
+        const message = String(payload?.error?.message || 'Worker path preprocessing failed')
+        pending.reject(EggBotPathWorkerClient.#buildError(code, message))
     }
 
     /**
@@ -114,7 +124,7 @@ export class PatternImportWorkerClient {
             this.#worker.terminate()
             this.#worker = null
         }
-        this.#rejectAllPending(PatternImportWorkerClient.#buildError('worker-crashed', message))
+        this.#rejectAllPending(EggBotPathWorkerClient.#buildError('worker-crashed', message))
     }
 
     /**

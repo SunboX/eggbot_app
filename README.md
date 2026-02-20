@@ -13,6 +13,8 @@ Live app: [https://eggbot.app/](https://eggbot.app/)
 - local project storage
 - rotatable 3D egg preview
 - direct EggBot drawing via Web Serial (EBB command stream)
+- WebMCP tool surface (imperative tools plus declarative form subset)
+- worker-backed compute/render/import/draw-prep paths with automatic fallback
 
 ## Project Structure
 
@@ -48,6 +50,20 @@ Open [http://localhost:3000/](http://localhost:3000/).
 - Uses EBB commands `SC`, `SP`, `EM`, and `SM`.
 - Calibrate `servo up/down` values and motion mapping before production runs.
 - Start with test eggs and simple patterns.
+
+## WebMCP Notes
+
+- The frontend exposes app functionality through `navigator.modelContext` tools.
+- Runtime is native-first with `@mcp-b/global` fallback bridge loaded from `/node_modules/@mcp-b/global/dist/index.iife.js`.
+- Bridge transport is enabled with wildcard origins (`allowedOrigins: ['*']`).
+- Dangerous actions (`serial connect/disconnect/draw/stop`, local delete) require `confirm: true`.
+- Content-based tools are provided for project JSON, share URL, and SVG export (no file-picker requirement).
+- Declarative subset forms are included for:
+    - `eggbot_form_apply_design`
+    - `eggbot_form_apply_project_json`
+    - `eggbot_form_machine_action`
+    - `eggbot_form_local_project_action`
+- Chrome WebMCP early-preview reference was updated on **February 10, 2026** and documents the experimental native API behind `chrome://flags/#enable-webmcp-testing`.
 
 ## Local Node Server
 

@@ -90,3 +90,14 @@ html {
     border-right: 1px solid rgba(157, 111, 37, 0.2);
     border-radius: 999px;
 }
+
+.webmcp-declarative {
+    position: absolute;
+    left: -10000px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0.001;
+    pointer-events: none;
+}

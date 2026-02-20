@@ -1,40 +1,32 @@
 /**
- * Worker transport for loading and parsing imported SVG patterns.
+ * Worker transport for generated-pattern compute tasks.
  */
-export class PatternImportWorkerClient {
+export class PatternComputeWorkerClient {
     #worker = null
     #nextRequestId = 1
     #pending = new Map()
     #workerFailed = false
 
     /**
-     * Parses SVG text in the worker thread.
-     * @param {string} svgText
-     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number }} [options]
-     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
+     * Computes generated render strokes in worker thread.
+     * @param {{ state?: Record<string, any>, activeHeightRatio?: number }} payload
+     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', transformGroupId?: number, horizontalRingGroup?: string, motifGroup?: string }> }>}
      */
-    parse(svgText, options = {}) {
-        const worker = this.#ensureWorker()
-        const requestId = this.#nextRequestId
-        this.#nextRequestId += 1
-
-        return new Promise((resolve, reject) => {
-            const timeoutId = window.setTimeout(() => {
-                this.#pending.delete(requestId)
-                reject(PatternImportWorkerClient.#buildError('worker-timeout', 'Worker parsing timed out'))
-            }, 90_000)
-
-            this.#pending.set(requestId, { resolve, reject, timeoutId })
-            worker.postMessage({
-                requestId,
-                svgText: String(svgText || ''),
-                options
-            })
-        })
+    computeGeneratedRenderedStrokes(payload) {
+        return this.#request('compute-generated-rendered-strokes', payload, 30_000)
     }
 
     /**
-     * Pre-initializes the import worker.
+     * Builds SVG export content in worker thread.
+     * @param {{ svgInput?: Record<string, any> }} payload
+     * @returns {Promise<{ contents: string }>}
+     */
+    buildExportSvg(payload) {
+        return this.#request('build-export-svg', payload, 90_000)
+    }
+
+    /**
+     * Pre-initializes the compute worker.
      */
     warmup() {
         this.#ensureWorker()
@@ -44,12 +36,39 @@ export class PatternImportWorkerClient {
      * Disposes worker resources.
      */
     dispose() {
-        this.#rejectAllPending(PatternImportWorkerClient.#buildError('worker-disposed', 'Worker disposed'))
+        this.#rejectAllPending(PatternComputeWorkerClient.#buildError('worker-disposed', 'Worker disposed'))
         if (this.#worker) {
             this.#worker.terminate()
             this.#worker = null
         }
         this.#workerFailed = true
+    }
+
+    /**
+     * Executes one worker operation.
+     * @param {string} op
+     * @param {Record<string, any>} payload
+     * @param {number} timeoutMs
+     * @returns {Promise<Record<string, any>>}
+     */
+    #request(op, payload, timeoutMs) {
+        const worker = this.#ensureWorker()
+        const requestId = this.#nextRequestId
+        this.#nextRequestId += 1
+
+        return new Promise((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                this.#pending.delete(requestId)
+                reject(PatternComputeWorkerClient.#buildError('worker-timeout', 'Worker compute timed out'))
+            }, timeoutMs)
+
+            this.#pending.set(requestId, { resolve, reject, timeoutId })
+            worker.postMessage({
+                requestId,
+                op,
+                payload: payload && typeof payload === 'object' ? payload : {}
+            })
+        })
     }
 
     /**
@@ -62,11 +81,11 @@ export class PatternImportWorkerClient {
         }
 
         if (this.#workerFailed || typeof Worker !== 'function') {
-            throw PatternImportWorkerClient.#buildError('worker-unavailable', 'Worker not available')
+            throw PatternComputeWorkerClient.#buildError('worker-unavailable', 'Worker not available')
         }
 
         try {
-            const worker = new Worker(new URL('./workers/pattern-import.worker.mjs', import.meta.url), {
+            const worker = new Worker(new URL('./workers/pattern-compute.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))
@@ -75,7 +94,7 @@ export class PatternImportWorkerClient {
             return worker
         } catch (_error) {
             this.#workerFailed = true
-            throw PatternImportWorkerClient.#buildError('worker-unavailable', 'Failed to initialize worker')
+            throw PatternComputeWorkerClient.#buildError('worker-unavailable', 'Failed to initialize worker')
         }
     }
 
@@ -99,8 +118,8 @@ export class PatternImportWorkerClient {
         }
 
         const code = String(payload?.error?.code || 'worker-error')
-        const message = String(payload?.error?.message || 'Worker parsing failed')
-        pending.reject(PatternImportWorkerClient.#buildError(code, message))
+        const message = String(payload?.error?.message || 'Worker compute failed')
+        pending.reject(PatternComputeWorkerClient.#buildError(code, message))
     }
 
     /**
@@ -114,7 +133,7 @@ export class PatternImportWorkerClient {
             this.#worker.terminate()
             this.#worker = null
         }
-        this.#rejectAllPending(PatternImportWorkerClient.#buildError('worker-crashed', message))
+        this.#rejectAllPending(PatternComputeWorkerClient.#buildError('worker-crashed', message))
     }
 
     /**
