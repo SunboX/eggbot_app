@@ -9,7 +9,7 @@ export class EggBotPathWorkerClient {
 
     /**
      * Precomputes drawable stroke paths in worker thread.
-     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number }, startX?: number }} payload
+     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean }, startX?: number }} payload
      * @returns {Promise<{ strokes: Array<Array<{x:number,y:number}>> }>}
      */
     prepareDrawStrokes(payload) {

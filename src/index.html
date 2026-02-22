@@ -236,31 +236,13 @@
                     </section>
 
                     <section class="section">
-                        <h2 data-i18n="machine.mappingTitle">Drawing mapping</h2>
-                        <label>
-                            <span data-i18n="machine.stepsPerTurn">Motor-1 steps / egg turn</span>
-                            <input type="number" min="100" step="1" data-steps-per-turn />
-                        </label>
-                        <label>
-                            <span data-i18n="machine.penRangeSteps">Motor-2 steps full pen travel</span>
-                            <input type="number" min="100" step="1" data-pen-range-steps />
-                        </label>
-                        <label>
-                            <span data-i18n="machine.msPerStep">Motion timing (ms per step)</span>
-                            <input type="number" min="0.2" max="20" step="0.1" data-ms-per-step />
-                        </label>
-                        <label>
-                            <span data-i18n="machine.servoUp">Servo up value (`SC,4`)</span>
-                            <input type="number" min="0" step="1" data-servo-up />
-                        </label>
-                        <label>
-                            <span data-i18n="machine.servoDown">Servo down value (`SC,5`)</span>
-                            <input type="number" min="0" step="1" data-servo-down />
-                        </label>
-                        <label class="inline-check">
-                            <input type="checkbox" data-invert-pen />
-                            <span data-i18n="machine.invertPen">Invert pen up/down (`SP`) logic</span>
-                        </label>
+                        <h2 data-i18n="machine.controlTitle">EggBot control</h2>
+                        <p class="hint" data-i18n="machine.controlHint">
+                            Open the EggBot Control / Configuration dialog for setup, timing, options, and manual actions.
+                        </p>
+                        <button class="ghost" type="button" data-eggbot-control-open data-i18n="machine.openControlDialog">
+                            Open EggBot control dialog
+                        </button>
                         <button class="warn" type="button" data-stop data-i18n="machine.stopDraw">Stop draw</button>
                     </section>
 
@@ -334,6 +316,474 @@
                     </div>
                 </div>
             </footer>
+        </div>
+
+        <div class="eggbot-dialog-backdrop" data-eggbot-dialog-backdrop hidden>
+            <section
+                class="eggbot-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="eggbot-control-title"
+                data-eggbot-dialog
+            >
+                <header class="eggbot-dialog-header">
+                    <h2 id="eggbot-control-title" data-i18n="controlDialog.title">EggBot Control</h2>
+                    <button
+                        class="eggbot-dialog-close-icon"
+                        type="button"
+                        aria-label="Close EggBot control dialog"
+                        data-i18n-aria-label="controlDialog.closeAria"
+                        data-eggbot-dialog-close-icon
+                    >
+                        ×
+                    </button>
+                </header>
+                <nav class="eggbot-dialog-tabs" role="tablist" aria-label="EggBot control tabs" data-eggbot-tablist>
+                    <button
+                        type="button"
+                        role="tab"
+                        class="active"
+                        aria-selected="true"
+                        aria-controls="eggbot-panel-plot"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="plot"
+                        data-i18n="controlDialog.tabs.plot"
+                    >
+                        Plotten
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-setup"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="setup"
+                        data-i18n="controlDialog.tabs.setup"
+                    >
+                        Setup
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-timing"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="timing"
+                        data-i18n="controlDialog.tabs.timing"
+                    >
+                        Timing
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-options"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="options"
+                        data-i18n="controlDialog.tabs.options"
+                    >
+                        Optionen
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-manual"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="manual"
+                        data-i18n="controlDialog.tabs.manual"
+                    >
+                        Manual
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-resume"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="resume"
+                        data-i18n="controlDialog.tabs.resume"
+                    >
+                        Resume
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-layers"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="layers"
+                        data-i18n="controlDialog.tabs.layers"
+                    >
+                        Ebenen
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="eggbot-panel-advanced"
+                        data-eggbot-tab-button
+                        data-eggbot-tab="advanced"
+                        data-i18n="controlDialog.tabs.advanced"
+                    >
+                        *
+                    </button>
+                </nav>
+
+                <div class="eggbot-dialog-body">
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-plot"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="plot"
+                    >
+                        <h3 data-i18n="controlDialog.plot.title">Welcome to the EggBot interface!</h3>
+                        <p data-i18n="controlDialog.plot.lineOne">Press 'Apply' to begin plotting.</p>
+                        <p data-i18n="controlDialog.plot.lineTwo">
+                            Or, look in the other tabs to adjust your settings and use additional EggBot functions.
+                        </p>
+                        <p data-i18n="controlDialog.plot.help">Need help? Visit http://wiki.evilmadscientist.com/eggbot</p>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-setup"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="setup"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.setup.title">EggBot: Basic Setup</h3>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.setup.penUpPercent">Pen up position, 0-100%:</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-pen-up-percent"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    data-control-pen-up-percent
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-pen-up-percent" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-pen-up-percent" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.setup.penDownPercent">Pen down position, 0-100%:</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-pen-down-percent"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    data-control-pen-down-percent
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-pen-down-percent" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-pen-down-percent" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <div class="eggbot-radio-group">
+                            <span data-i18n="controlDialog.setup.actionOnApply">Action on 'Apply':</span>
+                            <label class="inline-check">
+                                <input type="radio" name="eggbot-setup-action" value="toggle" data-control-setup-action-toggle />
+                                <span data-i18n="controlDialog.setup.togglePen">Toggle pen up/down</span>
+                            </label>
+                            <label class="inline-check">
+                                <input type="radio" name="eggbot-setup-action" value="raise-off" data-control-setup-action-raise-off />
+                                <span data-i18n="controlDialog.setup.raisePenDisableMotors">Raise pen, turn off motors</span>
+                            </label>
+                        </div>
+                        <p class="eggbot-note" data-i18n="controlDialog.setup.note">
+                            Raise and lower the pen to verify pen-up and pen-down positions. Use "raise pen, turn off motors"
+                            before aligning objects in the EggBot.
+                        </p>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-timing"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="timing"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.timing.movementTitle">Movement speeds:</h3>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.speedPenDown">Speed when pen is down (steps/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-speed-pen-down"
+                                    type="number"
+                                    min="10"
+                                    max="4000"
+                                    step="10"
+                                    data-control-speed-pen-down
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-down" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-down" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.speedPenUp">Speed when pen is up (steps/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input id="control-speed-pen-up" type="number" min="10" max="4000" step="10" data-control-speed-pen-up />
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-up" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-up" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+
+                        <h3 data-i18n="controlDialog.timing.penLiftTitle">Pen lift and lowering speeds:</h3>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.penRaiseRate">Pen raising speed (%/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input id="control-pen-raise-rate" type="number" min="1" max="100" step="1" data-control-pen-raise-rate />
+                                <button type="button" data-spin-step data-spin-target="control-pen-raise-rate" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-pen-raise-rate" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.delayAfterRaise">Delay after raising pen (ms):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-delay-after-raise"
+                                    type="number"
+                                    min="0"
+                                    max="5000"
+                                    step="10"
+                                    data-control-delay-after-raise
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-delay-after-raise" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-delay-after-raise" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.penLowerRate">Pen lowering speed (%/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input id="control-pen-lower-rate" type="number" min="1" max="100" step="1" data-control-pen-lower-rate />
+                                <button type="button" data-spin-step data-spin-target="control-pen-lower-rate" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-pen-lower-rate" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.delayAfterLower">Delay after lowering pen (ms):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-delay-after-lower"
+                                    type="number"
+                                    min="0"
+                                    max="5000"
+                                    step="10"
+                                    data-control-delay-after-lower
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-delay-after-lower" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-delay-after-lower" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-options"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="options"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.options.title">Advanced options:</h3>
+                        <label class="inline-check">
+                            <input type="checkbox" data-control-reverse-pen-motor />
+                            <span data-i18n="controlDialog.options.reversePenMotor">Reverse motion of Motor 1 (pen)</span>
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-control-reverse-egg-motor />
+                            <span data-i18n="controlDialog.options.reverseEggMotor">Reverse motion of Motor 2 (egg)</span>
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-control-wraps-around />
+                            <span data-i18n="controlDialog.options.wrapAround">Egg (x) axis wraps around</span>
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-control-return-home />
+                            <span data-i18n="controlDialog.options.returnHome">Return home when done</span>
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-control-enable-engraver />
+                            <span data-i18n="controlDialog.options.enableEngraver">Enable engraver, if attached</span>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.options.curveSmoothing">Curve smoothing (lower for more):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-curve-smoothing"
+                                    type="number"
+                                    min="0"
+                                    max="2"
+                                    step="0.05"
+                                    data-control-curve-smoothing
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-curve-smoothing" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-curve-smoothing" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-manual"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="manual"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.manual.title">EggBot Manual Control</h3>
+                        <p data-i18n="controlDialog.manual.description">
+                            Send direct commands to EggBot. Use Apply to execute the selected command.
+                        </p>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.manual.command">Command:</span>
+                            <select data-control-manual-command>
+                                <option value="disable-motors" data-i18n="controlDialog.manual.commands.disableMotors">
+                                    Disable Motors
+                                </option>
+                                <option value="enable-motors" data-i18n="controlDialog.manual.commands.enableMotors">
+                                    Enable Motors
+                                </option>
+                                <option value="raise-pen" data-i18n="controlDialog.manual.commands.raisePen">Raise Pen</option>
+                                <option value="lower-pen" data-i18n="controlDialog.manual.commands.lowerPen">Lower Pen</option>
+                                <option value="walk-egg" data-i18n="controlDialog.manual.commands.walkEgg">Walk Egg Motor</option>
+                                <option value="walk-pen" data-i18n="controlDialog.manual.commands.walkPen">Walk Pen Motor</option>
+                                <option value="query-version" data-i18n="controlDialog.manual.commands.queryVersion">
+                                    Query EBB Version
+                                </option>
+                            </select>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.manual.walkDistance">Walk distance (steps):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-walk-distance"
+                                    type="number"
+                                    min="-64000"
+                                    max="64000"
+                                    step="1"
+                                    data-control-walk-distance
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-walk-distance" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-walk-distance" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <p class="eggbot-note" data-i18n="controlDialog.manual.walkHint">
+                            Walk distance may be positive or negative.
+                        </p>
+                        <p class="eggbot-note" data-i18n="controlDialog.manual.applyHint">
+                            Press 'Apply' to execute the command.
+                        </p>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-resume"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="resume"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.resume.title">Resume</h3>
+                        <p data-i18n="controlDialog.resume.description">
+                            Resume drawing from paused jobs is not available yet in this web edition.
+                        </p>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-layers"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="layers"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.layers.title">Layers</h3>
+                        <p data-i18n="controlDialog.layers.description">
+                            Layer-based plotting controls are not available yet in this web edition.
+                        </p>
+                    </section>
+
+                    <section
+                        class="eggbot-dialog-panel"
+                        id="eggbot-panel-advanced"
+                        role="tabpanel"
+                        data-eggbot-tab-panel="advanced"
+                        hidden
+                    >
+                        <h3 data-i18n="controlDialog.advanced.title">Machine mapping and raw values</h3>
+                        <label class="eggbot-field">
+                            <span data-i18n="machine.stepsPerTurn">Motor-1 steps / egg turn</span>
+                            <input type="number" min="100" step="1" data-steps-per-turn />
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="machine.penRangeSteps">Motor-2 steps full pen travel</span>
+                            <input type="number" min="100" step="1" data-pen-range-steps />
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="machine.msPerStep">Motion timing (ms per step)</span>
+                            <input type="number" min="0.2" max="20" step="0.1" data-ms-per-step />
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="machine.servoUp">Servo up value (`SC,4`)</span>
+                            <input type="number" min="0" step="1" data-servo-up />
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="machine.servoDown">Servo down value (`SC,5`)</span>
+                            <input type="number" min="0" step="1" data-servo-down />
+                        </label>
+                        <label class="inline-check">
+                            <input type="checkbox" data-invert-pen />
+                            <span data-i18n="machine.invertPen">Invert pen up/down (`SP`) logic</span>
+                        </label>
+                    </section>
+                </div>
+
+                <footer class="eggbot-dialog-footer">
+                    <button class="ghost" type="button" data-eggbot-dialog-close data-i18n="controlDialog.close">Schließen</button>
+                    <button class="primary" type="button" data-eggbot-dialog-apply data-i18n="controlDialog.apply">Anwenden</button>
+                </footer>
+            </section>
         </div>
 
         <div class="webmcp-declarative" aria-hidden="true">

@@ -39,7 +39,25 @@ export class AppRuntimeConfig {
                 msPerStep: 1.8,
                 servoUp: 12000,
                 servoDown: 17000,
-                invertPen: false
+                invertPen: false,
+                penUpPercent: 35,
+                penDownPercent: 60,
+                penDownSpeed: 200,
+                penUpSpeed: 200,
+                penRaiseRate: 50,
+                penRaiseDelayMs: 200,
+                penLowerRate: 20,
+                penLowerDelayMs: 400,
+                reversePenMotor: false,
+                reverseEggMotor: false,
+                wrapAround: true,
+                returnHome: false,
+                engraverEnabled: false,
+                curveSmoothing: 0.2,
+                setupApplyAction: 'toggle',
+                manualCommand: 'disable-motors',
+                manualWalkDistance: 3200,
+                activeControlTab: 'plot'
             }
         }
     }

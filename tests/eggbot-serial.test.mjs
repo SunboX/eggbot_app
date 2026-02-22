@@ -445,3 +445,57 @@ test('EggBotSerial.drawStrokes should fallback to synchronous preprocessing when
         restoreTimers()
     }
 })
+
+test('EggBotSerial.drawStrokes should respect reverse motor flags, wrap mode, and return-home move', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+    let wrapAroundPayload = null
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes(payload) {
+            wrapAroundPayload = payload
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 20, y: 10 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.4 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 400,
+                penUpSpeed: 400,
+                reversePenMotor: true,
+                reverseEggMotor: true,
+                wrapAround: false,
+                returnHome: true
+            }
+        )
+
+        assert.equal(wrapAroundPayload?.drawConfig?.wrapAround, false)
+        assert.equal(commands.some((command) => /^SM,\d+,-20,-10$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,20,10$/.test(command)), true)
+    } finally {
+        restoreTimers()
+    }
+})
