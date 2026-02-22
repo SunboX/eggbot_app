@@ -16,7 +16,7 @@ export class PatternRenderer2D {
 
     /**
      * Renders a full texture frame.
-     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, importedSvgText?: string, importedSvgHeightRatio?: number }} data
+     * @param {{ baseColor: string, lineWidth: number, fillPatterns?: boolean, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, importedSvgText?: string, importedSvgHeightRatio?: number }} data
      */
     render(data) {
         const width = this.canvas.width
@@ -35,7 +35,7 @@ export class PatternRenderer2D {
             return
         }
 
-        this.#drawStrokes(strokes, data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8)
+        this.#drawStrokes(strokes, data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8, data.fillPatterns !== false)
 
         if (importedSvgText) {
             this.canvas.dispatchEvent(new Event('pattern-rendered'))
@@ -79,8 +79,9 @@ export class PatternRenderer2D {
      * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>} strokes
      * @param {string[]} palette
      * @param {number} lineWidth
+     * @param {boolean} fillPatterns
      */
-    #drawStrokes(strokes, palette, lineWidth) {
+    #drawStrokes(strokes, palette, lineWidth, fillPatterns) {
         const width = this.canvas.width
         const height = this.canvas.height
 
@@ -91,7 +92,7 @@ export class PatternRenderer2D {
         const groupedFills = new Map()
         strokes.forEach((stroke) => {
             if (!Array.isArray(stroke.points) || stroke.points.length < 2) return
-            if (typeof stroke.fillGroupId !== 'number') return
+            if (!fillPatterns || typeof stroke.fillGroupId !== 'number') return
             const color = String(palette[stroke.colorIndex % Math.max(1, palette.length)] || '#8b1f1a')
             const fillAlpha = Number.isFinite(stroke.fillAlpha) ? Math.max(0, Math.min(1, Number(stroke.fillAlpha))) : 0.16
             const fillRule = stroke.fillRule === 'evenodd' ? 'evenodd' : 'nonzero'
@@ -148,7 +149,7 @@ export class PatternRenderer2D {
                 })
                 if (stroke.closed) {
                     this.ctx.closePath()
-                    if (typeof stroke.fillGroupId !== 'number') {
+                    if (fillPatterns && typeof stroke.fillGroupId !== 'number') {
                         const fillAlpha = Number.isFinite(stroke.fillAlpha)
                             ? Math.max(0, Math.min(1, Number(stroke.fillAlpha)))
                             : 0.16

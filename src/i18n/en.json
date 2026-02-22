@@ -51,6 +51,7 @@
         "lineWidth": "Line width",
         "importHeightScale": "Pattern height / drawable zone",
         "showHorizontalLines": "Show horizontal lines/rings",
+        "fillPatterns": "Fill closed pattern shapes",
         "motifs": {
             "dots": "Punkte",
             "rays": "Strahlen",

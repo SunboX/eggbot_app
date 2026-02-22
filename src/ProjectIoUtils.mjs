@@ -76,6 +76,7 @@ export class ProjectIoUtils {
             lineWidth: Math.max(0.5, Math.min(4, ProjectIoUtils.#toNumber(state.lineWidth, 1.8))),
             importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 0.85))),
             showHorizontalLines: ProjectIoUtils.#toBoolean(state.showHorizontalLines, true),
+            fillPatterns: ProjectIoUtils.#toBoolean(state.fillPatterns, true),
             baseColor: String(state.baseColor || '#efe7ce'),
             palette: Array.isArray(state.palette)
                 ? state.palette.map((value) => String(value || '')).filter(Boolean)

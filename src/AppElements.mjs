@@ -43,6 +43,7 @@ export class AppElements {
             importHeightScale: query('[data-import-height-scale]'),
             importHeightScaleLabel: query('[data-import-height-scale-label]'),
             showHorizontalLines: query('[data-show-horizontal-lines]'),
+            fillPatterns: query('[data-fill-patterns]'),
             baseColor: query('[data-base-color]'),
             colorCount: query('[data-color-count]'),
             paletteList: query('[data-palette-list]'),

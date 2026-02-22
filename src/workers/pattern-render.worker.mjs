@@ -82,7 +82,7 @@ async function renderFrame(payload) {
         return { token }
     }
 
-    drawStrokes(strokes, data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8)
+    drawStrokes(strokes, data.palette || ['#8b1f1a'], Number(data.lineWidth) || 1.8, data.fillPatterns !== false)
     return { token }
 }
 
@@ -126,8 +126,9 @@ async function drawImportedSvg(svgText, heightRatio, token) {
  * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>} strokes
  * @param {string[]} palette
  * @param {number} lineWidth
+ * @param {boolean} fillPatterns
  */
-function drawStrokes(strokes, palette, lineWidth) {
+function drawStrokes(strokes, palette, lineWidth, fillPatterns) {
     if (!textureCanvas || !textureContext) {
         throw new Error('render-not-initialized')
     }
@@ -140,7 +141,7 @@ function drawStrokes(strokes, palette, lineWidth) {
     const groupedFills = new Map()
     strokes.forEach((stroke) => {
         if (!Array.isArray(stroke?.points) || stroke.points.length < 2) return
-        if (typeof stroke.fillGroupId !== 'number') return
+        if (!fillPatterns || typeof stroke.fillGroupId !== 'number') return
         const color = String(palette[stroke.colorIndex % Math.max(1, palette.length)] || '#8b1f1a')
         const fillAlpha = Number.isFinite(stroke.fillAlpha) ? Math.max(0, Math.min(1, Number(stroke.fillAlpha))) : 0.16
         const fillRule = stroke.fillRule === 'evenodd' ? 'evenodd' : 'nonzero'
@@ -197,7 +198,7 @@ function drawStrokes(strokes, palette, lineWidth) {
             })
             if (stroke.closed) {
                 textureContext.closePath()
-                if (typeof stroke.fillGroupId !== 'number') {
+                if (fillPatterns && typeof stroke.fillGroupId !== 'number') {
                     const fillAlpha = Number.isFinite(stroke.fillAlpha)
                         ? Math.max(0, Math.min(1, Number(stroke.fillAlpha)))
                         : 0.16

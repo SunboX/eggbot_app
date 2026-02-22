@@ -88,6 +88,30 @@ test('PatternSvgExportUtils should export stroke and fill path attributes', () =
     assert.equal(svg.includes('NaN'), false)
 })
 
+test('PatternSvgExportUtils should skip fill layers when fillPatterns is false', () => {
+    const svg = PatternSvgExportUtils.buildSvg({
+        palette: ['#8b1f1a'],
+        width: 100,
+        height: 50,
+        fillPatterns: false,
+        strokes: [
+            {
+                colorIndex: 0,
+                closed: true,
+                points: [
+                    { u: 0.1, v: 0.2 },
+                    { u: 0.4, v: 0.2 },
+                    { u: 0.2, v: 0.6 }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(svg.includes('<g id="ornament-fills">'), false)
+    assert.equal(svg.includes('fill-opacity='), false)
+    assert.ok(svg.includes('stroke="#8b1f1a"'))
+})
+
 test('PatternSvgExportUtils should group horizontal ring strokes by preset names', () => {
     const svg = PatternSvgExportUtils.buildSvg({
         palette: ['#8b1f1a'],

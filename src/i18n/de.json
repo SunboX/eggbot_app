@@ -51,6 +51,7 @@
         "lineWidth": "Linienbreite",
         "importHeightScale": "Musterhöhe / Zeichenzone",
         "showHorizontalLines": "Horizontale Linien/Ringe anzeigen",
+        "fillPatterns": "Geschlossene Musterflächen füllen",
         "motifs": {
             "dots": "Punkte",
             "rays": "Strahlen",

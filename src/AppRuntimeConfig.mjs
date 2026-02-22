@@ -22,6 +22,7 @@ export class AppRuntimeConfig {
             lineWidth: 1.8,
             importHeightScale: 0.85,
             showHorizontalLines: true,
+            fillPatterns: true,
             baseColor: '#efe7ce',
             palette: AppRuntimeConfig.#palette.slice(0, 4),
             motifs: {
