@@ -2,20 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ProjectFilenameUtils } from '../src/ProjectFilenameUtils.mjs'
 
-test('ProjectFilenameUtils should build stem from project name', () => {
-    const stem = ProjectFilenameUtils.buildFileStem('My Ornament', 'Fallback Name')
+test('ProjectFilenameUtils should include seed in file stem', () => {
+    const stem = ProjectFilenameUtils.buildFileStem('My Ornament', 'Fallback Name', 42)
 
-    assert.equal(stem, 'my-ornament')
+    assert.equal(stem, 'my-ornament-42')
 })
 
 test('ProjectFilenameUtils should build default stem when project name is empty', () => {
-    const filename = ProjectFilenameUtils.buildFileName('', 'Sorbische Komposition', 'json')
+    const filename = ProjectFilenameUtils.buildFileName('', 'Sorbische Komposition', 'invalid', 'json')
 
-    assert.equal(filename, 'sorbische-komposition.json')
+    assert.equal(filename, 'sorbische-komposition-1.json')
 })
 
-test('ProjectFilenameUtils should normalize extension', () => {
-    const filename = ProjectFilenameUtils.buildFileName('Deckblatt', 'Fallback', '.SVG')
+test('ProjectFilenameUtils should normalize extension and keep integer seed', () => {
+    const filename = ProjectFilenameUtils.buildFileName('Deckblatt', 'Fallback', 13.9, '.SVG')
 
-    assert.equal(filename, 'deckblatt.svg')
+    assert.equal(filename, 'deckblatt-13.svg')
 })
