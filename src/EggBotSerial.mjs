@@ -612,10 +612,11 @@ export class EggBotSerial {
             const chunkX = stepX === 0 ? Math.sign(dx) : stepX
             const chunkY = stepY === 0 ? Math.sign(dy) : stepY
             const durationMs = Math.max(8, Math.round(Math.max(Math.abs(chunkX), Math.abs(chunkY)) * msPerStep))
-            const commandX = cfg.reverseEggMotor ? -chunkX : chunkX
-            const commandY = cfg.reversePenMotor ? -chunkY : chunkY
+            // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
+            const axis1Pen = cfg.reversePenMotor ? -chunkY : chunkY
+            const axis2Egg = cfg.reverseEggMotor ? -chunkX : chunkX
 
-            await this.sendCommand(`SM,${durationMs},${commandX},${commandY}`)
+            await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
             await EggBotSerial.#sleep(durationMs + 6)
 
             current.x += chunkX
