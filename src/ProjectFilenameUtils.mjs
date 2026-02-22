@@ -3,28 +3,24 @@
  */
 export class ProjectFilenameUtils {
     /**
-     * Builds a deterministic file stem from project name and seed.
+     * Builds a deterministic file stem from project name.
      * @param {unknown} projectName
      * @param {unknown} fallbackStem
-     * @param {unknown} seed
      * @returns {string}
      */
-    static buildFileStem(projectName, fallbackStem, seed) {
-        const stem = ProjectFilenameUtils.#toStem(projectName, fallbackStem)
-        const normalizedSeed = ProjectFilenameUtils.#toSeed(seed)
-        return `${stem}-seed-${normalizedSeed}`
+    static buildFileStem(projectName, fallbackStem) {
+        return ProjectFilenameUtils.#toStem(projectName, fallbackStem)
     }
 
     /**
-     * Builds a deterministic filename from project name, seed, and extension.
+     * Builds a deterministic filename from project name and extension.
      * @param {unknown} projectName
      * @param {unknown} fallbackStem
-     * @param {unknown} seed
      * @param {unknown} extension
      * @returns {string}
      */
-    static buildFileName(projectName, fallbackStem, seed, extension) {
-        const stem = ProjectFilenameUtils.buildFileStem(projectName, fallbackStem, seed)
+    static buildFileName(projectName, fallbackStem, extension) {
+        const stem = ProjectFilenameUtils.buildFileStem(projectName, fallbackStem)
         const normalizedExtension = ProjectFilenameUtils.#toExtension(extension)
         return `${stem}.${normalizedExtension}`
     }
@@ -40,19 +36,6 @@ export class ProjectFilenameUtils {
         const normalizedFallback = String(fallback || '').trim() || 'project'
         const source = normalizedValue || normalizedFallback
         return source.replace(/\s+/g, '-').toLowerCase()
-    }
-
-    /**
-     * Normalizes seed input to an integer.
-     * @param {unknown} value
-     * @returns {number}
-     */
-    static #toSeed(value) {
-        const parsed = Number(value)
-        if (!Number.isFinite(parsed)) {
-            return 1
-        }
-        return Math.trunc(parsed)
     }
 
     /**
