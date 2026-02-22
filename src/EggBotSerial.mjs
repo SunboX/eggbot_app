@@ -124,7 +124,7 @@ export class EggBotSerial {
      */
     static #normalizeBaudRate(value) {
         const parsed = Math.trunc(Number(value))
-        return Number.isFinite(parsed) ? Math.max(300, parsed) : 9600
+        return Number.isFinite(parsed) ? Math.max(300, parsed) : 115200
     }
 
     /**

@@ -34,7 +34,7 @@ export class AppRuntimeConfig {
                 diamonds: true
             },
             drawConfig: {
-                baudRate: 9600,
+                baudRate: 115200,
                 stepsPerTurn: 3200,
                 penRangeSteps: 1500,
                 msPerStep: 1.8,
@@ -55,7 +55,7 @@ export class AppRuntimeConfig {
                 reverseEggMotor: false,
                 wrapAround: true,
                 returnHome: false,
-                printColorMode: 'single',
+                printColorMode: 'per-color',
                 engraverEnabled: false,
                 curveSmoothing: 0.2,
                 setupApplyAction: 'toggle',

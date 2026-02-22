@@ -90,7 +90,7 @@ export class ProjectIoUtils {
                 diamonds: ProjectIoUtils.#toBoolean(state?.motifs?.diamonds, true)
             },
             drawConfig: {
-                baudRate: Math.max(300, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.baudRate, 9600))),
+                baudRate: Math.max(300, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.baudRate, 115200))),
                 stepsPerTurn: Math.max(100, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.stepsPerTurn, 3200))),
                 penRangeSteps: Math.max(100, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penRangeSteps, 1500))),
                 msPerStep: Math.max(0.2, Math.min(20, ProjectIoUtils.#toNumber(state?.drawConfig?.msPerStep, 1.8))),
@@ -143,9 +143,9 @@ export class ProjectIoUtils {
                 returnHome: ProjectIoUtils.#toBoolean(state?.drawConfig?.returnHome, false),
                 printColorMode: String(state?.drawConfig?.printColorMode || '')
                     .trim()
-                    .toLowerCase() === 'per-color'
-                    ? 'per-color'
-                    : 'single',
+                    .toLowerCase() === 'single'
+                    ? 'single'
+                    : 'per-color',
                 engraverEnabled: ProjectIoUtils.#toBoolean(state?.drawConfig?.engraverEnabled, false),
                 curveSmoothing: Math.max(0, Math.min(2, ProjectIoUtils.#toNumber(state?.drawConfig?.curveSmoothing, 0.2))),
                 setupApplyAction:
