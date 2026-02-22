@@ -331,7 +331,7 @@ test('EggBotSerial.drawStrokes should preserve command ordering and progress wit
             },
             {
                 onStatus: (text) => statuses.push(text),
-                onProgress: (done, total) => progress.push({ done, total })
+                onProgress: (done, total, detail) => progress.push({ done, total, detail })
             }
         )
 
@@ -340,7 +340,15 @@ test('EggBotSerial.drawStrokes should preserve command ordering and progress wit
         assert.equal(commands[2], 'EM,1,1')
         assert.equal(commands.some((command) => command.startsWith('SM,')), true)
         assert.equal(commands[commands.length - 1], 'EM,0,0')
-        assert.deepEqual(progress, [{ done: 1, total: 1 }])
+        assert.equal(progress.length > 0, true)
+        assert.equal(progress[0]?.done, 0)
+        assert.equal(progress[0]?.total, 1)
+        const finalProgress = progress[progress.length - 1]
+        assert.equal(finalProgress?.done, 1)
+        assert.equal(finalProgress?.total, 1)
+        assert.equal(finalProgress?.detail?.remainingRatio, 0)
+        assert.equal(finalProgress?.detail?.remainingMs, 0)
+        assert.equal(Number.isFinite(finalProgress?.detail?.estimatedTotalMs), true)
         assert.equal(statuses.includes('Draw finished.'), true)
     } finally {
         restoreTimers()

@@ -255,6 +255,23 @@
                         <div class="status" data-status data-i18n="status.ready">
                             Ready. Generate a pattern and connect EggBot when you are ready to draw.
                         </div>
+                        <div class="draw-progress" data-draw-progress hidden>
+                            <div
+                                class="draw-progress-track"
+                                data-draw-progress-track
+                                role="progressbar"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="0"
+                                data-i18n-aria-label="machine.drawProgressAria"
+                            >
+                                <div class="draw-progress-fill" data-draw-progress-fill></div>
+                            </div>
+                            <div class="draw-progress-meta">
+                                <span class="draw-progress-remaining" data-draw-progress-percent>Remaining: 100%</span>
+                                <span class="draw-progress-time" data-draw-progress-time>Remaining time: --:--</span>
+                            </div>
+                        </div>
                     </section>
                 </aside>
             </main>

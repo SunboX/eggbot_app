@@ -97,7 +97,8 @@
         "servoUp": "Servo-Oben-Wert (`SC,4`)",
         "servoDown": "Servo-Unten-Wert (`SC,5`)",
         "invertPen": "Stiftlogik für Hoch/Runter (`SP`) invertieren",
-        "stopDraw": "Zeichnen stoppen"
+        "stopDraw": "Zeichnen stoppen",
+        "drawProgressAria": "Zeichenfortschritt"
     },
     "controlDialog": {
         "title": "EggBot Control",
@@ -206,6 +207,9 @@
         "connectingBeforeDraw": "EggBot wird vor dem Zeichnen verbunden...",
         "connectBeforeDraw": "Bitte EggBot vor dem Zeichnen verbinden.",
         "drawingProgress": "Zeichnung läuft: Linienzug {{done}}/{{total}}",
+        "drawingRemainingPercent": "Verbleibend: {{percent}}%",
+        "drawingRemainingTime": "Restzeit: {{time}}",
+        "drawingRemainingTimeUnknown": "--:--",
         "drawCompleted": "EggBot-Zeichenbefehl wurde vollständig übertragen.",
         "drawFailed": "Zeichnen fehlgeschlagen: {{message}}",
         "connectingBeforeManualControl": "EggBot wird für manuelle Steuerung verbunden...",

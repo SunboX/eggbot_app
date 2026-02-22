@@ -76,6 +76,7 @@ class AppController {
         this.webMcpBridge = null
         this.activeEggBotControlTab = 'plot'
         this.setupActionTogglePenDown = false
+        this.drawProgressStartedAtMs = 0
         this.autoGenerateOrnamentControls = [
             this.els.preset,
             this.els.seed,
@@ -123,6 +124,7 @@ class AppController {
         this.#syncConnectionUi()
         this.#syncPatternImportUi()
         this.#syncAutoGenerateOrnamentControlsUi()
+        this.#resetDrawProgressUi()
         this.#scheduleProjectArtifactsRefreshIdle()
     }
     /**
@@ -170,6 +172,85 @@ class AppController {
         this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
+    }
+
+    /**
+     * Shows draw-progress UI and initializes default values.
+     */
+    #startDrawProgressUi() {
+        this.drawProgressStartedAtMs = Date.now()
+        this.els.drawProgress.hidden = false
+        this.#updateDrawProgressUi(1, null)
+    }
+
+    /**
+     * Hides draw-progress UI and resets default labels.
+     */
+    #resetDrawProgressUi() {
+        this.drawProgressStartedAtMs = 0
+        this.els.drawProgress.hidden = true
+        this.els.drawProgressFill.style.width = '0%'
+        this.els.drawProgressTrack.setAttribute('aria-valuenow', '0')
+        this.els.drawProgressPercent.textContent = this.#t('messages.drawingRemainingPercent', { percent: 100 })
+        this.els.drawProgressTime.textContent = this.#t('messages.drawingRemainingTime', {
+            time: this.#t('messages.drawingRemainingTimeUnknown')
+        })
+    }
+
+    /**
+     * Updates draw-progress UI with remaining percentage and duration.
+     * @param {number} remainingRatio
+     * @param {number | null | undefined} remainingMs
+     */
+    #updateDrawProgressUi(remainingRatio, remainingMs) {
+        const normalizedRemainingRatio = Math.max(0, Math.min(1, Number(remainingRatio) || 0))
+        const completedPercent = Math.max(0, Math.min(100, Math.round((1 - normalizedRemainingRatio) * 100)))
+        const remainingPercent = Math.max(0, Math.min(100, 100 - completedPercent))
+        const normalizedRemainingMs = Number.isFinite(Number(remainingMs))
+            ? Math.max(0, Math.round(Number(remainingMs)))
+            : this.#estimateRemainingMsFromRatio(normalizedRemainingRatio)
+
+        this.els.drawProgressFill.style.width = `${completedPercent}%`
+        this.els.drawProgressTrack.setAttribute('aria-valuenow', String(completedPercent))
+        this.els.drawProgressPercent.textContent = this.#t('messages.drawingRemainingPercent', { percent: remainingPercent })
+        this.els.drawProgressTime.textContent = this.#t('messages.drawingRemainingTime', {
+            time:
+                normalizedRemainingMs === null
+                    ? this.#t('messages.drawingRemainingTimeUnknown')
+                    : this.#formatDurationLabel(normalizedRemainingMs)
+        })
+    }
+
+    /**
+     * Estimates remaining duration from elapsed runtime and remaining ratio.
+     * @param {number} remainingRatio
+     * @returns {number | null}
+     */
+    #estimateRemainingMsFromRatio(remainingRatio) {
+        if (this.drawProgressStartedAtMs <= 0) return null
+        const normalizedRemainingRatio = Math.max(0, Math.min(1, Number(remainingRatio) || 0))
+        if (normalizedRemainingRatio <= 0) return 0
+        if (normalizedRemainingRatio >= 1) return null
+
+        const elapsedMs = Math.max(1, Date.now() - this.drawProgressStartedAtMs)
+        const completedRatio = Math.max(0.0001, 1 - normalizedRemainingRatio)
+        return Math.max(0, Math.round((elapsedMs / completedRatio) * normalizedRemainingRatio))
+    }
+
+    /**
+     * Formats duration milliseconds into a compact `M:SS` or `H:MM:SS` string.
+     * @param {number} durationMs
+     * @returns {string}
+     */
+    #formatDurationLabel(durationMs) {
+        const totalSeconds = Math.max(0, Math.round((Number(durationMs) || 0) / 1000))
+        const hours = Math.floor(totalSeconds / 3600)
+        const minutes = Math.floor((totalSeconds % 3600) / 60)
+        const seconds = totalSeconds % 60
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        }
+        return `${minutes}:${String(seconds).padStart(2, '0')}`
     }
 
     /**
@@ -1375,6 +1456,7 @@ class AppController {
         } catch (error) {
             this.#setStatus(this.#t('messages.disconnectFailed', { message: error.message }), 'error')
         } finally {
+            this.#resetDrawProgressUi()
             this.#syncConnectionUi()
         }
     }
@@ -1386,6 +1468,9 @@ class AppController {
         this.i18n.setLocale(locale)
         this.#applyLocaleToUi()
         this.#renderPaletteControls()
+        if (!this.isDrawing) {
+            this.#resetDrawProgressUi()
+        }
         const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
         this.#refreshSavedProjectsSelect(selectedLocalProjectId, { preferIdle: false })
     }
@@ -1881,9 +1966,26 @@ class AppController {
                 this.#syncConnectionUi()
             }
 
+            this.#startDrawProgressUi()
+            let lastProgressDone = -1
+            let lastProgressTotal = -1
             await this.serial.drawStrokes(this.state.strokes, this.state.drawConfig, {
                 onStatus: (text) => this.#setStatus(text, 'info'),
-                onProgress: (done, total) => this.#setStatus(this.#t('messages.drawingProgress', { done, total }), 'info')
+                onProgress: (done, total, detail) => {
+                    if (done !== lastProgressDone || total !== lastProgressTotal) {
+                        lastProgressDone = done
+                        lastProgressTotal = total
+                        this.#setStatus(this.#t('messages.drawingProgress', { done, total }), 'info')
+                    }
+                    const fallbackRemainingRatio = total > 0 ? Math.max(0, 1 - done / total) : 0
+                    const remainingRatio = Number.isFinite(Number(detail?.remainingRatio))
+                        ? Math.max(0, Math.min(1, Number(detail.remainingRatio)))
+                        : fallbackRemainingRatio
+                    const remainingMs = Number.isFinite(Number(detail?.remainingMs))
+                        ? Math.max(0, Number(detail.remainingMs))
+                        : null
+                    this.#updateDrawProgressUi(remainingRatio, remainingMs)
+                }
             })
             this.#setStatus(this.#t('messages.drawCompleted'), 'success')
         } catch (error) {
@@ -1894,6 +1996,7 @@ class AppController {
             }
         } finally {
             this.isDrawing = false
+            this.#resetDrawProgressUi()
             this.#syncConnectionUi()
         }
     }

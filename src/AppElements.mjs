@@ -104,6 +104,11 @@ export class AppElements {
             deleteLocal: queryOptional('[data-delete-local]'),
             appVersion: query('[data-app-version]'),
             status: query('[data-status]'),
+            drawProgress: query('[data-draw-progress]'),
+            drawProgressTrack: query('[data-draw-progress-track]'),
+            drawProgressFill: query('[data-draw-progress-fill]'),
+            drawProgressPercent: query('[data-draw-progress-percent]'),
+            drawProgressTime: query('[data-draw-progress-time]'),
             eggCanvas: query('[data-egg-canvas]'),
             textureCanvas: query('[data-texture-canvas]')
         }
