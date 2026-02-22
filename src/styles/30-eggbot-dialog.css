@@ -159,15 +159,46 @@
     font-variant-numeric: tabular-nums;
 }
 
+.eggbot-spinbox input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.eggbot-spinbox input[type='number']::-webkit-outer-spin-button,
+.eggbot-spinbox input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 .eggbot-spinbox button {
     border: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 0;
     background: transparent;
-    color: #f3f5f8;
+    color: transparent;
     padding: 0;
-    font-size: 1.35rem;
-    line-height: 1;
+    font-size: 0;
+    line-height: 0;
+    display: grid;
+    place-items: center;
+    position: relative;
+}
+
+.eggbot-spinbox button::before {
+    content: '';
+    width: 14px;
+    height: 14px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 14px 14px;
+}
+
+.eggbot-spinbox button[data-spin-direction='-1']::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='%23f3f5f8' d='M2 6h10v2H2z'/%3E%3C/svg%3E");
+}
+
+.eggbot-spinbox button[data-spin-direction='1']::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='%23f3f5f8' d='M2 6h10v2H2zM6 2h2v10H6z'/%3E%3C/svg%3E");
 }
 
 .eggbot-spinbox button:hover {
