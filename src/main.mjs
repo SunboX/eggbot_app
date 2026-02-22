@@ -1448,6 +1448,28 @@ class AppController {
     }
 
     /**
+     * Builds one render-safe stroke list based on fill visibility settings.
+     * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>} strokes
+     * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>}
+     */
+    #buildRenderInputStrokes(strokes) {
+        const source = Array.isArray(strokes) ? strokes : []
+        if (this.state.fillPatterns !== false) {
+            return source
+        }
+        return source.map((stroke) => {
+            if (!stroke || typeof stroke !== 'object' || Array.isArray(stroke)) {
+                return stroke
+            }
+            return {
+                ...stroke,
+                // Keep geometry unchanged while forcing transparent fill in any backend.
+                fillAlpha: 0
+            }
+        })
+    }
+
+    /**
      * Regenerates the pattern and updates 2D/3D output.
      * @param {{ skipImportedStatus?: boolean }} [options]
      */
@@ -1520,7 +1542,7 @@ class AppController {
             lineWidth: this.state.lineWidth,
             fillPatterns: this.state.fillPatterns,
             palette: this.state.palette,
-            strokes: this.state.strokes,
+            strokes: this.#buildRenderInputStrokes(this.state.strokes),
             importedSvgText: config.importedSvgText,
             importedSvgHeightRatio: config.importedSvgHeightRatio
         }
