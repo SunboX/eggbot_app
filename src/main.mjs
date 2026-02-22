@@ -305,8 +305,6 @@ class AppController {
             -64000,
             Math.min(64000, AppController.#parseInteger(this.state.drawConfig.manualWalkDistance, 3200))
         )
-        const speed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)))
-        const durationMs = Math.max(8, Math.round(Math.abs(walkDistance) * (1000 / speed)))
 
         if (command === 'disable-motors') {
             await this.serial.sendCommand('EM,0,0')
@@ -333,12 +331,34 @@ class AppController {
             return
         }
         if (command === 'walk-egg') {
+            const eggMotorSpeed = Math.max(
+                10,
+                Math.min(
+                    4000,
+                    AppController.#parseInteger(
+                        this.state.drawConfig.eggMotorSpeed,
+                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)
+                    )
+                )
+            )
+            const durationMs = Math.max(8, Math.round(Math.abs(walkDistance) * (1000 / eggMotorSpeed)))
             const logicalDistance = this.state.drawConfig.reverseEggMotor ? -walkDistance : walkDistance
             await this.serial.sendCommand(`SM,${durationMs},0,${logicalDistance}`)
             this.#setStatus(this.#t('messages.controlDialogManualWalkEggApplied', { steps: walkDistance }), 'success')
             return
         }
         if (command === 'walk-pen') {
+            const penMotorSpeed = Math.max(
+                10,
+                Math.min(
+                    4000,
+                    AppController.#parseInteger(
+                        this.state.drawConfig.penMotorSpeed,
+                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)
+                    )
+                )
+            )
+            const durationMs = Math.max(8, Math.round(Math.abs(walkDistance) * (1000 / penMotorSpeed)))
             const logicalDistance = this.state.drawConfig.reversePenMotor ? -walkDistance : walkDistance
             await this.serial.sendCommand(`SM,${durationMs},${logicalDistance},0`)
             this.#setStatus(this.#t('messages.controlDialogManualWalkPenApplied', { steps: walkDistance }), 'success')
@@ -433,10 +453,16 @@ class AppController {
         const fallbackSpeed = Math.max(10, Math.min(4000, Math.round(1000 / Math.max(0.2, this.state.drawConfig.msPerStep || 1.8))))
         const penDownSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penDownSpeed, fallbackSpeed)))
         const penUpSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penUpSpeed, penDownSpeed)))
+        const penMotorSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penMotorSpeed, 4000)))
+        const eggMotorSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.eggMotorSpeed, 4000)))
         this.state.drawConfig.penDownSpeed = penDownSpeed
         this.state.drawConfig.penUpSpeed = penUpSpeed
+        this.state.drawConfig.penMotorSpeed = penMotorSpeed
+        this.state.drawConfig.eggMotorSpeed = eggMotorSpeed
         this.els.controlSpeedPenDown.value = String(penDownSpeed)
         this.els.controlSpeedPenUp.value = String(penUpSpeed)
+        this.els.controlSpeedPenMotor.value = String(penMotorSpeed)
+        this.els.controlSpeedEggMotor.value = String(eggMotorSpeed)
 
         this.state.drawConfig.penRaiseRate = Math.max(
             1,
@@ -1138,6 +1164,26 @@ class AppController {
             this.state.drawConfig.penUpSpeed = Math.max(
                 10,
                 Math.min(4000, AppController.#parseInteger(this.els.controlSpeedPenUp.value, this.state.drawConfig.penUpSpeed))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSpeedPenMotor.addEventListener('change', () => {
+            this.state.drawConfig.penMotorSpeed = Math.max(
+                10,
+                Math.min(
+                    4000,
+                    AppController.#parseInteger(this.els.controlSpeedPenMotor.value, this.state.drawConfig.penMotorSpeed)
+                )
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSpeedEggMotor.addEventListener('change', () => {
+            this.state.drawConfig.eggMotorSpeed = Math.max(
+                10,
+                Math.min(
+                    4000,
+                    AppController.#parseInteger(this.els.controlSpeedEggMotor.value, this.state.drawConfig.eggMotorSpeed)
+                )
             )
             this.#markProjectArtifactsDirty()
         })
@@ -2866,6 +2912,20 @@ class AppController {
             this.state.drawConfig.penUpSpeed = Math.max(
                 10,
                 Math.min(4000, AppController.#parseInteger(patch.penUpSpeed, this.state.drawConfig.penUpSpeed))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penMotorSpeed')) {
+            this.state.drawConfig.penMotorSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(patch.penMotorSpeed, this.state.drawConfig.penMotorSpeed))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'eggMotorSpeed')) {
+            this.state.drawConfig.eggMotorSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(patch.eggMotorSpeed, this.state.drawConfig.eggMotorSpeed))
             )
             didMutateState = true
         }

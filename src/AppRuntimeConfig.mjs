@@ -44,6 +44,8 @@ export class AppRuntimeConfig {
                 penDownPercent: 60,
                 penDownSpeed: 200,
                 penUpSpeed: 200,
+                penMotorSpeed: 4000,
+                eggMotorSpeed: 4000,
                 penRaiseRate: 50,
                 penRaiseDelayMs: 200,
                 penLowerRate: 20,

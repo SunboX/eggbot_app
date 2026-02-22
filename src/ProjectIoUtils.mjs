@@ -118,6 +118,14 @@ export class ProjectIoUtils {
                 ),
                 penDownSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penDownSpeed, 200)))),
                 penUpSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penUpSpeed, 200)))),
+                penMotorSpeed: Math.max(
+                    10,
+                    Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penMotorSpeed, 4000)))
+                ),
+                eggMotorSpeed: Math.max(
+                    10,
+                    Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.eggMotorSpeed, 4000)))
+                ),
                 penRaiseRate: Math.max(1, Math.min(100, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penRaiseRate, 50)))),
                 penRaiseDelayMs: Math.max(
                     0,

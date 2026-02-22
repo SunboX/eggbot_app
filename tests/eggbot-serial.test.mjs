@@ -499,3 +499,51 @@ test('EggBotSerial.drawStrokes should respect reverse motor flags, wrap mode, an
         restoreTimers()
     }
 })
+
+test('EggBotSerial.drawStrokes should apply per-motor speed limits to movement duration', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 20, y: 10 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.4 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 400,
+                penUpSpeed: 400,
+                penMotorSpeed: 1000,
+                eggMotorSpeed: 50
+            }
+        )
+
+        assert.equal(commands.some((command) => /^SM,400,10,20$/.test(command)), true)
+    } finally {
+        restoreTimers()
+    }
+})

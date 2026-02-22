@@ -346,7 +346,7 @@ export class EggBotSerial {
     /**
      * Draws generated strokes on the connected EggBot.
      * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
-     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean }} drawConfig
+     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean }} drawConfig
      * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number) => void }} [callbacks]
      * @returns {Promise<void>}
      */
@@ -379,6 +379,9 @@ export class EggBotSerial {
             returnHome: Boolean(drawConfig.returnHome)
         }
         cfg.penUpSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penUpSpeed) || cfg.penDownSpeed)))
+        const profileMaxSpeed = Math.max(cfg.penDownSpeed, cfg.penUpSpeed)
+        cfg.penMotorSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penMotorSpeed) || profileMaxSpeed)))
+        cfg.eggMotorSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.eggMotorSpeed) || profileMaxSpeed)))
 
         this.abortDrawing = false
         this.drawing = true
@@ -593,7 +596,7 @@ export class EggBotSerial {
      * @param {{x:number,y:number}} target
      * @param {{x:number,y:number}} current
      * @param {number} speedStepsPerSecond
-     * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean }} cfg
+     * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean, penMotorSpeed: number, eggMotorSpeed: number }} cfg
      * @returns {Promise<void>}
      */
     async #moveTo(target, current, speedStepsPerSecond, cfg) {
@@ -601,8 +604,11 @@ export class EggBotSerial {
         let dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return
 
-        const speed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
-        const msPerStep = 1000 / speed
+        const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
+        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
+        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
+        const effectivePenSpeed = Math.min(profileSpeed, penMotorSpeed)
+        const effectiveEggSpeed = Math.min(profileSpeed, eggMotorSpeed)
         const maxChunk = 1200
         while (dx !== 0 || dy !== 0) {
             if (this.abortDrawing) return
@@ -611,7 +617,9 @@ export class EggBotSerial {
             const stepY = Math.trunc(dy / scale)
             const chunkX = stepX === 0 ? Math.sign(dx) : stepX
             const chunkY = stepY === 0 ? Math.sign(dy) : stepY
-            const durationMs = Math.max(8, Math.round(Math.max(Math.abs(chunkX), Math.abs(chunkY)) * msPerStep))
+            const penDurationMs = (Math.abs(chunkY) / effectivePenSpeed) * 1000
+            const eggDurationMs = (Math.abs(chunkX) / effectiveEggSpeed) * 1000
+            const durationMs = Math.max(8, Math.round(Math.max(penDurationMs, eggDurationMs)))
             // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
             const axis1Pen = cfg.reversePenMotor ? -chunkY : chunkY
             const axis2Egg = cfg.reverseEggMotor ? -chunkX : chunkX

@@ -2,7 +2,7 @@
  * Current application version synced from package.json.
  */
 export class AppVersion {
-    static #current = '1.3.24'
+    static #current = '1.3.25'
 
     /**
      * Returns current application version.

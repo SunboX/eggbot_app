@@ -547,6 +547,44 @@
                                 </button>
                             </div>
                         </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.speedPenMotor">Speed limit of Motor 1 (pen, steps/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-speed-pen-motor"
+                                    type="number"
+                                    min="10"
+                                    max="4000"
+                                    step="10"
+                                    data-control-speed-pen-motor
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-motor" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-speed-pen-motor" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
+                        <label class="eggbot-field">
+                            <span data-i18n="controlDialog.timing.speedEggMotor">Speed limit of Motor 2 (egg, steps/s):</span>
+                            <div class="eggbot-spinbox">
+                                <input
+                                    id="control-speed-egg-motor"
+                                    type="number"
+                                    min="10"
+                                    max="4000"
+                                    step="10"
+                                    data-control-speed-egg-motor
+                                />
+                                <button type="button" data-spin-step data-spin-target="control-speed-egg-motor" data-spin-direction="-1">
+                                    -
+                                </button>
+                                <button type="button" data-spin-step data-spin-target="control-speed-egg-motor" data-spin-direction="1">
+                                    +
+                                </button>
+                            </div>
+                        </label>
 
                         <h3 data-i18n="controlDialog.timing.penLiftTitle">Pen lift and lowering speeds:</h3>
                         <label class="eggbot-field">

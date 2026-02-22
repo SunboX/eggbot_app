@@ -130,6 +130,8 @@
             "movementTitle": "Bewegungsgeschwindigkeiten:",
             "speedPenDown": "Geschwindigkeit bei abgesenktem Stift (Schritte/s):",
             "speedPenUp": "Geschwindigkeit bei angehobenem Stift (Schritte/s):",
+            "speedPenMotor": "Geschwindigkeitslimit von Motor 1 (Stift, Schritte/s):",
+            "speedEggMotor": "Geschwindigkeitslimit von Motor 2 (Ei, Schritte/s):",
             "penLiftTitle": "Geschwindigkeit für Heben und Senken:",
             "penRaiseRate": "Stift-Hebegeschwindigkeit (%/s):",
             "delayAfterRaise": "Verzögerung nach Stiftheben (ms):",
