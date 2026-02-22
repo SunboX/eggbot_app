@@ -235,7 +235,40 @@
     color: #f0f1f3;
 }
 
-.eggbot-dialog-panel select,
+.eggbot-dialog-panel select {
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 7px;
+    background-color: #1f2229;
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.25 4.5 6 8.25 9.75 4.5' fill='none' stroke='%23e8edf5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
+        linear-gradient(180deg, #252932, #1f232b);
+    background-repeat: no-repeat, no-repeat;
+    background-position: right 0.62rem center, center;
+    background-size: 12px 12px, auto;
+    color: #fafafa;
+    padding: 0.32rem 2rem 0.32rem 0.6rem;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.eggbot-dialog-panel select:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+}
+
+.eggbot-dialog-panel select:focus,
+.eggbot-dialog-panel select:focus-visible {
+    outline: none;
+    border-color: rgba(93, 173, 255, 0.75);
+    box-shadow: 0 0 0 1px rgba(93, 173, 255, 0.28);
+}
+
+.eggbot-dialog-panel select::-ms-expand {
+    display: none;
+}
+
 .eggbot-dialog-panel input[type='number'] {
     background: #1f2229;
     border-color: rgba(255, 255, 255, 0.18);
