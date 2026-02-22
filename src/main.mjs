@@ -30,6 +30,9 @@ const IDLE_TIMEOUT_PROJECT_ARTIFACTS_MS = 1000
 const IDLE_TIMEOUT_LOCAL_PROJECT_RENDER_MS = 800
 const LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE = 30
 const LOCAL_PROJECT_RENDER_IDLE_THRESHOLD = 100
+const EGGBOT_CONTROL_TABS = ['plot', 'setup', 'timing', 'options', 'manual', 'resume', 'layers', 'advanced']
+const SERVO_VALUE_MIN = 5000
+const SERVO_VALUE_MAX = 25000
 /**
  * App orchestration for controls, rendering, persistence, and EggBot drawing.
  */
@@ -69,6 +72,8 @@ class AppController {
         this.i18n = i18n
         this.importedPattern = null
         this.webMcpBridge = null
+        this.activeEggBotControlTab = 'plot'
+        this.setupActionTogglePenDown = false
         this.autoGenerateOrnamentControls = [
             this.els.preset,
             this.els.seed,
@@ -155,6 +160,355 @@ class AppController {
         this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
+    }
+
+    /**
+     * Opens the EggBot control modal dialog.
+     */
+    #openEggBotControlDialog() {
+        this.#syncEggBotDialogControlsFromState()
+        this.#syncEggBotControlTabUi()
+        this.els.eggbotDialogBackdrop.hidden = false
+        document.body.classList.add('eggbot-dialog-open')
+    }
+
+    /**
+     * Closes the EggBot control modal dialog.
+     */
+    #closeEggBotControlDialog() {
+        this.els.eggbotDialogBackdrop.hidden = true
+        document.body.classList.remove('eggbot-dialog-open')
+    }
+
+    /**
+     * Returns true when the EggBot control dialog is visible.
+     * @returns {boolean}
+     */
+    #isEggBotControlDialogOpen() {
+        return !this.els.eggbotDialogBackdrop.hidden
+    }
+
+    /**
+     * Sets one active EggBot control tab and syncs tab UI.
+     * @param {string} tab
+     */
+    #setEggBotControlTab(tab) {
+        const nextTab = String(tab || '').trim()
+        if (!EGGBOT_CONTROL_TABS.includes(nextTab)) {
+            return
+        }
+        this.activeEggBotControlTab = nextTab
+        if (this.state?.drawConfig) {
+            this.state.drawConfig.activeControlTab = nextTab
+            this.#markProjectArtifactsDirty()
+        }
+        this.#syncEggBotControlTabUi()
+    }
+
+    /**
+     * Synchronizes EggBot control tab buttons and panels.
+     */
+    #syncEggBotControlTabUi() {
+        const activeTab = EGGBOT_CONTROL_TABS.includes(this.activeEggBotControlTab) ? this.activeEggBotControlTab : 'plot'
+        this.activeEggBotControlTab = activeTab
+        this.els.eggbotTabButtons.forEach((button) => {
+            const tabName = String(button?.dataset?.eggbotTab || '').trim()
+            const isActive = tabName === activeTab
+            button.classList.toggle('active', isActive)
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false')
+            button.tabIndex = isActive ? 0 : -1
+        })
+        this.els.eggbotTabPanels.forEach((panel) => {
+            const panelTabName = String(panel?.dataset?.eggbotTabPanel || '').trim()
+            panel.hidden = panelTabName !== activeTab
+        })
+    }
+
+    /**
+     * Applies the action for the currently active EggBot control tab.
+     * @returns {Promise<void>}
+     */
+    async #applyEggBotControlCurrentTab() {
+        if (this.activeEggBotControlTab === 'plot') {
+            await this.#drawCurrentPattern()
+            return
+        }
+        if (this.activeEggBotControlTab === 'setup') {
+            await this.#applySetupControlAction()
+            return
+        }
+        if (this.activeEggBotControlTab === 'manual') {
+            await this.#applyManualControlAction()
+            return
+        }
+        this.#setStatus(this.#t('messages.controlDialogSettingsApplied'), 'success')
+    }
+
+    /**
+     * Applies setup-tab action against a connected EggBot.
+     * @returns {Promise<void>}
+     */
+    async #applySetupControlAction() {
+        if (this.isDrawing) {
+            this.#setStatus(this.#t('messages.controlDialogBusyDrawing'), 'error')
+            return
+        }
+        const connected = await this.#ensureSerialConnectedForControl()
+        if (!connected) return
+
+        await this.serial.sendCommand(`SC,4,${Math.round(this.state.drawConfig.servoUp)}`)
+        await this.serial.sendCommand(`SC,5,${Math.round(this.state.drawConfig.servoDown)}`)
+
+        if (this.state.drawConfig.setupApplyAction === 'raise-off') {
+            await this.serial.sendCommand(`SP,${this.#resolvePenCommandValue(false)}`)
+            await this.serial.sendCommand('EM,0,0')
+            this.setupActionTogglePenDown = false
+            this.#setStatus(this.#t('messages.controlDialogSetupRaiseDisableApplied'), 'success')
+            return
+        }
+
+        this.setupActionTogglePenDown = !this.setupActionTogglePenDown
+        await this.serial.sendCommand('EM,1,1')
+        await this.serial.sendCommand(`SP,${this.#resolvePenCommandValue(this.setupActionTogglePenDown)}`)
+        this.#setStatus(
+            this.setupActionTogglePenDown
+                ? this.#t('messages.controlDialogSetupPenDownApplied')
+                : this.#t('messages.controlDialogSetupPenUpApplied'),
+            'success'
+        )
+    }
+
+    /**
+     * Applies manual-tab command against a connected EggBot.
+     * @returns {Promise<void>}
+     */
+    async #applyManualControlAction() {
+        if (this.isDrawing) {
+            this.#setStatus(this.#t('messages.controlDialogBusyDrawing'), 'error')
+            return
+        }
+        const connected = await this.#ensureSerialConnectedForControl()
+        if (!connected) return
+
+        const command = String(this.state.drawConfig.manualCommand || 'disable-motors').trim()
+        const walkDistance = Math.max(
+            -64000,
+            Math.min(64000, AppController.#parseInteger(this.state.drawConfig.manualWalkDistance, 3200))
+        )
+        const speed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)))
+        const durationMs = Math.max(8, Math.round(Math.abs(walkDistance) * (1000 / speed)))
+
+        if (command === 'disable-motors') {
+            await this.serial.sendCommand('EM,0,0')
+            this.#setStatus(this.#t('messages.controlDialogManualMotorsDisabled'), 'success')
+            return
+        }
+        if (command === 'enable-motors') {
+            await this.serial.sendCommand('EM,1,1')
+            this.#setStatus(this.#t('messages.controlDialogManualMotorsEnabled'), 'success')
+            return
+        }
+        if (command === 'raise-pen') {
+            await this.serial.sendCommand(`SC,4,${Math.round(this.state.drawConfig.servoUp)}`)
+            await this.serial.sendCommand(`SC,5,${Math.round(this.state.drawConfig.servoDown)}`)
+            await this.serial.sendCommand(`SP,${this.#resolvePenCommandValue(false)}`)
+            this.#setStatus(this.#t('messages.controlDialogManualPenRaised'), 'success')
+            return
+        }
+        if (command === 'lower-pen') {
+            await this.serial.sendCommand(`SC,4,${Math.round(this.state.drawConfig.servoUp)}`)
+            await this.serial.sendCommand(`SC,5,${Math.round(this.state.drawConfig.servoDown)}`)
+            await this.serial.sendCommand(`SP,${this.#resolvePenCommandValue(true)}`)
+            this.#setStatus(this.#t('messages.controlDialogManualPenLowered'), 'success')
+            return
+        }
+        if (command === 'walk-egg') {
+            const logicalDistance = this.state.drawConfig.reverseEggMotor ? -walkDistance : walkDistance
+            await this.serial.sendCommand(`SM,${durationMs},${logicalDistance},0`)
+            this.#setStatus(this.#t('messages.controlDialogManualWalkEggApplied', { steps: walkDistance }), 'success')
+            return
+        }
+        if (command === 'walk-pen') {
+            const logicalDistance = this.state.drawConfig.reversePenMotor ? -walkDistance : walkDistance
+            await this.serial.sendCommand(`SM,${durationMs},0,${logicalDistance}`)
+            this.#setStatus(this.#t('messages.controlDialogManualWalkPenApplied', { steps: walkDistance }), 'success')
+            return
+        }
+        if (command === 'query-version') {
+            const response = await this.serial.sendCommand('v', { expectResponse: true, timeoutMs: 1500 })
+            this.#setStatus(this.#t('messages.controlDialogManualVersionResult', { version: response || 'Connected' }), 'info')
+            return
+        }
+        this.#setStatus(this.#t('messages.controlDialogManualUnknownCommand'), 'error')
+    }
+
+    /**
+     * Connects serial when needed for setup/manual dialog actions.
+     * @returns {Promise<boolean>}
+     */
+    async #ensureSerialConnectedForControl() {
+        if (this.serial.isConnected) {
+            return true
+        }
+
+        try {
+            this.#setStatus(this.#t('messages.connectingBeforeManualControl'), 'loading')
+            const version = await this.serial.connectForDraw({ baudRate: this.#resolveSerialBaudRate() })
+            this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
+            this.#syncConnectionUi()
+            return true
+        } catch (error) {
+            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            this.#syncConnectionUi()
+            return false
+        }
+    }
+
+    /**
+     * Resolves SP command value for pen state.
+     * @param {boolean} isDown
+     * @returns {number}
+     */
+    #resolvePenCommandValue(isDown) {
+        const invertPen = Boolean(this.state.drawConfig.invertPen)
+        return isDown ? (invertPen ? 1 : 0) : invertPen ? 0 : 1
+    }
+
+    /**
+     * Applies plus/minus spinner steps for one numeric control.
+     * @param {MouseEvent} event
+     */
+    #applyControlStepperAdjustment(event) {
+        const target = event.target instanceof HTMLElement ? event.target.closest('[data-spin-step]') : null
+        if (!target) return
+        const targetId = String(target.dataset.spinTarget || '').trim()
+        if (!targetId) return
+
+        const input = document.getElementById(targetId)
+        if (!(input instanceof HTMLInputElement)) return
+
+        const direction = AppController.#parseFloat(target.dataset.spinDirection, 1)
+        const step = Math.abs(AppController.#parseFloat(input.step, 1)) || 1
+        const min = input.min === '' ? Number.NEGATIVE_INFINITY : AppController.#parseFloat(input.min, Number.NEGATIVE_INFINITY)
+        const max = input.max === '' ? Number.POSITIVE_INFINITY : AppController.#parseFloat(input.max, Number.POSITIVE_INFINITY)
+        const current = AppController.#parseFloat(input.value, 0)
+        const next = Math.max(min, Math.min(max, current + direction * step))
+        const precision = AppController.#resolveStepPrecision(step)
+        input.value = precision > 0 ? next.toFixed(precision) : String(Math.round(next))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+
+    /**
+     * Syncs derived draw-config controls shown in the EggBot control dialog.
+     */
+    #syncEggBotDialogControlsFromState() {
+        const currentServoUp = Math.max(0, AppController.#parseInteger(this.state.drawConfig.servoUp, 12000))
+        const currentServoDown = Math.max(0, AppController.#parseInteger(this.state.drawConfig.servoDown, 17000))
+        const penUpPercent = Math.max(
+            0,
+            Math.min(100, AppController.#parseFloat(this.state.drawConfig.penUpPercent, AppController.#servoValueToPercent(currentServoUp)))
+        )
+        const penDownPercent = Math.max(
+            0,
+            Math.min(
+                100,
+                AppController.#parseFloat(this.state.drawConfig.penDownPercent, AppController.#servoValueToPercent(currentServoDown))
+            )
+        )
+        this.state.drawConfig.penUpPercent = penUpPercent
+        this.state.drawConfig.penDownPercent = penDownPercent
+        this.els.controlPenUpPercent.value = String(Math.round(penUpPercent))
+        this.els.controlPenDownPercent.value = String(Math.round(penDownPercent))
+
+        const fallbackSpeed = Math.max(10, Math.min(4000, Math.round(1000 / Math.max(0.2, this.state.drawConfig.msPerStep || 1.8))))
+        const penDownSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penDownSpeed, fallbackSpeed)))
+        const penUpSpeed = Math.max(10, Math.min(4000, AppController.#parseInteger(this.state.drawConfig.penUpSpeed, penDownSpeed)))
+        this.state.drawConfig.penDownSpeed = penDownSpeed
+        this.state.drawConfig.penUpSpeed = penUpSpeed
+        this.els.controlSpeedPenDown.value = String(penDownSpeed)
+        this.els.controlSpeedPenUp.value = String(penUpSpeed)
+
+        this.state.drawConfig.penRaiseRate = Math.max(
+            1,
+            Math.min(100, AppController.#parseInteger(this.state.drawConfig.penRaiseRate, 50))
+        )
+        this.state.drawConfig.penLowerRate = Math.max(
+            1,
+            Math.min(100, AppController.#parseInteger(this.state.drawConfig.penLowerRate, 20))
+        )
+        this.state.drawConfig.penRaiseDelayMs = Math.max(
+            0,
+            Math.min(5000, AppController.#parseInteger(this.state.drawConfig.penRaiseDelayMs, 200))
+        )
+        this.state.drawConfig.penLowerDelayMs = Math.max(
+            0,
+            Math.min(5000, AppController.#parseInteger(this.state.drawConfig.penLowerDelayMs, 400))
+        )
+        this.els.controlPenRaiseRate.value = String(this.state.drawConfig.penRaiseRate)
+        this.els.controlPenLowerRate.value = String(this.state.drawConfig.penLowerRate)
+        this.els.controlDelayAfterRaise.value = String(this.state.drawConfig.penRaiseDelayMs)
+        this.els.controlDelayAfterLower.value = String(this.state.drawConfig.penLowerDelayMs)
+
+        this.state.drawConfig.reversePenMotor = Boolean(this.state.drawConfig.reversePenMotor)
+        this.state.drawConfig.reverseEggMotor = Boolean(this.state.drawConfig.reverseEggMotor)
+        this.state.drawConfig.wrapAround = this.state.drawConfig.wrapAround !== false
+        this.state.drawConfig.returnHome = Boolean(this.state.drawConfig.returnHome)
+        this.state.drawConfig.engraverEnabled = Boolean(this.state.drawConfig.engraverEnabled)
+        this.state.drawConfig.curveSmoothing = Math.max(
+            0,
+            Math.min(2, AppController.#parseFloat(this.state.drawConfig.curveSmoothing, 0.2))
+        )
+        this.els.controlReversePenMotor.checked = this.state.drawConfig.reversePenMotor
+        this.els.controlReverseEggMotor.checked = this.state.drawConfig.reverseEggMotor
+        this.els.controlWrapsAround.checked = this.state.drawConfig.wrapAround
+        this.els.controlReturnHome.checked = this.state.drawConfig.returnHome
+        this.els.controlEnableEngraver.checked = this.state.drawConfig.engraverEnabled
+        this.els.controlCurveSmoothing.value = this.state.drawConfig.curveSmoothing.toFixed(2)
+
+        this.state.drawConfig.setupApplyAction = this.state.drawConfig.setupApplyAction === 'raise-off' ? 'raise-off' : 'toggle'
+        this.els.controlSetupActionToggle.checked = this.state.drawConfig.setupApplyAction === 'toggle'
+        this.els.controlSetupActionRaiseOff.checked = this.state.drawConfig.setupApplyAction === 'raise-off'
+
+        const supportedCommands = [
+            'disable-motors',
+            'enable-motors',
+            'raise-pen',
+            'lower-pen',
+            'walk-egg',
+            'walk-pen',
+            'query-version'
+        ]
+        const manualCommand = String(this.state.drawConfig.manualCommand || 'disable-motors')
+        this.state.drawConfig.manualCommand = supportedCommands.includes(manualCommand) ? manualCommand : 'disable-motors'
+        this.state.drawConfig.manualWalkDistance = Math.max(
+            -64000,
+            Math.min(64000, AppController.#parseInteger(this.state.drawConfig.manualWalkDistance, 3200))
+        )
+        this.els.controlManualCommand.value = this.state.drawConfig.manualCommand
+        this.els.controlWalkDistance.value = String(this.state.drawConfig.manualWalkDistance)
+    }
+
+    /**
+     * Converts one pen position percent (0-100) into a servo value.
+     * @param {number} percent
+     * @returns {number}
+     */
+    static #percentToServoValue(percent) {
+        const clamped = Math.max(0, Math.min(100, Number(percent) || 0))
+        const span = SERVO_VALUE_MAX - SERVO_VALUE_MIN
+        return Math.round(SERVO_VALUE_MIN + (clamped / 100) * span)
+    }
+
+    /**
+     * Converts one servo value into a pen position percentage.
+     * @param {number} value
+     * @returns {number}
+     */
+    static #servoValueToPercent(value) {
+        const span = SERVO_VALUE_MAX - SERVO_VALUE_MIN
+        if (span <= 0) return 0
+        const normalized = ((Number(value) || SERVO_VALUE_MIN) - SERVO_VALUE_MIN) / span
+        return Math.max(0, Math.min(100, normalized * 100))
     }
 
     /**
@@ -638,16 +992,16 @@ class AppController {
             this.#markProjectArtifactsDirty()
         })
         this.els.stepsPerTurn.addEventListener('change', () => {
-            this.state.drawConfig.stepsPerTurn = AppController.#parseInteger(
-                this.els.stepsPerTurn.value,
-                this.state.drawConfig.stepsPerTurn
+            this.state.drawConfig.stepsPerTurn = Math.max(
+                100,
+                AppController.#parseInteger(this.els.stepsPerTurn.value, this.state.drawConfig.stepsPerTurn)
             )
             this.#markProjectArtifactsDirty()
         })
         this.els.penRangeSteps.addEventListener('change', () => {
-            this.state.drawConfig.penRangeSteps = AppController.#parseInteger(
-                this.els.penRangeSteps.value,
-                this.state.drawConfig.penRangeSteps
+            this.state.drawConfig.penRangeSteps = Math.max(
+                100,
+                AppController.#parseInteger(this.els.penRangeSteps.value, this.state.drawConfig.penRangeSteps)
             )
             this.#markProjectArtifactsDirty()
         })
@@ -656,6 +1010,14 @@ class AppController {
                 this.els.msPerStep.value,
                 this.state.drawConfig.msPerStep
             )
+            const derivedSpeed = Math.max(
+                10,
+                Math.min(4000, Math.round(1000 / Math.max(0.2, this.state.drawConfig.msPerStep || 1.8)))
+            )
+            this.state.drawConfig.penDownSpeed = derivedSpeed
+            this.state.drawConfig.penUpSpeed = derivedSpeed
+            this.els.controlSpeedPenDown.value = String(derivedSpeed)
+            this.els.controlSpeedPenUp.value = String(derivedSpeed)
             this.#markProjectArtifactsDirty()
         })
         this.els.servoUp.addEventListener('change', () => {
@@ -663,6 +1025,8 @@ class AppController {
                 this.els.servoUp.value,
                 this.state.drawConfig.servoUp
             )
+            this.state.drawConfig.penUpPercent = AppController.#servoValueToPercent(this.state.drawConfig.servoUp)
+            this.els.controlPenUpPercent.value = String(Math.round(this.state.drawConfig.penUpPercent))
             this.#markProjectArtifactsDirty()
         })
         this.els.servoDown.addEventListener('change', () => {
@@ -670,11 +1034,164 @@ class AppController {
                 this.els.servoDown.value,
                 this.state.drawConfig.servoDown
             )
+            this.state.drawConfig.penDownPercent = AppController.#servoValueToPercent(this.state.drawConfig.servoDown)
+            this.els.controlPenDownPercent.value = String(Math.round(this.state.drawConfig.penDownPercent))
             this.#markProjectArtifactsDirty()
         })
         this.els.invertPen.addEventListener('change', () => {
             this.state.drawConfig.invertPen = this.els.invertPen.checked
             this.#markProjectArtifactsDirty()
+        })
+        this.els.controlPenUpPercent.addEventListener('change', () => {
+            this.state.drawConfig.penUpPercent = Math.max(
+                0,
+                Math.min(100, AppController.#parseFloat(this.els.controlPenUpPercent.value, this.state.drawConfig.penUpPercent))
+            )
+            this.state.drawConfig.servoUp = AppController.#percentToServoValue(this.state.drawConfig.penUpPercent)
+            this.els.servoUp.value = String(this.state.drawConfig.servoUp)
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlPenDownPercent.addEventListener('change', () => {
+            this.state.drawConfig.penDownPercent = Math.max(
+                0,
+                Math.min(
+                    100,
+                    AppController.#parseFloat(this.els.controlPenDownPercent.value, this.state.drawConfig.penDownPercent)
+                )
+            )
+            this.state.drawConfig.servoDown = AppController.#percentToServoValue(this.state.drawConfig.penDownPercent)
+            this.els.servoDown.value = String(this.state.drawConfig.servoDown)
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSpeedPenDown.addEventListener('change', () => {
+            this.state.drawConfig.penDownSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(this.els.controlSpeedPenDown.value, this.state.drawConfig.penDownSpeed))
+            )
+            this.state.drawConfig.msPerStep = Math.max(0.2, Math.min(20, 1000 / this.state.drawConfig.penDownSpeed))
+            this.els.msPerStep.value = this.state.drawConfig.msPerStep.toFixed(2)
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSpeedPenUp.addEventListener('change', () => {
+            this.state.drawConfig.penUpSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(this.els.controlSpeedPenUp.value, this.state.drawConfig.penUpSpeed))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlPenRaiseRate.addEventListener('change', () => {
+            this.state.drawConfig.penRaiseRate = Math.max(
+                1,
+                Math.min(100, AppController.#parseInteger(this.els.controlPenRaiseRate.value, this.state.drawConfig.penRaiseRate))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlDelayAfterRaise.addEventListener('change', () => {
+            this.state.drawConfig.penRaiseDelayMs = Math.max(
+                0,
+                Math.min(
+                    5000,
+                    AppController.#parseInteger(this.els.controlDelayAfterRaise.value, this.state.drawConfig.penRaiseDelayMs)
+                )
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlPenLowerRate.addEventListener('change', () => {
+            this.state.drawConfig.penLowerRate = Math.max(
+                1,
+                Math.min(100, AppController.#parseInteger(this.els.controlPenLowerRate.value, this.state.drawConfig.penLowerRate))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlDelayAfterLower.addEventListener('change', () => {
+            this.state.drawConfig.penLowerDelayMs = Math.max(
+                0,
+                Math.min(
+                    5000,
+                    AppController.#parseInteger(this.els.controlDelayAfterLower.value, this.state.drawConfig.penLowerDelayMs)
+                )
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlReversePenMotor.addEventListener('change', () => {
+            this.state.drawConfig.reversePenMotor = this.els.controlReversePenMotor.checked
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlReverseEggMotor.addEventListener('change', () => {
+            this.state.drawConfig.reverseEggMotor = this.els.controlReverseEggMotor.checked
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlWrapsAround.addEventListener('change', () => {
+            this.state.drawConfig.wrapAround = this.els.controlWrapsAround.checked
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlReturnHome.addEventListener('change', () => {
+            this.state.drawConfig.returnHome = this.els.controlReturnHome.checked
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlEnableEngraver.addEventListener('change', () => {
+            this.state.drawConfig.engraverEnabled = this.els.controlEnableEngraver.checked
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlCurveSmoothing.addEventListener('change', () => {
+            this.state.drawConfig.curveSmoothing = Math.max(
+                0,
+                Math.min(2, AppController.#parseFloat(this.els.controlCurveSmoothing.value, this.state.drawConfig.curveSmoothing))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSetupActionToggle.addEventListener('change', () => {
+            if (!this.els.controlSetupActionToggle.checked) return
+            this.state.drawConfig.setupApplyAction = 'toggle'
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlSetupActionRaiseOff.addEventListener('change', () => {
+            if (!this.els.controlSetupActionRaiseOff.checked) return
+            this.state.drawConfig.setupApplyAction = 'raise-off'
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlManualCommand.addEventListener('change', () => {
+            const nextCommand = String(this.els.controlManualCommand.value || '').trim()
+            const supportedCommands = [
+                'disable-motors',
+                'enable-motors',
+                'raise-pen',
+                'lower-pen',
+                'walk-egg',
+                'walk-pen',
+                'query-version'
+            ]
+            this.state.drawConfig.manualCommand = supportedCommands.includes(nextCommand) ? nextCommand : 'disable-motors'
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlWalkDistance.addEventListener('change', () => {
+            this.state.drawConfig.manualWalkDistance = Math.max(
+                -64000,
+                Math.min(64000, AppController.#parseInteger(this.els.controlWalkDistance.value, this.state.drawConfig.manualWalkDistance))
+            )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.eggbotControlOpen.addEventListener('click', () => this.#openEggBotControlDialog())
+        this.els.eggbotDialogClose.addEventListener('click', () => this.#closeEggBotControlDialog())
+        this.els.eggbotDialogCloseIcon.addEventListener('click', () => this.#closeEggBotControlDialog())
+        this.els.eggbotDialogBackdrop.addEventListener('click', (event) => {
+            if (event.target !== this.els.eggbotDialogBackdrop) return
+            this.#closeEggBotControlDialog()
+        })
+        this.els.eggbotDialog.addEventListener('click', (event) => this.#applyControlStepperAdjustment(event))
+        this.els.eggbotDialogApply.addEventListener('click', () => {
+            this.#applyEggBotControlCurrentTab().catch((error) => {
+                this.#setStatus(this.#t('messages.controlDialogApplyFailed', { message: error.message }), 'error')
+            })
+        })
+        this.els.eggbotTabButtons.forEach((button) => {
+            button.addEventListener('click', () => this.#setEggBotControlTab(button.dataset.eggbotTab || 'plot'))
+        })
+        window.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !this.#isEggBotControlDialogOpen()) {
+                return
+            }
+            this.#closeEggBotControlDialog()
         })
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
@@ -1105,10 +1622,18 @@ class AppController {
         this.els.baudRate.value = String(this.state.drawConfig.baudRate)
         this.els.stepsPerTurn.value = String(this.state.drawConfig.stepsPerTurn)
         this.els.penRangeSteps.value = String(this.state.drawConfig.penRangeSteps)
-        this.els.msPerStep.value = String(this.state.drawConfig.msPerStep)
+        this.state.drawConfig.msPerStep = Math.max(
+            0.2,
+            Math.min(20, AppController.#parseFloat(this.state.drawConfig.msPerStep, 1.8))
+        )
+        this.els.msPerStep.value = this.state.drawConfig.msPerStep.toFixed(2)
         this.els.servoUp.value = String(this.state.drawConfig.servoUp)
         this.els.servoDown.value = String(this.state.drawConfig.servoDown)
         this.els.invertPen.checked = Boolean(this.state.drawConfig.invertPen)
+        this.#syncEggBotDialogControlsFromState()
+        const requestedTab = String(this.state?.drawConfig?.activeControlTab || this.activeEggBotControlTab || 'plot')
+        this.activeEggBotControlTab = EGGBOT_CONTROL_TABS.includes(requestedTab) ? requestedTab : 'plot'
+        this.#syncEggBotControlTabUi()
     }
     /**
      * Syncs motif checkbox states.
@@ -2229,10 +2754,14 @@ class AppController {
         if (Object.hasOwn(patch, 'msPerStep')) {
             const nextValue = AppController.#parseFloat(patch.msPerStep, this.state.drawConfig.msPerStep)
             this.state.drawConfig.msPerStep = Math.max(0.2, Math.min(20, nextValue))
+            const derivedSpeed = Math.max(10, Math.min(4000, Math.round(1000 / this.state.drawConfig.msPerStep)))
+            this.state.drawConfig.penDownSpeed = derivedSpeed
+            this.state.drawConfig.penUpSpeed = derivedSpeed
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'servoUp')) {
             this.state.drawConfig.servoUp = Math.max(0, AppController.#parseInteger(patch.servoUp, this.state.drawConfig.servoUp))
+            this.state.drawConfig.penUpPercent = AppController.#servoValueToPercent(this.state.drawConfig.servoUp)
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'servoDown')) {
@@ -2240,11 +2769,147 @@ class AppController {
                 0,
                 AppController.#parseInteger(patch.servoDown, this.state.drawConfig.servoDown)
             )
+            this.state.drawConfig.penDownPercent = AppController.#servoValueToPercent(this.state.drawConfig.servoDown)
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'invertPen')) {
             this.state.drawConfig.invertPen = AppController.#parseBoolean(patch.invertPen, this.state.drawConfig.invertPen)
             didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penUpPercent')) {
+            this.state.drawConfig.penUpPercent = Math.max(
+                0,
+                Math.min(100, AppController.#parseFloat(patch.penUpPercent, this.state.drawConfig.penUpPercent))
+            )
+            this.state.drawConfig.servoUp = AppController.#percentToServoValue(this.state.drawConfig.penUpPercent)
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penDownPercent')) {
+            this.state.drawConfig.penDownPercent = Math.max(
+                0,
+                Math.min(100, AppController.#parseFloat(patch.penDownPercent, this.state.drawConfig.penDownPercent))
+            )
+            this.state.drawConfig.servoDown = AppController.#percentToServoValue(this.state.drawConfig.penDownPercent)
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penDownSpeed')) {
+            this.state.drawConfig.penDownSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(patch.penDownSpeed, this.state.drawConfig.penDownSpeed))
+            )
+            this.state.drawConfig.msPerStep = Math.max(0.2, Math.min(20, 1000 / this.state.drawConfig.penDownSpeed))
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penUpSpeed')) {
+            this.state.drawConfig.penUpSpeed = Math.max(
+                10,
+                Math.min(4000, AppController.#parseInteger(patch.penUpSpeed, this.state.drawConfig.penUpSpeed))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penRaiseRate')) {
+            this.state.drawConfig.penRaiseRate = Math.max(
+                1,
+                Math.min(100, AppController.#parseInteger(patch.penRaiseRate, this.state.drawConfig.penRaiseRate))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penRaiseDelayMs')) {
+            this.state.drawConfig.penRaiseDelayMs = Math.max(
+                0,
+                Math.min(5000, AppController.#parseInteger(patch.penRaiseDelayMs, this.state.drawConfig.penRaiseDelayMs))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penLowerRate')) {
+            this.state.drawConfig.penLowerRate = Math.max(
+                1,
+                Math.min(100, AppController.#parseInteger(patch.penLowerRate, this.state.drawConfig.penLowerRate))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'penLowerDelayMs')) {
+            this.state.drawConfig.penLowerDelayMs = Math.max(
+                0,
+                Math.min(5000, AppController.#parseInteger(patch.penLowerDelayMs, this.state.drawConfig.penLowerDelayMs))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'reversePenMotor')) {
+            this.state.drawConfig.reversePenMotor = AppController.#parseBoolean(
+                patch.reversePenMotor,
+                this.state.drawConfig.reversePenMotor
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'reverseEggMotor')) {
+            this.state.drawConfig.reverseEggMotor = AppController.#parseBoolean(
+                patch.reverseEggMotor,
+                this.state.drawConfig.reverseEggMotor
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'wrapAround')) {
+            this.state.drawConfig.wrapAround = AppController.#parseBoolean(patch.wrapAround, this.state.drawConfig.wrapAround)
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'returnHome')) {
+            this.state.drawConfig.returnHome = AppController.#parseBoolean(patch.returnHome, this.state.drawConfig.returnHome)
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'engraverEnabled')) {
+            this.state.drawConfig.engraverEnabled = AppController.#parseBoolean(
+                patch.engraverEnabled,
+                this.state.drawConfig.engraverEnabled
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'curveSmoothing')) {
+            this.state.drawConfig.curveSmoothing = Math.max(
+                0,
+                Math.min(2, AppController.#parseFloat(patch.curveSmoothing, this.state.drawConfig.curveSmoothing))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'setupApplyAction')) {
+            this.state.drawConfig.setupApplyAction = String(patch.setupApplyAction || '').trim().toLowerCase() === 'raise-off'
+                ? 'raise-off'
+                : 'toggle'
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'manualCommand')) {
+            const nextCommand = String(patch.manualCommand || '').trim()
+            const supportedCommands = [
+                'disable-motors',
+                'enable-motors',
+                'raise-pen',
+                'lower-pen',
+                'walk-egg',
+                'walk-pen',
+                'query-version'
+            ]
+            this.state.drawConfig.manualCommand = supportedCommands.includes(nextCommand)
+                ? nextCommand
+                : this.state.drawConfig.manualCommand
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'manualWalkDistance')) {
+            this.state.drawConfig.manualWalkDistance = Math.max(
+                -64000,
+                Math.min(
+                    64000,
+                    AppController.#parseInteger(patch.manualWalkDistance, this.state.drawConfig.manualWalkDistance)
+                )
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'activeControlTab')) {
+            const requestedTab = String(patch.activeControlTab || '').trim()
+            if (EGGBOT_CONTROL_TABS.includes(requestedTab)) {
+                this.state.drawConfig.activeControlTab = requestedTab
+                this.activeEggBotControlTab = requestedTab
+                didMutateState = true
+            }
         }
 
         if (didMutateState) {
@@ -2603,6 +3268,18 @@ class AppController {
             message: `Locale set to ${this.i18n.locale}.`,
             state: this.#webMcpStateSnapshot()
         }
+    }
+
+    /**
+     * Resolves decimal precision for one numeric step value.
+     * @param {number} step
+     * @returns {number}
+     */
+    static #resolveStepPrecision(step) {
+        const text = String(step || '')
+        const decimalIndex = text.indexOf('.')
+        if (decimalIndex < 0) return 0
+        return Math.max(0, text.length - decimalIndex - 1)
     }
 
     /**

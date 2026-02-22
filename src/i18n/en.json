@@ -86,6 +86,9 @@
         "baudRate": "Baud rate",
         "connectSerial": "Connect USB serial",
         "disconnect": "Disconnect",
+        "controlTitle": "EggBot control",
+        "controlHint": "Open the EggBot Control / Configuration dialog for setup, timing, options, and manual actions.",
+        "openControlDialog": "Open EggBot control dialog",
         "mappingTitle": "Drawing mapping",
         "stepsPerTurn": "Motor-1 steps / egg turn",
         "penRangeSteps": "Motor-2 steps full pen travel",
@@ -94,6 +97,84 @@
         "servoDown": "Servo down value (`SC,5`)",
         "invertPen": "Invert pen up/down (`SP`) logic",
         "stopDraw": "Stop draw"
+    },
+    "controlDialog": {
+        "title": "EggBot Control",
+        "closeAria": "Close EggBot control dialog",
+        "tabs": {
+            "plot": "Plotten",
+            "setup": "Setup",
+            "timing": "Timing",
+            "options": "Optionen",
+            "manual": "Manual",
+            "resume": "Resume",
+            "layers": "Ebenen",
+            "advanced": "*"
+        },
+        "plot": {
+            "title": "Welcome to the EggBot interface!",
+            "lineOne": "Press 'Apply' to begin plotting.",
+            "lineTwo": "Or, look in the other tabs to adjust your settings and use additional EggBot functions.",
+            "help": "Need help? Visit http://wiki.evilmadscientist.com/eggbot"
+        },
+        "setup": {
+            "title": "EggBot: Basic Setup",
+            "penUpPercent": "Pen up position, 0-100%:",
+            "penDownPercent": "Pen down position, 0-100%:",
+            "actionOnApply": "Action on 'Apply':",
+            "togglePen": "Toggle pen up/down",
+            "raisePenDisableMotors": "Raise pen, turn off motors",
+            "note": "Raise and lower the pen to verify pen-up and pen-down positions. Use \"raise pen, turn off motors\" before aligning objects in the EggBot."
+        },
+        "timing": {
+            "movementTitle": "Movement speeds:",
+            "speedPenDown": "Speed when pen is down (steps/s):",
+            "speedPenUp": "Speed when pen is up (steps/s):",
+            "penLiftTitle": "Pen lift and lowering speeds:",
+            "penRaiseRate": "Pen raising speed (%/s):",
+            "delayAfterRaise": "Delay after raising pen (ms):",
+            "penLowerRate": "Pen lowering speed (%/s):",
+            "delayAfterLower": "Delay after lowering pen (ms):"
+        },
+        "options": {
+            "title": "Advanced options:",
+            "reversePenMotor": "Reverse motion of Motor 1 (pen)",
+            "reverseEggMotor": "Reverse motion of Motor 2 (egg)",
+            "wrapAround": "Egg (x) axis wraps around",
+            "returnHome": "Return home when done",
+            "enableEngraver": "Enable engraver, if attached",
+            "curveSmoothing": "Curve smoothing (lower for more):"
+        },
+        "manual": {
+            "title": "EggBot Manual Control",
+            "description": "Send direct commands to EggBot. Use Apply to execute the selected command.",
+            "command": "Command:",
+            "walkDistance": "Walk distance (steps):",
+            "walkHint": "Walk distance may be positive or negative.",
+            "applyHint": "Press 'Apply' to execute the command.",
+            "commands": {
+                "disableMotors": "Disable Motors",
+                "enableMotors": "Enable Motors",
+                "raisePen": "Raise Pen",
+                "lowerPen": "Lower Pen",
+                "walkEgg": "Walk Egg Motor",
+                "walkPen": "Walk Pen Motor",
+                "queryVersion": "Query EBB Version"
+            }
+        },
+        "resume": {
+            "title": "Resume",
+            "description": "Resume drawing from paused jobs is not available yet in this web edition."
+        },
+        "layers": {
+            "title": "Layers",
+            "description": "Layer-based plotting controls are not available yet in this web edition."
+        },
+        "advanced": {
+            "title": "Machine mapping and raw values"
+        },
+        "close": "Close",
+        "apply": "Apply"
     },
     "status": {
         "title": "Status",
@@ -124,6 +205,21 @@
         "drawingProgress": "Drawing in progress: stroke {{done}}/{{total}}",
         "drawCompleted": "EggBot draw command stream completed.",
         "drawFailed": "Draw failed: {{message}}",
+        "connectingBeforeManualControl": "Connecting EggBot for manual control...",
+        "controlDialogSettingsApplied": "EggBot control settings updated.",
+        "controlDialogApplyFailed": "EggBot control apply failed: {{message}}",
+        "controlDialogSetupRaiseDisableApplied": "Setup applied: pen raised and motors disabled.",
+        "controlDialogSetupPenDownApplied": "Setup applied: pen lowered.",
+        "controlDialogSetupPenUpApplied": "Setup applied: pen raised.",
+        "controlDialogManualMotorsDisabled": "Manual command applied: motors disabled.",
+        "controlDialogManualMotorsEnabled": "Manual command applied: motors enabled.",
+        "controlDialogManualPenRaised": "Manual command applied: pen raised.",
+        "controlDialogManualPenLowered": "Manual command applied: pen lowered.",
+        "controlDialogManualWalkEggApplied": "Manual command applied: walked egg motor by {{steps}} steps.",
+        "controlDialogManualWalkPenApplied": "Manual command applied: walked pen motor by {{steps}} steps.",
+        "controlDialogManualVersionResult": "EBB firmware response: {{version}}",
+        "controlDialogManualUnknownCommand": "Unknown manual command.",
+        "controlDialogBusyDrawing": "Manual control is disabled while a draw run is active.",
         "projectJsonDescription": "Project JSON",
         "projectSaved": "Project saved: {{name}}",
         "projectDownloaded": "Project downloaded: {{name}}",

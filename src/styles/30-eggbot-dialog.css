@@ -1,0 +1,252 @@
+.eggbot-dialog-open {
+    overflow: hidden;
+}
+
+.eggbot-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 10, 16, 0.74);
+    backdrop-filter: blur(2px);
+    z-index: 500;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+}
+
+.eggbot-dialog-backdrop[hidden] {
+    display: none;
+}
+
+.eggbot-dialog {
+    width: min(760px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    background: linear-gradient(180deg, #2a2d34, #23262d);
+    border: 1px solid #12141a;
+    border-radius: 10px;
+    box-shadow: 0 24px 54px rgba(0, 0, 0, 0.42);
+    color: #f1f1f2;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.eggbot-dialog-header {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.3rem 2.6rem 0.3rem 0.8rem;
+}
+
+.eggbot-dialog-header h2 {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.03rem;
+    font-weight: 700;
+    color: #f6f6f8;
+}
+
+.eggbot-dialog-close-icon {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid #0f6ca5;
+    background: linear-gradient(180deg, #25b4f2, #0f82c2);
+    color: #ffffff;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.eggbot-dialog-close-icon:hover {
+    border-color: #14a0df;
+    background: linear-gradient(180deg, #30bef8, #0d8ecf);
+    transform: none;
+}
+
+.eggbot-dialog-tabs {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, #2a2d34, #24272e);
+}
+
+.eggbot-dialog-tabs button {
+    border: 0;
+    border-radius: 0;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    color: #f0f1f4;
+    min-width: 64px;
+    padding: 0.6rem 0.9rem 0.48rem;
+    font-size: 0.92rem;
+}
+
+.eggbot-dialog-tabs button:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.eggbot-dialog-tabs button.active {
+    border-bottom-color: #2a8dff;
+    color: #ffffff;
+}
+
+.eggbot-dialog-body {
+    overflow: auto;
+    padding: 0.86rem 0.86rem 0.78rem;
+}
+
+.eggbot-dialog-panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, #2c2f36, #262930);
+    min-height: min(460px, calc(100vh - 260px));
+    padding: 0.84rem;
+    display: grid;
+    align-content: start;
+    gap: 0.72rem;
+}
+
+.eggbot-dialog-panel[hidden] {
+    display: none !important;
+}
+
+.eggbot-dialog-panel h3 {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fafbff;
+}
+
+.eggbot-dialog-panel p {
+    color: #f0f1f3;
+}
+
+.eggbot-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.78rem;
+    color: #f0f1f3;
+}
+
+.eggbot-field > span {
+    color: #f0f1f3;
+}
+
+.eggbot-spinbox {
+    width: 136px;
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 7px;
+    background: linear-gradient(180deg, #252932, #1f232b);
+    display: grid;
+    grid-template-columns: 1fr 32px 32px;
+    overflow: hidden;
+}
+
+.eggbot-spinbox input {
+    border: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0;
+    background: transparent;
+    color: #f8fafc;
+    text-align: right;
+    padding: 0.3rem 0.45rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.eggbot-spinbox button {
+    border: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0;
+    background: transparent;
+    color: #f3f5f8;
+    padding: 0;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.eggbot-spinbox button:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.eggbot-dialog-panel .inline-check {
+    color: #f0f1f3;
+}
+
+.eggbot-dialog-panel .inline-check span {
+    color: #f0f1f3;
+}
+
+.eggbot-dialog-panel select,
+.eggbot-dialog-panel input[type='number'] {
+    background: #1f2229;
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fafafa;
+}
+
+.eggbot-radio-group {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.eggbot-radio-group > span {
+    font-weight: 600;
+}
+
+.eggbot-note {
+    color: #cfd3da;
+    font-size: 0.92rem;
+}
+
+.eggbot-dialog-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    padding: 0.64rem 0.82rem;
+}
+
+.eggbot-dialog-footer button {
+    min-width: 104px;
+    border-radius: 8px;
+}
+
+.eggbot-dialog-footer .ghost {
+    background: linear-gradient(180deg, #373c46, #2d3139);
+    color: #f1f2f4;
+    border-color: #20242b;
+}
+
+.eggbot-dialog-footer .primary {
+    background: linear-gradient(180deg, #353c48, #2a2f39);
+    color: #f1f2f4;
+    border-color: #1d2026;
+}
+
+@media (max-width: 780px) {
+    .eggbot-dialog {
+        width: calc(100vw - 1rem);
+    }
+
+    .eggbot-dialog-tabs {
+        overflow-x: auto;
+    }
+
+    .eggbot-dialog-tabs button {
+        flex: 0 0 auto;
+    }
+
+    .eggbot-field {
+        grid-template-columns: 1fr;
+    }
+
+    .eggbot-spinbox {
+        width: min(100%, 190px);
+    }
+}

@@ -4,7 +4,7 @@
 export class EggBotPathComputeTasks {
     /**
      * Converts UV strokes into EggBot step coordinates and aligns seam-wrapped X travel.
-     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number }, startX?: number }} input
+     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean }, startX?: number }} input
      * @returns {{ strokes: Array<Array<{x:number,y:number}>> }}
      */
     static prepareDrawStrokes(input) {
@@ -16,7 +16,7 @@ export class EggBotPathComputeTasks {
         strokes.forEach((stroke) => {
             if (!Array.isArray(stroke?.points) || stroke.points.length < 2) return
             const scaled = EggBotPathComputeTasks.#unwrapAndScaleStroke(stroke.points, cfg)
-            const aligned = EggBotPathComputeTasks.#alignStrokeXToCurrent(scaled, currentX, cfg.stepsPerTurn)
+            const aligned = cfg.wrapAround ? EggBotPathComputeTasks.#alignStrokeXToCurrent(scaled, currentX, cfg.stepsPerTurn) : scaled
             if (aligned.length < 2) return
             output.push(aligned)
             currentX = aligned[aligned.length - 1].x
@@ -27,13 +27,14 @@ export class EggBotPathComputeTasks {
 
     /**
      * Normalizes required draw configuration values.
-     * @param {{ stepsPerTurn?: number, penRangeSteps?: number } | undefined} drawConfig
-     * @returns {{ stepsPerTurn: number, penRangeSteps: number }}
+     * @param {{ stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean } | undefined} drawConfig
+     * @returns {{ stepsPerTurn: number, penRangeSteps: number, wrapAround: boolean }}
      */
     static #normalizeConfig(drawConfig) {
         return {
             stepsPerTurn: Math.max(100, Math.round(Number(drawConfig?.stepsPerTurn) || 3200)),
-            penRangeSteps: Math.max(100, Math.round(Number(drawConfig?.penRangeSteps) || 1500))
+            penRangeSteps: Math.max(100, Math.round(Number(drawConfig?.penRangeSteps) || 1500)),
+            wrapAround: drawConfig?.wrapAround !== false
         }
     }
 

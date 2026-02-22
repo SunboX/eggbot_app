@@ -16,6 +16,7 @@ export class AppElements {
             return element
         }
         const queryOptional = (selector) => root.querySelector(selector)
+        const queryAll = (selector) => Array.from(root.querySelectorAll(selector))
 
         return {
             localeSelect: query('[data-locale-select]'),
@@ -54,6 +55,14 @@ export class AppElements {
             baudRate: query('[data-baud-rate]'),
             serialConnect: query('[data-serial-connect]'),
             serialDisconnect: query('[data-serial-disconnect]'),
+            eggbotControlOpen: query('[data-eggbot-control-open]'),
+            eggbotDialogBackdrop: query('[data-eggbot-dialog-backdrop]'),
+            eggbotDialog: query('[data-eggbot-dialog]'),
+            eggbotDialogClose: query('[data-eggbot-dialog-close]'),
+            eggbotDialogCloseIcon: query('[data-eggbot-dialog-close-icon]'),
+            eggbotDialogApply: query('[data-eggbot-dialog-apply]'),
+            eggbotTabButtons: queryAll('[data-eggbot-tab-button]'),
+            eggbotTabPanels: queryAll('[data-eggbot-tab-panel]'),
             drawButton: query('[data-draw]'),
             stopButton: query('[data-stop]'),
             stepsPerTurn: query('[data-steps-per-turn]'),
@@ -62,6 +71,24 @@ export class AppElements {
             servoUp: query('[data-servo-up]'),
             servoDown: query('[data-servo-down]'),
             invertPen: query('[data-invert-pen]'),
+            controlPenUpPercent: query('[data-control-pen-up-percent]'),
+            controlPenDownPercent: query('[data-control-pen-down-percent]'),
+            controlSetupActionToggle: query('[data-control-setup-action-toggle]'),
+            controlSetupActionRaiseOff: query('[data-control-setup-action-raise-off]'),
+            controlSpeedPenDown: query('[data-control-speed-pen-down]'),
+            controlSpeedPenUp: query('[data-control-speed-pen-up]'),
+            controlPenRaiseRate: query('[data-control-pen-raise-rate]'),
+            controlDelayAfterRaise: query('[data-control-delay-after-raise]'),
+            controlPenLowerRate: query('[data-control-pen-lower-rate]'),
+            controlDelayAfterLower: query('[data-control-delay-after-lower]'),
+            controlReversePenMotor: query('[data-control-reverse-pen-motor]'),
+            controlReverseEggMotor: query('[data-control-reverse-egg-motor]'),
+            controlWrapsAround: query('[data-control-wraps-around]'),
+            controlReturnHome: query('[data-control-return-home]'),
+            controlEnableEngraver: query('[data-control-enable-engraver]'),
+            controlCurveSmoothing: query('[data-control-curve-smoothing]'),
+            controlManualCommand: query('[data-control-manual-command]'),
+            controlWalkDistance: query('[data-control-walk-distance]'),
             saveProject: query('[data-save-project]'),
             exportSvg: query('[data-export-svg]'),
             loadProject: query('[data-load-project]'),

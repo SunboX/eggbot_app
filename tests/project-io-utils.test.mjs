@@ -28,6 +28,9 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.ornamentDistribution, 1)
     assert.equal(typeof normalized.drawConfig.baudRate, 'number')
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
+    assert.equal(typeof normalized.drawConfig.penDownSpeed, 'number')
+    assert.equal(typeof normalized.drawConfig.penUpPercent, 'number')
+    assert.equal(typeof normalized.drawConfig.wrapAround, 'boolean')
 })
 
 test('Default drawing palette should not include white by default', () => {
@@ -44,4 +47,34 @@ test('ProjectIoUtils should stamp project payload with app version', () => {
 
     assert.equal(payload.version, AppVersion.get())
     assert.equal(payload.schemaVersion, 1)
+})
+
+test('ProjectIoUtils should clamp extended EggBot control payload fields', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        drawConfig: {
+            penUpPercent: 999,
+            penDownPercent: -10,
+            penDownSpeed: 9000,
+            penUpSpeed: -40,
+            penRaiseRate: 500,
+            penRaiseDelayMs: -2,
+            penLowerRate: 0,
+            penLowerDelayMs: 999999,
+            curveSmoothing: 8,
+            manualWalkDistance: 999999,
+            activeControlTab: 'manual'
+        }
+    })
+
+    assert.equal(normalized.drawConfig.penUpPercent, 100)
+    assert.equal(normalized.drawConfig.penDownPercent, 0)
+    assert.equal(normalized.drawConfig.penDownSpeed, 4000)
+    assert.equal(normalized.drawConfig.penUpSpeed, 10)
+    assert.equal(normalized.drawConfig.penRaiseRate, 100)
+    assert.equal(normalized.drawConfig.penRaiseDelayMs, 0)
+    assert.equal(normalized.drawConfig.penLowerRate, 1)
+    assert.equal(normalized.drawConfig.penLowerDelayMs, 5000)
+    assert.equal(normalized.drawConfig.curveSmoothing, 2)
+    assert.equal(normalized.drawConfig.manualWalkDistance, 64000)
+    assert.equal(normalized.drawConfig.activeControlTab, 'manual')
 })
