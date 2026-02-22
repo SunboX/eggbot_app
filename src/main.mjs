@@ -1383,6 +1383,7 @@ class AppController {
         const suggestedName = ProjectFilenameUtils.buildFileName(
             this.state.projectName,
             this.#t('project.defaultFileStem'),
+            this.state.seed,
             'json'
         )
         try {
@@ -1453,11 +1454,13 @@ class AppController {
     async #buildSvgExportData() {
         const fileStem = ProjectFilenameUtils.buildFileStem(
             this.state.projectName,
-            this.#t('project.defaultFileStem')
+            this.#t('project.defaultFileStem'),
+            this.state.seed
         )
         const suggestedName = ProjectFilenameUtils.buildFileName(
             this.state.projectName,
             this.#t('project.defaultFileStem'),
+            this.state.seed,
             'svg'
         )
         const editorName = String(document?.title || 'eggbot-app').trim() || 'eggbot-app'
@@ -2359,6 +2362,7 @@ class AppController {
         const suggestedName = ProjectFilenameUtils.buildFileName(
             this.state.projectName,
             this.#t('project.defaultFileStem'),
+            this.state.seed,
             'json'
         )
         return {
