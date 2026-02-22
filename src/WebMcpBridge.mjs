@@ -248,6 +248,7 @@ export class WebMcpBridge {
                         reverseEggMotor: { type: 'boolean' },
                         wrapAround: { type: 'boolean' },
                         returnHome: { type: 'boolean' },
+                        printColorMode: { type: 'string', enum: ['single', 'per-color'] },
                         engraverEnabled: { type: 'boolean' },
                         curveSmoothing: { type: 'number' },
                         setupApplyAction: { type: 'string' },

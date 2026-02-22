@@ -696,6 +696,32 @@
                             <input type="checkbox" data-control-return-home />
                             <span data-i18n="controlDialog.options.returnHome">Return home when done</span>
                         </label>
+                        <div class="eggbot-radio-group">
+                            <span data-i18n="controlDialog.options.printColorModeTitle">Color printing mode:</span>
+                            <label class="inline-check">
+                                <input
+                                    type="radio"
+                                    name="eggbot-print-color-mode"
+                                    value="single"
+                                    data-control-print-color-mode-single
+                                />
+                                <span data-i18n="controlDialog.options.printColorModeSingle">Draw all strokes with one pen color</span>
+                            </label>
+                            <label class="inline-check">
+                                <input
+                                    type="radio"
+                                    name="eggbot-print-color-mode"
+                                    value="per-color"
+                                    data-control-print-color-mode-per-color
+                                />
+                                <span data-i18n="controlDialog.options.printColorModePerColor">
+                                    Draw each palette color separately
+                                </span>
+                            </label>
+                        </div>
+                        <p class="eggbot-note" data-i18n="controlDialog.options.printColorModeHint">
+                            Separate-color mode pauses before each color to let you change pens.
+                        </p>
                         <label class="inline-check">
                             <input type="checkbox" data-control-enable-engraver />
                             <span data-i18n="controlDialog.options.enableEngraver">Enable engraver, if attached</span>
@@ -775,6 +801,7 @@
                         <p class="eggbot-note" data-i18n="controlDialog.manual.applyHint">
                             Press 'Apply' to execute the command.
                         </p>
+                        <p class="eggbot-note eggbot-manual-result" data-control-manual-result role="status" aria-live="polite" hidden></p>
                     </section>
 
                     <section

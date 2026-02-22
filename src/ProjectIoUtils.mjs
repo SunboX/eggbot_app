@@ -141,6 +141,11 @@ export class ProjectIoUtils {
                 reverseEggMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reverseEggMotor, false),
                 wrapAround: ProjectIoUtils.#toBoolean(state?.drawConfig?.wrapAround, true),
                 returnHome: ProjectIoUtils.#toBoolean(state?.drawConfig?.returnHome, false),
+                printColorMode: String(state?.drawConfig?.printColorMode || '')
+                    .trim()
+                    .toLowerCase() === 'per-color'
+                    ? 'per-color'
+                    : 'single',
                 engraverEnabled: ProjectIoUtils.#toBoolean(state?.drawConfig?.engraverEnabled, false),
                 curveSmoothing: Math.max(0, Math.min(2, ProjectIoUtils.#toNumber(state?.drawConfig?.curveSmoothing, 0.2))),
                 setupApplyAction:
