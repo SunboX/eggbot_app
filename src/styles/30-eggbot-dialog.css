@@ -145,21 +145,39 @@
     background: linear-gradient(180deg, #252932, #1f232b);
     display: grid;
     grid-template-columns: 1fr 32px 32px;
+    align-items: stretch;
     overflow: hidden;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.eggbot-spinbox:focus-within {
+    border-color: rgba(93, 173, 255, 0.75);
+    box-shadow: 0 0 0 1px rgba(93, 173, 255, 0.28);
 }
 
 .eggbot-spinbox input {
     border: 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 0;
     background: transparent;
     color: #f8fafc;
     text-align: right;
     padding: 0.3rem 0.45rem;
     font-variant-numeric: tabular-nums;
+    margin: 0;
+    min-width: 0;
+    height: 100%;
+    outline: none;
+    box-shadow: none;
+}
+
+.eggbot-spinbox input:focus,
+.eggbot-spinbox input:focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 .eggbot-spinbox input[type='number'] {
+    -webkit-appearance: none;
     appearance: textfield;
     -moz-appearance: textfield;
 }
@@ -171,6 +189,8 @@
 }
 
 .eggbot-spinbox button {
+    -webkit-appearance: none;
+    appearance: none;
     border: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 0;
@@ -179,26 +199,30 @@
     padding: 0;
     font-size: 0;
     line-height: 0;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
+    height: 100%;
+    min-height: 0;
 }
 
 .eggbot-spinbox button::before {
     content: '';
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
+    display: block;
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 14px 14px;
+    background-size: 16px 16px;
 }
 
 .eggbot-spinbox button[data-spin-direction='-1']::before {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='%23f3f5f8' d='M2 6h10v2H2z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8h10' stroke='%23f3f5f8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 .eggbot-spinbox button[data-spin-direction='1']::before {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='%23f3f5f8' d='M2 6h10v2H2zM6 2h2v10H6z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8h10M8 3v10' stroke='%23f3f5f8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 .eggbot-spinbox button:hover {
