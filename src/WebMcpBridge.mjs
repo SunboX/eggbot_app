@@ -226,6 +226,7 @@ export class WebMcpBridge {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        baudRate: { type: 'integer' },
                         stepsPerTurn: { type: 'integer' },
                         penRangeSteps: { type: 'integer' },
                         msPerStep: { type: 'number' },

@@ -26,6 +26,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.ornamentSize, 1)
     assert.equal(normalized.ornamentCount, 1)
     assert.equal(normalized.ornamentDistribution, 1)
+    assert.equal(typeof normalized.drawConfig.baudRate, 'number')
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
 })
 

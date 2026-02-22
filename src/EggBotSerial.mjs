@@ -40,23 +40,25 @@ export class EggBotSerial {
 
     /**
      * Opens a serial connection to EBB.
+     * @param {{ baudRate?: number }} [options]
      * @returns {Promise<string>}
      */
-    async connect() {
+    async connect(options = {}) {
         this.#assertSerialSupport()
         if (this.isConnected) {
             return 'Already connected'
         }
 
         const requestedPort = await navigator.serial.requestPort()
-        return this.#openPortAndInitialize(requestedPort)
+        return this.#openPortAndInitialize(requestedPort, options)
     }
 
     /**
      * Opens a serial connection for draw-time reconnect.
+     * @param {{ baudRate?: number }} [options]
      * @returns {Promise<string>}
      */
-    async connectForDraw() {
+    async connectForDraw(options = {}) {
         this.#assertSerialSupport()
         if (this.isConnected) {
             return 'Already connected'
@@ -65,11 +67,11 @@ export class EggBotSerial {
         const grantedPorts = typeof navigator.serial.getPorts === 'function' ? await navigator.serial.getPorts() : []
         const reconnectPort = this.#selectReconnectPort(grantedPorts)
         if (reconnectPort) {
-            return this.#openPortAndInitialize(reconnectPort)
+            return this.#openPortAndInitialize(reconnectPort, options)
         }
 
         const requestedPort = await navigator.serial.requestPort()
-        return this.#openPortAndInitialize(requestedPort)
+        return this.#openPortAndInitialize(requestedPort, options)
     }
 
     /**
@@ -116,11 +118,22 @@ export class EggBotSerial {
     }
 
     /**
+     * Normalizes and bounds serial baud rate values.
+     * @param {unknown} value
+     * @returns {number}
+     */
+    static #normalizeBaudRate(value) {
+        const parsed = Math.trunc(Number(value))
+        return Number.isFinite(parsed) ? Math.max(300, parsed) : 9600
+    }
+
+    /**
      * Opens and initializes one serial port.
      * @param {SerialPort} port
+     * @param {{ baudRate?: number }} [options]
      * @returns {Promise<string>}
      */
-    async #openPortAndInitialize(port) {
+    async #openPortAndInitialize(port, options = {}) {
         if (!port) {
             throw new Error('No serial port selected.')
         }
@@ -128,7 +141,7 @@ export class EggBotSerial {
         this.port = port
         try {
             await this.port.open({
-                baudRate: 9600,
+                baudRate: EggBotSerial.#normalizeBaudRate(options?.baudRate),
                 dataBits: 8,
                 stopBits: 1,
                 parity: 'none',

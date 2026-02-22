@@ -72,7 +72,7 @@ function installBrowserMocks(overrides = {}) {
  * Builds one serial port mock that emits a version line.
  * @param {{ usbVendorId?: number, usbProductId?: number }} [info]
  * @param {string} [versionLine]
- * @returns {SerialPort & { openCalls: number, closeCalls: number }}
+ * @returns {SerialPort & { openCalls: number, closeCalls: number, openOptions: Record<string, any>[] }}
  */
 function createMockPort(info = {}, versionLine = 'EBBv3.0') {
     const encoder = new TextEncoder()
@@ -106,6 +106,7 @@ function createMockPort(info = {}, versionLine = 'EBBv3.0') {
     return {
         openCalls: 0,
         closeCalls: 0,
+        openOptions: [],
         getInfo() {
             return {
                 usbVendorId: info.usbVendorId,
@@ -122,8 +123,9 @@ function createMockPort(info = {}, versionLine = 'EBBv3.0') {
                 return reader
             }
         },
-        async open(_options) {
+        async open(options) {
             this.openCalls += 1
+            this.openOptions.push(options)
         },
         async close() {
             this.closeCalls += 1
@@ -196,10 +198,11 @@ test('EggBotSerial.connectForDraw should request port when no granted ports exis
 
     const serial = new EggBotSerial()
     try {
-        await serial.connectForDraw()
+        await serial.connectForDraw({ baudRate: 19200 })
 
         assert.equal(mockedBrowser.requestPortCalls(), 1)
         assert.equal(requestedPort.openCalls, 1)
+        assert.equal(requestedPort.openOptions[0]?.baudRate, 19200)
     } finally {
         await serial.disconnect()
         mockedBrowser.restore()
@@ -242,6 +245,24 @@ test('EggBotSerial should persist vendor/product hint after successful connect',
 
         const rawHint = mockedBrowser.localStorage.getItem(LAST_PORT_STORAGE_KEY)
         assert.equal(rawHint, JSON.stringify({ usbVendorId: 0x45aa, usbProductId: 0x67bb }))
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.connect should open with explicit baud rate', async () => {
+    const requestedPort = createMockPort({ usbVendorId: 0x45ab, usbProductId: 0x67bc })
+    const mockedBrowser = installBrowserMocks({
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        await serial.connect({ baudRate: 57600 })
+
+        assert.equal(requestedPort.openCalls, 1)
+        assert.equal(requestedPort.openOptions[0]?.baudRate, 57600)
     } finally {
         await serial.disconnect()
         mockedBrowser.restore()
