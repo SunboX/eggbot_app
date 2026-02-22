@@ -1033,6 +1033,10 @@ class AppController {
             this.state.showHorizontalLines = this.els.showHorizontalLines.checked
             this.#scheduleRender()
         })
+        this.els.fillPatterns.addEventListener('change', () => {
+            this.state.fillPatterns = this.els.fillPatterns.checked
+            this.#scheduleRender()
+        })
         this.els.baseColor.addEventListener('input', () => {
             this.state.baseColor = this.els.baseColor.value
             this.#scheduleRender()
@@ -1416,6 +1420,7 @@ class AppController {
             ornamentCount: this.state.ornamentCount,
             ornamentDistribution: this.state.ornamentDistribution,
             showHorizontalLines: this.state.showHorizontalLines,
+            fillPatterns: this.state.fillPatterns,
             palette: Array.isArray(this.state.palette) ? [...this.state.palette] : [],
             motifs: {
                 dots: Boolean(this.state?.motifs?.dots),
@@ -1513,6 +1518,7 @@ class AppController {
         const renderInput = {
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
+            fillPatterns: this.state.fillPatterns,
             palette: this.state.palette,
             strokes: this.state.strokes,
             importedSvgText: config.importedSvgText,
@@ -1553,7 +1559,7 @@ class AppController {
 
     /**
      * Renders one texture frame with worker-first fallback behavior.
-     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
+     * @param {{ baseColor: string, lineWidth: number, fillPatterns?: boolean, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
      * @param {number} token
      * @returns {Promise<{ stale?: boolean, dispatchImportedRenderedEvent?: boolean }>}
      */
@@ -1583,7 +1589,7 @@ class AppController {
 
     /**
      * Renders one frame on main thread and proxies imported render events when needed.
-     * @param {{ baseColor: string, lineWidth: number, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
+     * @param {{ baseColor: string, lineWidth: number, fillPatterns?: boolean, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} input
      * @param {boolean} useFallbackCanvas
      * @returns {Promise<{ dispatchImportedRenderedEvent: boolean }>}
      */
@@ -1721,6 +1727,8 @@ class AppController {
         this.els.importHeightScale.value = String(this.state.importHeightScale)
         this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
         this.els.showHorizontalLines.checked = this.state.showHorizontalLines !== false
+        this.state.fillPatterns = this.state.fillPatterns !== false
+        this.els.fillPatterns.checked = this.state.fillPatterns
         this.els.baseColor.value = this.state.baseColor
         this.#normalizePaletteLength(this.state.palette.length)
         this.els.colorCount.value = String(this.state.palette.length)
@@ -2127,6 +2135,7 @@ class AppController {
             palette: this.state.palette,
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth * 2.4,
+            fillPatterns: this.state.fillPatterns,
             width: SVG_EXPORT_WIDTH,
             height: SVG_EXPORT_HEIGHT,
             editorName,
@@ -2711,6 +2720,11 @@ class AppController {
         }
         if (Object.hasOwn(patch, 'showHorizontalLines')) {
             this.state.showHorizontalLines = AppController.#parseBoolean(patch.showHorizontalLines, this.state.showHorizontalLines)
+            shouldRender = true
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'fillPatterns')) {
+            this.state.fillPatterns = AppController.#parseBoolean(patch.fillPatterns, this.state.fillPatterns)
             shouldRender = true
             didMutateState = true
         }

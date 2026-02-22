@@ -20,7 +20,7 @@ export class PatternSvgExportUtils {
 
     /**
      * Builds an SVG document string from stroke data.
-     * @param {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', horizontalRingGroup?: string, motifGroup?: string }>, palette?: string[], baseColor?: string, lineWidth?: number, width?: number, height?: number, editorName?: string, editorUrl?: string, metadata?: { title?: string, date?: string, creator?: string, rights?: string, publisher?: string, identifier?: string, source?: string, relation?: string, language?: string, keywords?: string[] | string, coverage?: string, description?: string, contributors?: string[] | string } }} input
+     * @param {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', horizontalRingGroup?: string, motifGroup?: string }>, palette?: string[], baseColor?: string, lineWidth?: number, fillPatterns?: boolean, width?: number, height?: number, editorName?: string, editorUrl?: string, metadata?: { title?: string, date?: string, creator?: string, rights?: string, publisher?: string, identifier?: string, source?: string, relation?: string, language?: string, keywords?: string[] | string, coverage?: string, description?: string, contributors?: string[] | string } }} input
      * @returns {string}
      */
     static buildSvg(input) {
@@ -29,6 +29,7 @@ export class PatternSvgExportUtils {
         const width = Math.max(64, Math.round(Number(input?.width) || PatternSvgExportUtils.#DEFAULT_WIDTH))
         const height = Math.max(64, Math.round(Number(input?.height) || PatternSvgExportUtils.#DEFAULT_HEIGHT))
         const lineWidth = Math.max(0.5, Number(input?.lineWidth) || 1.8)
+        const fillPatterns = input?.fillPatterns !== false
         const baseColor = String(input?.baseColor || '#efe7ce')
         const version = String(AppVersion.get() || '').trim() || '0.0.0'
         const editorName = String(input?.editorName || 'eggbot-app').trim() || 'eggbot-app'
@@ -44,7 +45,7 @@ export class PatternSvgExportUtils {
         })
         const metadataElement = PatternSvgExportUtils.#buildMetadataElement(metadata)
 
-        const fillElements = PatternSvgExportUtils.#buildFillElements(strokes, palette, width, height)
+        const fillElements = fillPatterns ? PatternSvgExportUtils.#buildFillElements(strokes, palette, width, height) : []
         const fillGroups = fillElements.length ? [`<g id="ornament-fills">\n${fillElements.join('\n')}\n</g>`] : []
         const strokeElements = PatternSvgExportUtils.#buildStrokeElements(strokes, palette, width, height, lineWidth)
         const body = [...fillGroups, ...strokeElements].join('\n')

@@ -4,11 +4,12 @@ import { PatternRenderer2D } from '../src/PatternRenderer2D.mjs'
 
 /**
  * Creates a minimal canvas/context mock for renderer tests.
- * @returns {{ canvas: HTMLCanvasElement, ctx: Record<string, unknown> & { beginPathCalls: number, strokeCalls: number, drawImageCalls: number, lastDrawImageArgs: unknown[] | null } }}
+ * @returns {{ canvas: HTMLCanvasElement, ctx: Record<string, unknown> & { beginPathCalls: number, fillCalls: number, strokeCalls: number, drawImageCalls: number, lastDrawImageArgs: unknown[] | null } }}
  */
 function createMockCanvas() {
     const ctx = {
         beginPathCalls: 0,
+        fillCalls: 0,
         strokeCalls: 0,
         drawImageCalls: 0,
         lastDrawImageArgs: null,
@@ -20,7 +21,9 @@ function createMockCanvas() {
         moveTo() {},
         lineTo() {},
         closePath() {},
-        fill() {},
+        fill() {
+            this.fillCalls += 1
+        },
         stroke() {
             this.strokeCalls += 1
         },
@@ -165,4 +168,30 @@ test('PatternRenderer2D should draw imported fallback SVG with proportional widt
     } finally {
         restore()
     }
+})
+
+test('PatternRenderer2D should skip closed-shape fills when fillPatterns is false', () => {
+    const { canvas, ctx } = createMockCanvas()
+    const renderer = new PatternRenderer2D(canvas)
+
+    renderer.render({
+        baseColor: '#efe7ce',
+        lineWidth: 2,
+        fillPatterns: false,
+        palette: ['#8b1f1a'],
+        strokes: [
+            {
+                colorIndex: 0,
+                closed: true,
+                points: [
+                    { u: 0.1, v: 0.2 },
+                    { u: 0.4, v: 0.2 },
+                    { u: 0.2, v: 0.6 }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(ctx.fillCalls, 0)
+    assert.ok(ctx.strokeCalls > 0)
 })

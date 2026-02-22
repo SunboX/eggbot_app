@@ -26,6 +26,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.ornamentSize, 1)
     assert.equal(normalized.ornamentCount, 1)
     assert.equal(normalized.ornamentDistribution, 1)
+    assert.equal(typeof normalized.fillPatterns, 'boolean')
     assert.equal(typeof normalized.drawConfig.baudRate, 'number')
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
     assert.equal(typeof normalized.drawConfig.penDownSpeed, 'number')
@@ -53,6 +54,7 @@ test('ProjectIoUtils should stamp project payload with app version', () => {
 
 test('ProjectIoUtils should clamp extended EggBot control payload fields', () => {
     const normalized = ProjectIoUtils.normalizeProjectState({
+        fillPatterns: false,
         drawConfig: {
             penUpPercent: 999,
             penDownPercent: -10,
@@ -83,4 +85,5 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     assert.equal(normalized.drawConfig.curveSmoothing, 2)
     assert.equal(normalized.drawConfig.manualWalkDistance, 64000)
     assert.equal(normalized.drawConfig.activeControlTab, 'manual')
+    assert.equal(normalized.fillPatterns, false)
 })

@@ -17,6 +17,7 @@ function createDeclarativeFixture() {
                     <input name="density" />
                     <input name="symmetry" />
                     <input name="showHorizontalLines" type="checkbox" value="true" />
+                    <input name="fillPatterns" type="checkbox" value="true" />
                     <input name="regenerate" type="checkbox" value="true" />
                     <button type="submit">submit</button>
                 </form>
@@ -155,6 +156,7 @@ test('WebMcpBridge should parse declarative design form into setDesignSettings a
         form.querySelector('[name="density"]').value = '0.55'
         form.querySelector('[name="symmetry"]').value = '12'
         form.querySelector('[name="showHorizontalLines"]').checked = true
+        form.querySelector('[name="fillPatterns"]').checked = true
         form.querySelector('[name="regenerate"]').checked = true
 
         const response = await dispatchDeclarativeSubmit(form, window)
@@ -165,6 +167,7 @@ test('WebMcpBridge should parse declarative design form into setDesignSettings a
             symmetry: 12,
             density: 0.55,
             showHorizontalLines: true,
+            fillPatterns: true,
             regenerate: true
         })
     } finally {

@@ -174,6 +174,7 @@ export class WebMcpBridge {
                         lineWidth: { type: 'number' },
                         importHeightScale: { type: 'number' },
                         showHorizontalLines: { type: 'boolean' },
+                        fillPatterns: { type: 'boolean' },
                         rerollSeed: { type: 'boolean' },
                         regenerate: { type: 'boolean' }
                     },
@@ -485,6 +486,7 @@ export class WebMcpBridge {
                         lineWidth: { type: 'number' },
                         importHeightScale: { type: 'number' },
                         showHorizontalLines: { type: 'boolean' },
+                        fillPatterns: { type: 'boolean' },
                         rerollSeed: { type: 'boolean' },
                         regenerate: { type: 'boolean' }
                     },
@@ -770,6 +772,9 @@ export class WebMcpBridge {
 
         if (formData.has('showHorizontalLines')) {
             args.showHorizontalLines = WebMcpBridge.#isTruthy(formData.get('showHorizontalLines'))
+        }
+        if (formData.has('fillPatterns')) {
+            args.fillPatterns = WebMcpBridge.#isTruthy(formData.get('fillPatterns'))
         }
         if (formData.has('rerollSeed')) {
             args.rerollSeed = WebMcpBridge.#isTruthy(formData.get('rerollSeed'))
