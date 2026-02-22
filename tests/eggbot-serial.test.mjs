@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { EggBotSerial } from '../src/EggBotSerial.mjs'
 
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
+const RECONNECT_ON_LOAD_STORAGE_KEY = 'eggbot.serial.reconnectOnLoad.v1'
 
 /**
  * Creates a minimal localStorage mock.
@@ -266,6 +267,73 @@ test('EggBotSerial.connectForDraw should request port when remembered match is a
     }
 })
 
+test('EggBotSerial.reconnectIfPreviouslyConnected should use remembered granted port without chooser', async () => {
+    const rememberedPort = createMockPort({ usbVendorId: 0x1234, usbProductId: 0x5678 })
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [rememberedPort],
+        requestPort: async () => createMockPort()
+    })
+    mockedBrowser.localStorage.setItem(LAST_PORT_STORAGE_KEY, JSON.stringify({ usbVendorId: 0x1234, usbProductId: 0x5678 }))
+    mockedBrowser.localStorage.setItem(RECONNECT_ON_LOAD_STORAGE_KEY, '1')
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.reconnectIfPreviouslyConnected()
+
+        assert.equal(version, 'EBBv3.0')
+        assert.equal(rememberedPort.openCalls, 1)
+        assert.equal(mockedBrowser.requestPortCalls(), 0)
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.reconnectIfPreviouslyConnected should no-op when reconnect flag is missing', async () => {
+    const rememberedPort = createMockPort({ usbVendorId: 0x9876, usbProductId: 0x5432 })
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [rememberedPort],
+        requestPort: async () => createMockPort()
+    })
+    mockedBrowser.localStorage.setItem(LAST_PORT_STORAGE_KEY, JSON.stringify({ usbVendorId: 0x9876, usbProductId: 0x5432 }))
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.reconnectIfPreviouslyConnected()
+
+        assert.equal(version, null)
+        assert.equal(rememberedPort.openCalls, 0)
+        assert.equal(mockedBrowser.requestPortCalls(), 0)
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.reconnectIfPreviouslyConnected should no-op when remembered match is ambiguous', async () => {
+    const ambiguousPortA = createMockPort({ usbVendorId: 0x2222, usbProductId: 0x3333 })
+    const ambiguousPortB = createMockPort({ usbVendorId: 0x2222, usbProductId: 0x3333 })
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [ambiguousPortA, ambiguousPortB],
+        requestPort: async () => createMockPort()
+    })
+    mockedBrowser.localStorage.setItem(LAST_PORT_STORAGE_KEY, JSON.stringify({ usbVendorId: 0x2222, usbProductId: 0x3333 }))
+    mockedBrowser.localStorage.setItem(RECONNECT_ON_LOAD_STORAGE_KEY, '1')
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.reconnectIfPreviouslyConnected()
+
+        assert.equal(version, null)
+        assert.equal(ambiguousPortA.openCalls, 0)
+        assert.equal(ambiguousPortB.openCalls, 0)
+        assert.equal(mockedBrowser.requestPortCalls(), 0)
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
 test('EggBotSerial should persist vendor/product hint after successful connect', async () => {
     const requestedPort = createMockPort({ usbVendorId: 0x45aa, usbProductId: 0x67bb })
     const mockedBrowser = installBrowserMocks({
@@ -279,8 +347,27 @@ test('EggBotSerial should persist vendor/product hint after successful connect',
         assert.equal(requestedPort.openOptions[0]?.baudRate, 115200)
         const rawHint = mockedBrowser.localStorage.getItem(LAST_PORT_STORAGE_KEY)
         assert.equal(rawHint, JSON.stringify({ usbVendorId: 0x45aa, usbProductId: 0x67bb }))
+        assert.equal(mockedBrowser.localStorage.getItem(RECONNECT_ON_LOAD_STORAGE_KEY), '1')
     } finally {
         await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.disconnect should clear reconnect-on-load intent', async () => {
+    const requestedPort = createMockPort({ usbVendorId: 0x45ac, usbProductId: 0x67bd })
+    const mockedBrowser = installBrowserMocks({
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        await serial.connect()
+        assert.equal(mockedBrowser.localStorage.getItem(RECONNECT_ON_LOAD_STORAGE_KEY), '1')
+
+        await serial.disconnect()
+        assert.equal(mockedBrowser.localStorage.getItem(RECONNECT_ON_LOAD_STORAGE_KEY), null)
+    } finally {
         mockedBrowser.restore()
     }
 })

@@ -2,6 +2,7 @@ import { EggBotPathComputeTasks } from './EggBotPathComputeTasks.mjs'
 import { EggBotPathWorkerClient } from './EggBotPathWorkerClient.mjs'
 
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
+const RECONNECT_ON_LOAD_STORAGE_KEY = 'eggbot.serial.reconnectOnLoad.v1'
 
 /**
  * Web Serial bridge for EggBot EBB command streaming.
@@ -75,6 +76,30 @@ export class EggBotSerial {
     }
 
     /**
+     * Attempts one silent reconnect after reload when previous session was connected.
+     * This never opens the serial chooser and only uses already granted ports.
+     * @param {{ baudRate?: number }} [options]
+     * @returns {Promise<string | null>}
+     */
+    async reconnectIfPreviouslyConnected(options = {}) {
+        this.#assertSerialSupport()
+        if (this.isConnected) {
+            return 'Already connected'
+        }
+        if (!this.#shouldReconnectOnLoad()) {
+            return null
+        }
+
+        const grantedPorts = typeof navigator.serial.getPorts === 'function' ? await navigator.serial.getPorts() : []
+        const reconnectPort = this.#selectReconnectPort(grantedPorts)
+        if (!reconnectPort) {
+            return null
+        }
+
+        return this.#openPortAndInitialize(reconnectPort, options)
+    }
+
+    /**
      * Returns true if the provided port is the active one.
      * @param {SerialPort | null | undefined} port
      * @returns {boolean}
@@ -89,6 +114,7 @@ export class EggBotSerial {
      */
     async disconnect() {
         this.abortDrawing = true
+        this.#persistReconnectOnLoad(false)
         await this.#releaseConnectionResources()
     }
 
@@ -161,6 +187,7 @@ export class EggBotSerial {
 
             const version = await this.#probeVersion()
             this.#savePortHint(this.port)
+            this.#persistReconnectOnLoad(true)
             return version
         } catch (error) {
             await this.#releaseConnectionResources()
@@ -288,6 +315,36 @@ export class EggBotSerial {
             return this.#isValidPortHint(parsed) ? parsed : null
         } catch (_error) {
             return null
+        }
+    }
+
+    /**
+     * Returns true when startup should attempt an automatic reconnect.
+     * @returns {boolean}
+     */
+    #shouldReconnectOnLoad() {
+        try {
+            if (!window?.localStorage) return false
+            return window.localStorage.getItem(RECONNECT_ON_LOAD_STORAGE_KEY) === '1'
+        } catch (_error) {
+            return false
+        }
+    }
+
+    /**
+     * Persists whether startup should auto-reconnect serial.
+     * @param {boolean} enabled
+     */
+    #persistReconnectOnLoad(enabled) {
+        try {
+            if (!window?.localStorage) return
+            if (enabled) {
+                window.localStorage.setItem(RECONNECT_ON_LOAD_STORAGE_KEY, '1')
+                return
+            }
+            window.localStorage.removeItem(RECONNECT_ON_LOAD_STORAGE_KEY)
+        } catch (_error) {
+            // Ignore localStorage write failures.
         }
     }
 

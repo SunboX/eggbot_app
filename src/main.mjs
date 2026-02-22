@@ -123,6 +123,7 @@ class AppController {
         )
         this.#renderPattern()
         this.#syncConnectionUi()
+        await this.#restoreSerialConnectionAfterReload()
         this.#syncPatternImportUi()
         this.#syncAutoGenerateOrnamentControlsUi()
         this.#resetDrawProgressUi()
@@ -2095,6 +2096,25 @@ class AppController {
         })
     }
 
+    /**
+     * Restores a previous serial connection after page reload when possible.
+     * @returns {Promise<void>}
+     */
+    async #restoreSerialConnectionAfterReload() {
+        if (!('serial' in navigator)) {
+            return
+        }
+
+        try {
+            const version = await this.serial.reconnectIfPreviouslyConnected({ baudRate: this.#resolveSerialBaudRate() })
+            if (!version) return
+            this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
+        } catch (error) {
+            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+        } finally {
+            this.#syncConnectionUi()
+        }
+    }
     /**
      * Opens Web Serial and refreshes UI.
      * @returns {Promise<void>}
