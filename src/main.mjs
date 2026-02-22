@@ -630,6 +630,13 @@ class AppController {
             this.state.motifs.diamonds = this.els.motifDiamond.checked
             this.#scheduleRender()
         })
+        this.els.baudRate.addEventListener('change', () => {
+            this.state.drawConfig.baudRate = Math.max(
+                300,
+                AppController.#parseInteger(this.els.baudRate.value, this.state.drawConfig.baudRate)
+            )
+            this.#markProjectArtifactsDirty()
+        })
         this.els.stepsPerTurn.addEventListener('change', () => {
             this.state.drawConfig.stepsPerTurn = AppController.#parseInteger(
                 this.els.stepsPerTurn.value,
@@ -1094,6 +1101,8 @@ class AppController {
         this.els.colorCount.value = String(this.state.palette.length)
         this.#syncMotifControls()
         this.#renderPaletteControls()
+        this.state.drawConfig.baudRate = this.#resolveSerialBaudRate()
+        this.els.baudRate.value = String(this.state.drawConfig.baudRate)
         this.els.stepsPerTurn.value = String(this.state.drawConfig.stepsPerTurn)
         this.els.penRangeSteps.value = String(this.state.drawConfig.penRangeSteps)
         this.els.msPerStep.value = String(this.state.drawConfig.msPerStep)
@@ -1146,13 +1155,22 @@ class AppController {
         }
         this.state.palette = this.state.palette.slice(0, count)
     }
+
+    /**
+     * Resolves the validated serial baud rate from draw configuration.
+     * @returns {number}
+     */
+    #resolveSerialBaudRate() {
+        return Math.max(300, AppController.#parseInteger(this.state?.drawConfig?.baudRate, 9600))
+    }
+
     /**
      * Opens Web Serial and refreshes UI.
      * @returns {Promise<void>}
      */
     async #connectSerial() {
         try {
-            const version = await this.serial.connect()
+            const version = await this.serial.connect({ baudRate: this.#resolveSerialBaudRate() })
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
             this.#syncConnectionUi()
         } catch (error) {
@@ -1194,7 +1212,7 @@ class AppController {
             if (!this.serial.isConnected) {
                 connectingBeforeDraw = true
                 this.#setStatus(this.#t('messages.connectingBeforeDraw'), 'loading')
-                const version = await this.serial.connectForDraw()
+                const version = await this.serial.connectForDraw({ baudRate: this.#resolveSerialBaudRate() })
                 connectingBeforeDraw = false
                 this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
                 this.#syncConnectionUi()
@@ -2187,6 +2205,13 @@ class AppController {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let didMutateState = false
 
+        if (Object.hasOwn(patch, 'baudRate')) {
+            this.state.drawConfig.baudRate = Math.max(
+                300,
+                AppController.#parseInteger(patch.baudRate, this.state.drawConfig.baudRate)
+            )
+            didMutateState = true
+        }
         if (Object.hasOwn(patch, 'stepsPerTurn')) {
             this.state.drawConfig.stepsPerTurn = Math.max(
                 100,

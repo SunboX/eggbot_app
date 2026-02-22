@@ -83,6 +83,7 @@
     },
     "machine": {
         "connectionTitle": "EggBot connection",
+        "baudRate": "Baud rate",
         "connectSerial": "Connect USB serial",
         "disconnect": "Disconnect",
         "mappingTitle": "Drawing mapping",

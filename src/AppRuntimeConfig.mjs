@@ -33,6 +33,7 @@ export class AppRuntimeConfig {
                 diamonds: true
             },
             drawConfig: {
+                baudRate: 9600,
                 stepsPerTurn: 3200,
                 penRangeSteps: 1500,
                 msPerStep: 1.8,

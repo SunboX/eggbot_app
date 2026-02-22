@@ -51,6 +51,7 @@ export class AppElements {
             motifWolfTeeth: query('[data-motif-wolf-teeth]'),
             motifPine: query('[data-motif-pine]'),
             motifDiamond: query('[data-motif-diamond]'),
+            baudRate: query('[data-baud-rate]'),
             serialConnect: query('[data-serial-connect]'),
             serialDisconnect: query('[data-serial-disconnect]'),
             drawButton: query('[data-draw]'),
