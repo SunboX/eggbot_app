@@ -77,6 +77,8 @@ export class AppElements {
             controlSetupActionRaiseOff: query('[data-control-setup-action-raise-off]'),
             controlSpeedPenDown: query('[data-control-speed-pen-down]'),
             controlSpeedPenUp: query('[data-control-speed-pen-up]'),
+            controlSpeedPenMotor: query('[data-control-speed-pen-motor]'),
+            controlSpeedEggMotor: query('[data-control-speed-egg-motor]'),
             controlPenRaiseRate: query('[data-control-pen-raise-rate]'),
             controlDelayAfterRaise: query('[data-control-delay-after-raise]'),
             controlPenLowerRate: query('[data-control-pen-lower-rate]'),

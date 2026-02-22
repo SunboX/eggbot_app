@@ -29,6 +29,8 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(typeof normalized.drawConfig.baudRate, 'number')
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
     assert.equal(typeof normalized.drawConfig.penDownSpeed, 'number')
+    assert.equal(typeof normalized.drawConfig.penMotorSpeed, 'number')
+    assert.equal(typeof normalized.drawConfig.eggMotorSpeed, 'number')
     assert.equal(typeof normalized.drawConfig.penUpPercent, 'number')
     assert.equal(typeof normalized.drawConfig.wrapAround, 'boolean')
 })
@@ -56,6 +58,8 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
             penDownPercent: -10,
             penDownSpeed: 9000,
             penUpSpeed: -40,
+            penMotorSpeed: 99999,
+            eggMotorSpeed: -5,
             penRaiseRate: 500,
             penRaiseDelayMs: -2,
             penLowerRate: 0,
@@ -70,6 +74,8 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     assert.equal(normalized.drawConfig.penDownPercent, 0)
     assert.equal(normalized.drawConfig.penDownSpeed, 4000)
     assert.equal(normalized.drawConfig.penUpSpeed, 10)
+    assert.equal(normalized.drawConfig.penMotorSpeed, 4000)
+    assert.equal(normalized.drawConfig.eggMotorSpeed, 10)
     assert.equal(normalized.drawConfig.penRaiseRate, 100)
     assert.equal(normalized.drawConfig.penRaiseDelayMs, 0)
     assert.equal(normalized.drawConfig.penLowerRate, 1)

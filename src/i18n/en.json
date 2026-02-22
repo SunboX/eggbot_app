@@ -130,6 +130,8 @@
             "movementTitle": "Movement speeds:",
             "speedPenDown": "Speed when pen is down (steps/s):",
             "speedPenUp": "Speed when pen is up (steps/s):",
+            "speedPenMotor": "Speed limit of Motor 1 (pen, steps/s):",
+            "speedEggMotor": "Speed limit of Motor 2 (egg, steps/s):",
             "penLiftTitle": "Pen lift and lowering speeds:",
             "penRaiseRate": "Pen raising speed (%/s):",
             "delayAfterRaise": "Delay after raising pen (ms):",

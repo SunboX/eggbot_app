@@ -237,6 +237,8 @@ export class WebMcpBridge {
                         penDownPercent: { type: 'number' },
                         penDownSpeed: { type: 'integer' },
                         penUpSpeed: { type: 'integer' },
+                        penMotorSpeed: { type: 'integer' },
+                        eggMotorSpeed: { type: 'integer' },
                         penRaiseRate: { type: 'integer' },
                         penRaiseDelayMs: { type: 'integer' },
                         penLowerRate: { type: 'integer' },
