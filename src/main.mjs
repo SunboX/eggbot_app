@@ -520,7 +520,7 @@ class AppController {
             return
         }
         if (command === 'query-version') {
-            const response = await this.serial.sendCommand('v', { expectResponse: true, timeoutMs: 1500 })
+            const response = await this.serial.queryVersion({ timeoutMs: 1500 })
             const resultMessage = this.#t('messages.controlDialogManualVersionResult', { version: response || 'Connected' })
             this.#setStatus(resultMessage, 'info')
             this.#setManualControlResult(resultMessage, 'info')
