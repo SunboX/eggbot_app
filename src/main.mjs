@@ -334,13 +334,13 @@ class AppController {
         }
         if (command === 'walk-egg') {
             const logicalDistance = this.state.drawConfig.reverseEggMotor ? -walkDistance : walkDistance
-            await this.serial.sendCommand(`SM,${durationMs},${logicalDistance},0`)
+            await this.serial.sendCommand(`SM,${durationMs},0,${logicalDistance}`)
             this.#setStatus(this.#t('messages.controlDialogManualWalkEggApplied', { steps: walkDistance }), 'success')
             return
         }
         if (command === 'walk-pen') {
             const logicalDistance = this.state.drawConfig.reversePenMotor ? -walkDistance : walkDistance
-            await this.serial.sendCommand(`SM,${durationMs},0,${logicalDistance}`)
+            await this.serial.sendCommand(`SM,${durationMs},${logicalDistance},0`)
             this.#setStatus(this.#t('messages.controlDialogManualWalkPenApplied', { steps: walkDistance }), 'success')
             return
         }

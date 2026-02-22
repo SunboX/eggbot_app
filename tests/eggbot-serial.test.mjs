@@ -493,8 +493,8 @@ test('EggBotSerial.drawStrokes should respect reverse motor flags, wrap mode, an
         )
 
         assert.equal(wrapAroundPayload?.drawConfig?.wrapAround, false)
-        assert.equal(commands.some((command) => /^SM,\d+,-20,-10$/.test(command)), true)
-        assert.equal(commands.some((command) => /^SM,\d+,20,10$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,-10,-20$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,10,20$/.test(command)), true)
     } finally {
         restoreTimers()
     }
