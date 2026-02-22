@@ -182,6 +182,7 @@ test('EggBotSerial.connectForDraw should use remembered granted port without cho
 
         assert.equal(version, 'EBBv3.0')
         assert.equal(rememberedPort.openCalls, 1)
+        assert.equal(rememberedPort.openOptions[0]?.baudRate, 115200)
         assert.equal(mockedBrowser.requestPortCalls(), 0)
     } finally {
         await serial.disconnect()
@@ -243,6 +244,7 @@ test('EggBotSerial should persist vendor/product hint after successful connect',
     try {
         await serial.connect()
 
+        assert.equal(requestedPort.openOptions[0]?.baudRate, 115200)
         const rawHint = mockedBrowser.localStorage.getItem(LAST_PORT_STORAGE_KEY)
         assert.equal(rawHint, JSON.stringify({ usbVendorId: 0x45aa, usbProductId: 0x67bb }))
     } finally {

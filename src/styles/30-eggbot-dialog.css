@@ -249,6 +249,26 @@
     border-color: #1d2026;
 }
 
+.eggbot-pen-dialog {
+    width: min(520px, calc(100vw - 2rem));
+    max-height: calc(100vh - 3rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.eggbot-pen-dialog-body {
+    padding: 0.86rem;
+}
+
+.eggbot-pen-dialog-panel {
+    min-height: 0;
+}
+
+.eggbot-pen-dialog-message {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #f0f1f3;
+}
+
 @media (max-width: 780px) {
     .eggbot-dialog {
         width: calc(100vw - 1rem);

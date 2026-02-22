@@ -12,4 +12,10 @@ test('AppElements should expose EggBot manual result element from index markup',
 
     assert.ok(elements.controlManualResult)
     assert.equal(elements.controlManualResult.getAttribute('data-control-manual-result'), '')
+    assert.ok(elements.penColorDialogBackdrop)
+    assert.ok(elements.penColorDialog)
+    assert.ok(elements.penColorDialogTitle)
+    assert.ok(elements.penColorDialogMessage)
+    assert.ok(elements.penColorDialogContinue)
+    assert.ok(elements.penColorDialogCancel)
 })

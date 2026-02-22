@@ -77,6 +77,7 @@ class AppController {
         this.activeEggBotControlTab = 'plot'
         this.setupActionTogglePenDown = false
         this.drawProgressStartedAtMs = 0
+        this.pendingPenColorDialogResolve = null
         this.autoGenerateOrnamentControls = [
             this.els.preset,
             this.els.seed,
@@ -283,7 +284,7 @@ class AppController {
         this.#syncEggBotControlTabUi()
         this.#clearManualControlResult()
         this.els.eggbotDialogBackdrop.hidden = false
-        document.body.classList.add('eggbot-dialog-open')
+        this.#syncDialogBodyScrollLock()
     }
 
     /**
@@ -291,7 +292,7 @@ class AppController {
      */
     #closeEggBotControlDialog() {
         this.els.eggbotDialogBackdrop.hidden = true
-        document.body.classList.remove('eggbot-dialog-open')
+        this.#syncDialogBodyScrollLock()
     }
 
     /**
@@ -300,6 +301,55 @@ class AppController {
      */
     #isEggBotControlDialogOpen() {
         return !this.els.eggbotDialogBackdrop.hidden
+    }
+
+    /**
+     * Returns true when the pen-color dialog is visible.
+     * @returns {boolean}
+     */
+    #isPenColorDialogOpen() {
+        return !this.els.penColorDialogBackdrop.hidden
+    }
+
+    /**
+     * Applies body scroll lock when any EggBot modal dialog is open.
+     */
+    #syncDialogBodyScrollLock() {
+        const shouldLockBody = this.#isEggBotControlDialogOpen() || this.#isPenColorDialogOpen()
+        document.body.classList.toggle('eggbot-dialog-open', shouldLockBody)
+    }
+
+    /**
+     * Opens pen-color confirmation dialog with one title and message.
+     * @param {string} title
+     * @param {string} message
+     */
+    #openPenColorDialog(title, message) {
+        this.els.penColorDialogTitle.textContent = title
+        this.els.penColorDialogMessage.textContent = message
+        this.els.penColorDialogBackdrop.hidden = false
+        this.#syncDialogBodyScrollLock()
+        this.els.penColorDialogContinue.focus()
+    }
+
+    /**
+     * Closes pen-color confirmation dialog.
+     */
+    #closePenColorDialog() {
+        this.els.penColorDialogBackdrop.hidden = true
+        this.#syncDialogBodyScrollLock()
+    }
+
+    /**
+     * Resolves one pending pen-color confirmation dialog promise.
+     * @param {boolean} shouldContinue
+     */
+    #resolvePendingPenColorDialog(shouldContinue) {
+        const resolve = this.pendingPenColorDialogResolve
+        if (!resolve) return
+        this.pendingPenColorDialogResolve = null
+        this.#closePenColorDialog()
+        resolve(Boolean(shouldContinue))
     }
 
     /**
@@ -1411,6 +1461,13 @@ class AppController {
             if (event.target !== this.els.eggbotDialogBackdrop) return
             this.#closeEggBotControlDialog()
         })
+        this.els.penColorDialogBackdrop.addEventListener('click', (event) => {
+            if (event.target !== this.els.penColorDialogBackdrop) return
+            this.#resolvePendingPenColorDialog(false)
+        })
+        this.els.penColorDialogClose.addEventListener('click', () => this.#resolvePendingPenColorDialog(false))
+        this.els.penColorDialogCancel.addEventListener('click', () => this.#resolvePendingPenColorDialog(false))
+        this.els.penColorDialogContinue.addEventListener('click', () => this.#resolvePendingPenColorDialog(true))
         this.els.eggbotDialog.addEventListener('click', (event) => this.#applyControlStepperAdjustment(event))
         this.els.eggbotDialogApply.addEventListener('click', () => {
             this.#applyEggBotControlCurrentTab().catch((error) => {
@@ -1421,10 +1478,14 @@ class AppController {
             button.addEventListener('click', () => this.#setEggBotControlTab(button.dataset.eggbotTab || 'plot'))
         })
         window.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape' || !this.#isEggBotControlDialogOpen()) {
+            if (event.key !== 'Escape') return
+            if (this.#isPenColorDialogOpen()) {
+                this.#resolvePendingPenColorDialog(false)
                 return
             }
-            this.#closeEggBotControlDialog()
+            if (this.#isEggBotControlDialogOpen()) {
+                this.#closeEggBotControlDialog()
+            }
         })
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
@@ -1432,6 +1493,7 @@ class AppController {
         this.els.loadPattern.addEventListener('click', () => this.#loadPatternFromFile())
         this.els.stopButton.addEventListener('click', () => {
             this.serial.stop()
+            this.#resolvePendingPenColorDialog(false)
             this.#setStatus(this.#t('messages.stopRequested'), 'info')
         })
         this.els.saveProject.addEventListener('click', () => this.#saveProjectToFile())
@@ -1949,7 +2011,7 @@ class AppController {
      * @returns {number}
      */
     #resolveSerialBaudRate() {
-        return Math.max(300, AppController.#parseInteger(this.state?.drawConfig?.baudRate, 9600))
+        return Math.max(300, AppController.#parseInteger(this.state?.drawConfig?.baudRate, 115200))
     }
 
     /**
@@ -2015,16 +2077,22 @@ class AppController {
      * Asks the user to insert or change pen color before continuing.
      * @param {number} batchIndex
      * @param {number} colorIndex
-     * @returns {boolean}
+     * @returns {Promise<boolean>}
      */
-    #confirmDrawColorBatchReady(batchIndex, colorIndex) {
+    async #confirmDrawColorBatchReady(batchIndex, colorIndex) {
         const colorLabel = this.#formatDrawColorLabel(colorIndex)
         const isFirstBatch = batchIndex === 0
         const statusKey = isFirstBatch ? 'messages.waitingForPenColorStart' : 'messages.waitingForPenColorChange'
-        const confirmKey = isFirstBatch ? 'messages.penColorStartConfirm' : 'messages.penColorChangeConfirm'
-        this.#setStatus(this.#t(statusKey, { color: colorLabel }), 'info')
-        if (typeof window?.confirm !== 'function') return true
-        return window.confirm(this.#t(confirmKey, { color: colorLabel }))
+        const titleKey = isFirstBatch ? 'messages.penColorDialogTitleStart' : 'messages.penColorDialogTitleChange'
+        const message = this.#t(statusKey, { color: colorLabel })
+        this.#setStatus(message, 'info')
+        if (this.pendingPenColorDialogResolve) {
+            this.#resolvePendingPenColorDialog(false)
+        }
+        return new Promise((resolve) => {
+            this.pendingPenColorDialogResolve = resolve
+            this.#openPenColorDialog(this.#t(titleKey), message)
+        })
     }
 
     /**
@@ -2100,9 +2168,13 @@ class AppController {
                 if (!Array.isArray(batch?.strokes) || batch.strokes.length <= 0) continue
 
                 if (Number.isInteger(batch.colorIndex)) {
-                    const confirmed = this.#confirmDrawColorBatchReady(batchIndex, batch.colorIndex)
+                    const confirmed = await this.#confirmDrawColorBatchReady(batchIndex, batch.colorIndex)
                     if (!confirmed) {
-                        drawCanceledByUser = true
+                        if (this.serial.abortDrawing) {
+                            drawAbortedByStop = true
+                        } else {
+                            drawCanceledByUser = true
+                        }
                         break
                     }
                 }
@@ -2163,6 +2235,8 @@ class AppController {
                 this.#setStatus(this.#t('messages.drawFailed', { message: error.message }), 'error')
             }
         } finally {
+            this.#resolvePendingPenColorDialog(false)
+            this.#closePenColorDialog()
             this.isDrawing = false
             this.#resetDrawProgressUi()
             this.#syncConnectionUi()
@@ -3679,6 +3753,7 @@ class AppController {
      */
     #webMcpSerialStop() {
         this.serial.stop()
+        this.#resolvePendingPenColorDialog(false)
         this.#setStatus(this.#t('messages.stopRequested'), 'info')
         return {
             message: 'Stop request sent.',
@@ -3721,7 +3796,7 @@ class AppController {
      * @returns {'single' | 'per-color'}
      */
     static #normalizePrintColorMode(value) {
-        return String(value || '').trim().toLowerCase() === 'per-color' ? 'per-color' : 'single'
+        return String(value || '').trim().toLowerCase() === 'single' ? 'single' : 'per-color'
     }
 
     /**

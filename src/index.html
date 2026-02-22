@@ -872,6 +872,50 @@
             </section>
         </div>
 
+        <div class="eggbot-dialog-backdrop" data-pen-color-dialog-backdrop hidden>
+            <section
+                class="eggbot-dialog eggbot-pen-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="pen-color-dialog-title"
+                data-pen-color-dialog
+            >
+                <header class="eggbot-dialog-header">
+                    <h2 id="pen-color-dialog-title" data-pen-color-dialog-title>Pen change required</h2>
+                    <button
+                        class="eggbot-dialog-close-icon"
+                        type="button"
+                        aria-label="Close pen color dialog"
+                        data-pen-color-dialog-close
+                    >
+                        ×
+                    </button>
+                </header>
+
+                <div class="eggbot-dialog-body eggbot-pen-dialog-body">
+                    <section class="eggbot-dialog-panel eggbot-pen-dialog-panel">
+                        <p class="eggbot-pen-dialog-message" data-pen-color-dialog-message>
+                            Insert the requested pen color and continue.
+                        </p>
+                    </section>
+                </div>
+
+                <footer class="eggbot-dialog-footer">
+                    <button class="ghost" type="button" data-pen-color-dialog-cancel data-i18n="messages.penColorDialogCancel">
+                        Cancel
+                    </button>
+                    <button
+                        class="primary"
+                        type="button"
+                        data-pen-color-dialog-continue
+                        data-i18n="messages.penColorDialogContinue"
+                    >
+                        Continue
+                    </button>
+                </footer>
+            </section>
+        </div>
+
         <div class="webmcp-declarative" aria-hidden="true">
             <form
                 data-webmcp-form-design

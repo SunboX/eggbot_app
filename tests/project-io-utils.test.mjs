@@ -28,6 +28,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.ornamentDistribution, 1)
     assert.equal(typeof normalized.fillPatterns, 'boolean')
     assert.equal(typeof normalized.drawConfig.baudRate, 'number')
+    assert.equal(normalized.drawConfig.baudRate, 115200)
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
     assert.equal(typeof normalized.drawConfig.penDownSpeed, 'number')
     assert.equal(typeof normalized.drawConfig.penMotorSpeed, 'number')
@@ -41,6 +42,7 @@ test('Default drawing palette should not include white by default', () => {
     const defaults = AppRuntimeConfig.createDefaultState()
     const normalizedHex = defaults.palette.map((value) => String(value).trim().toLowerCase())
 
+    assert.equal(defaults.drawConfig.baudRate, 115200)
     assert.equal(normalizedHex.includes('#ffffff'), false)
     assert.equal(normalizedHex.includes('#fff'), false)
     assert.equal(normalizedHex.includes('#f3f0e7'), false)
@@ -86,7 +88,7 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     assert.equal(normalized.drawConfig.penLowerDelayMs, 5000)
     assert.equal(normalized.drawConfig.curveSmoothing, 2)
     assert.equal(normalized.drawConfig.manualWalkDistance, 64000)
-    assert.equal(normalized.drawConfig.printColorMode, 'single')
+    assert.equal(normalized.drawConfig.printColorMode, 'per-color')
     assert.equal(normalized.drawConfig.activeControlTab, 'manual')
     assert.equal(normalized.fillPatterns, false)
 })
@@ -99,4 +101,14 @@ test('ProjectIoUtils should keep per-color print mode when provided', () => {
     })
 
     assert.equal(normalized.drawConfig.printColorMode, 'per-color')
+})
+
+test('ProjectIoUtils should keep single print mode when provided', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        drawConfig: {
+            printColorMode: 'single'
+        }
+    })
+
+    assert.equal(normalized.drawConfig.printColorMode, 'single')
 })
