@@ -20,6 +20,7 @@ import { WebMcpBridge } from './WebMcpBridge.mjs'
 import { IdleScheduler } from './IdleScheduler.mjs'
 import { SvgProjectNameUtils } from './SvgProjectNameUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
+const SETTINGS_STORAGE_KEY = 'eggbot.settings.v1'
 const IMPORT_HEIGHT_REFERENCE = 800
 const SVG_EXPORT_WIDTH = 2048
 const SVG_EXPORT_HEIGHT = 1024
@@ -28,6 +29,7 @@ const IDLE_TIMEOUT_STARTUP_WEBMCP_MS = 900
 const IDLE_TIMEOUT_STARTUP_WORKERS_MS = 1500
 const IDLE_TIMEOUT_PROJECT_ARTIFACTS_MS = 1000
 const IDLE_TIMEOUT_LOCAL_PROJECT_RENDER_MS = 800
+const IDLE_TIMEOUT_SETTINGS_PERSIST_MS = 450
 const LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE = 30
 const LOCAL_PROJECT_RENDER_IDLE_THRESHOLD = 100
 const EGGBOT_CONTROL_TABS = ['plot', 'setup', 'timing', 'options', 'manual', 'resume', 'layers', 'advanced']
@@ -100,12 +102,20 @@ class AppController {
     async init() {
         this.#applyLocaleToUi()
         this.#renderAppVersion()
+        this.#loadSettingsFromLocalStorage()
         this.#syncControlsFromState()
         this.#applyProjectFromUrl()
         this.#bindEvents()
         this.#bindSerialLifecycleEvents()
         this.#initializeRenderBackend()
-        window.addEventListener('beforeunload', () => this.#disposeBackgroundWorkers(), { once: true })
+        window.addEventListener(
+            'beforeunload',
+            () => {
+                this.#persistSettingsToLocalStorage()
+                this.#disposeBackgroundWorkers()
+            },
+            { once: true }
+        )
         this.els.textureCanvas.addEventListener('pattern-rendered', () =>
             this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
         )
@@ -678,6 +688,38 @@ class AppController {
         this.projectArtifactsRevision += 1
         this.projectArtifactsDirty = true
         this.#scheduleProjectArtifactsRefreshIdle()
+        this.#scheduleSettingsPersistIdle()
+    }
+
+    /**
+     * Schedules one idle save for current project settings.
+     */
+    #scheduleSettingsPersistIdle() {
+        const revision = this.projectArtifactsRevision
+        this.#scheduleIdleTask(
+            'settings-persist',
+            () => {
+                if (revision !== this.projectArtifactsRevision) {
+                    this.#scheduleSettingsPersistIdle()
+                    return
+                }
+                this.#persistSettingsToLocalStorage()
+            },
+            IDLE_TIMEOUT_SETTINGS_PERSIST_MS
+        )
+    }
+
+    /**
+     * Persists current settings payload into localStorage.
+     */
+    #persistSettingsToLocalStorage() {
+        try {
+            if (!window?.localStorage) return
+            const payload = ProjectIoUtils.buildProjectPayload(this.state)
+            window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload))
+        } catch (error) {
+            console.warn('Failed to save settings to localStorage.', error)
+        }
     }
 
     /**
@@ -801,6 +843,26 @@ class AppController {
             setLocale: (args) => this.#webMcpSetLocale(args)
         }
     }
+
+    /**
+     * Loads last saved settings snapshot from localStorage, when available.
+     */
+    #loadSettingsFromLocalStorage() {
+        try {
+            if (!window?.localStorage) return
+            const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+            if (!raw) return
+            const parsed = JSON.parse(raw)
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
+            this.#clearImportedPattern()
+            this.state = ProjectIoUtils.normalizeProjectState(parsed)
+            this.state.strokes = []
+            this.#markProjectArtifactsDirty()
+        } catch (error) {
+            console.warn('Failed to load settings from localStorage.', error)
+        }
+    }
+
     /**
      * Applies URL-embedded project if present.
      */
