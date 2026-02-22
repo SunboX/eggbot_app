@@ -155,7 +155,7 @@
     box-shadow: 0 0 0 1px rgba(93, 173, 255, 0.28);
 }
 
-.eggbot-spinbox input {
+.eggbot-spinbox > input[type='number'] {
     border: 0;
     border-radius: 0;
     background: transparent;
@@ -166,24 +166,19 @@
     margin: 0;
     min-width: 0;
     height: 100%;
-    outline: none;
-    box-shadow: none;
-}
-
-.eggbot-spinbox input:focus,
-.eggbot-spinbox input:focus-visible {
-    outline: none;
-    box-shadow: none;
-}
-
-.eggbot-spinbox input[type='number'] {
     -webkit-appearance: none;
     appearance: textfield;
     -moz-appearance: textfield;
 }
 
-.eggbot-spinbox input[type='number']::-webkit-outer-spin-button,
-.eggbot-spinbox input[type='number']::-webkit-inner-spin-button {
+.eggbot-spinbox > input[type='number']:focus,
+.eggbot-spinbox > input[type='number']:focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+
+.eggbot-spinbox > input[type='number']::-webkit-outer-spin-button,
+.eggbot-spinbox > input[type='number']::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
@@ -199,9 +194,7 @@
     padding: 0;
     font-size: 0;
     line-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: block;
     position: relative;
     height: 100%;
     min-height: 0;
@@ -209,9 +202,13 @@
 
 .eggbot-spinbox button::before {
     content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
     width: 16px;
     height: 16px;
     display: block;
+    transform: translate(-50%, -50%);
     background-repeat: no-repeat;
     background-position: center;
     background-size: 16px 16px;
