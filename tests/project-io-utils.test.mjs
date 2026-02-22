@@ -34,6 +34,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(typeof normalized.drawConfig.eggMotorSpeed, 'number')
     assert.equal(typeof normalized.drawConfig.penUpPercent, 'number')
     assert.equal(typeof normalized.drawConfig.wrapAround, 'boolean')
+    assert.equal(typeof normalized.drawConfig.printColorMode, 'string')
 })
 
 test('Default drawing palette should not include white by default', () => {
@@ -68,6 +69,7 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
             penLowerDelayMs: 999999,
             curveSmoothing: 8,
             manualWalkDistance: 999999,
+            printColorMode: 'unsupported',
             activeControlTab: 'manual'
         }
     })
@@ -84,6 +86,17 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     assert.equal(normalized.drawConfig.penLowerDelayMs, 5000)
     assert.equal(normalized.drawConfig.curveSmoothing, 2)
     assert.equal(normalized.drawConfig.manualWalkDistance, 64000)
+    assert.equal(normalized.drawConfig.printColorMode, 'single')
     assert.equal(normalized.drawConfig.activeControlTab, 'manual')
     assert.equal(normalized.fillPatterns, false)
+})
+
+test('ProjectIoUtils should keep per-color print mode when provided', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        drawConfig: {
+            printColorMode: 'per-color'
+        }
+    })
+
+    assert.equal(normalized.drawConfig.printColorMode, 'per-color')
 })

@@ -200,3 +200,25 @@ test('WebMcpBridge should return structured response contract', async () => {
         navigatorMock.restore()
     }
 })
+
+test('WebMcpBridge should expose printColorMode in draw-config schema', () => {
+    const navigatorMock = installModelContextMock()
+    const commandMocks = createCommandMocks()
+
+    try {
+        const bridge = new WebMcpBridge({
+            commands: commandMocks.commands,
+            root: { querySelector: () => null }
+        })
+        bridge.init()
+
+        const drawConfigTool = navigatorMock
+            .imperativeTools()
+            .find((tool) => tool.name === 'eggbot_set_draw_config')
+        assert.ok(drawConfigTool)
+        assert.equal(drawConfigTool.inputSchema?.properties?.printColorMode?.type, 'string')
+        assert.deepEqual(drawConfigTool.inputSchema?.properties?.printColorMode?.enum, ['single', 'per-color'])
+    } finally {
+        navigatorMock.restore()
+    }
+})

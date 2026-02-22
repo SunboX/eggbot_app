@@ -175,6 +175,28 @@ class AppController {
     }
 
     /**
+     * Writes manual control result text inside the EggBot popup.
+     * @param {string} text
+     * @param {'info' | 'success' | 'error'} [type='info']
+     */
+    #setManualControlResult(text, type = 'info') {
+        if (!this.els.controlManualResult) return
+        this.els.controlManualResult.textContent = text
+        this.els.controlManualResult.dataset.type = type
+        this.els.controlManualResult.hidden = false
+    }
+
+    /**
+     * Clears manual control result text inside the EggBot popup.
+     */
+    #clearManualControlResult() {
+        if (!this.els.controlManualResult) return
+        this.els.controlManualResult.textContent = ''
+        this.els.controlManualResult.hidden = true
+        delete this.els.controlManualResult.dataset.type
+    }
+
+    /**
      * Shows draw-progress UI and initializes default values.
      */
     #startDrawProgressUi() {
@@ -259,6 +281,7 @@ class AppController {
     #openEggBotControlDialog() {
         this.#syncEggBotDialogControlsFromState()
         this.#syncEggBotControlTabUi()
+        this.#clearManualControlResult()
         this.els.eggbotDialogBackdrop.hidden = false
         document.body.classList.add('eggbot-dialog-open')
     }
@@ -374,6 +397,7 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #applyManualControlAction() {
+        this.#clearManualControlResult()
         if (this.isDrawing) {
             this.#setStatus(this.#t('messages.controlDialogBusyDrawing'), 'error')
             return
@@ -447,7 +471,9 @@ class AppController {
         }
         if (command === 'query-version') {
             const response = await this.serial.sendCommand('v', { expectResponse: true, timeoutMs: 1500 })
-            this.#setStatus(this.#t('messages.controlDialogManualVersionResult', { version: response || 'Connected' }), 'info')
+            const resultMessage = this.#t('messages.controlDialogManualVersionResult', { version: response || 'Connected' })
+            this.#setStatus(resultMessage, 'info')
+            this.#setManualControlResult(resultMessage, 'info')
             return
         }
         this.#setStatus(this.#t('messages.controlDialogManualUnknownCommand'), 'error')
@@ -570,6 +596,7 @@ class AppController {
         this.state.drawConfig.reverseEggMotor = Boolean(this.state.drawConfig.reverseEggMotor)
         this.state.drawConfig.wrapAround = this.state.drawConfig.wrapAround !== false
         this.state.drawConfig.returnHome = Boolean(this.state.drawConfig.returnHome)
+        this.state.drawConfig.printColorMode = AppController.#normalizePrintColorMode(this.state.drawConfig.printColorMode)
         this.state.drawConfig.engraverEnabled = Boolean(this.state.drawConfig.engraverEnabled)
         this.state.drawConfig.curveSmoothing = Math.max(
             0,
@@ -579,6 +606,8 @@ class AppController {
         this.els.controlReverseEggMotor.checked = this.state.drawConfig.reverseEggMotor
         this.els.controlWrapsAround.checked = this.state.drawConfig.wrapAround
         this.els.controlReturnHome.checked = this.state.drawConfig.returnHome
+        this.els.controlPrintColorModeSingle.checked = this.state.drawConfig.printColorMode === 'single'
+        this.els.controlPrintColorModePerColor.checked = this.state.drawConfig.printColorMode === 'per-color'
         this.els.controlEnableEngraver.checked = this.state.drawConfig.engraverEnabled
         this.els.controlCurveSmoothing.value = this.state.drawConfig.curveSmoothing.toFixed(2)
 
@@ -1322,6 +1351,16 @@ class AppController {
             this.state.drawConfig.returnHome = this.els.controlReturnHome.checked
             this.#markProjectArtifactsDirty()
         })
+        this.els.controlPrintColorModeSingle.addEventListener('change', () => {
+            if (!this.els.controlPrintColorModeSingle.checked) return
+            this.state.drawConfig.printColorMode = 'single'
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.controlPrintColorModePerColor.addEventListener('change', () => {
+            if (!this.els.controlPrintColorModePerColor.checked) return
+            this.state.drawConfig.printColorMode = 'per-color'
+            this.#markProjectArtifactsDirty()
+        })
         this.els.controlEnableEngraver.addEventListener('change', () => {
             this.state.drawConfig.engraverEnabled = this.els.controlEnableEngraver.checked
             this.#markProjectArtifactsDirty()
@@ -1355,6 +1394,7 @@ class AppController {
                 'query-version'
             ]
             this.state.drawConfig.manualCommand = supportedCommands.includes(nextCommand) ? nextCommand : 'disable-motors'
+            this.#clearManualControlResult()
             this.#markProjectArtifactsDirty()
         })
         this.els.controlWalkDistance.addEventListener('change', () => {
@@ -1913,6 +1953,81 @@ class AppController {
     }
 
     /**
+     * Builds one ordered batch list based on current print color mode.
+     * @param {Array<{ colorIndex?: number, points: Array<{u:number,v:number}> }>} strokes
+     * @returns {Array<{ colorIndex: number | null, strokes: Array<{ colorIndex?: number, points: Array<{u:number,v:number}> }> }>}
+     */
+    #buildDrawColorBatches(strokes) {
+        const sourceStrokes = Array.isArray(strokes) ? strokes : []
+        const colorMode = AppController.#normalizePrintColorMode(this.state?.drawConfig?.printColorMode)
+        if (colorMode !== 'per-color') {
+            return [{ colorIndex: null, strokes: sourceStrokes }]
+        }
+
+        const byColor = new Map()
+        sourceStrokes.forEach((stroke) => {
+            const colorIndex = this.#resolveStrokeColorIndex(stroke)
+            if (!byColor.has(colorIndex)) {
+                byColor.set(colorIndex, [])
+            }
+            byColor.get(colorIndex).push(stroke)
+        })
+
+        return Array.from(byColor.keys())
+            .sort((a, b) => a - b)
+            .map((colorIndex) => ({
+                colorIndex,
+                strokes: byColor.get(colorIndex) || []
+            }))
+    }
+
+    /**
+     * Resolves one bounded stroke color index for palette lookup.
+     * @param {{ colorIndex?: number } | null | undefined} stroke
+     * @returns {number}
+     */
+    #resolveStrokeColorIndex(stroke) {
+        const paletteSize = Array.isArray(this.state?.palette) ? this.state.palette.length : 0
+        const fallbackColorIndex = 0
+        const parsed = Math.trunc(Number(stroke?.colorIndex))
+        const normalized = Number.isFinite(parsed) ? parsed : fallbackColorIndex
+        if (paletteSize <= 0) {
+            return Math.max(0, normalized)
+        }
+        return Math.max(0, Math.min(paletteSize - 1, normalized))
+    }
+
+    /**
+     * Returns a user-facing color label for pen-change prompts.
+     * @param {number} colorIndex
+     * @returns {string}
+     */
+    #formatDrawColorLabel(colorIndex) {
+        const normalizedIndex = this.#resolveStrokeColorIndex({ colorIndex })
+        const label = this.#t('colors.colorLabel', { index: normalizedIndex + 1 })
+        const colorHex = String(this.state?.palette?.[normalizedIndex] || '')
+            .trim()
+            .toUpperCase()
+        return colorHex ? `${label} (${colorHex})` : label
+    }
+
+    /**
+     * Asks the user to insert or change pen color before continuing.
+     * @param {number} batchIndex
+     * @param {number} colorIndex
+     * @returns {boolean}
+     */
+    #confirmDrawColorBatchReady(batchIndex, colorIndex) {
+        const colorLabel = this.#formatDrawColorLabel(colorIndex)
+        const isFirstBatch = batchIndex === 0
+        const statusKey = isFirstBatch ? 'messages.waitingForPenColorStart' : 'messages.waitingForPenColorChange'
+        const confirmKey = isFirstBatch ? 'messages.penColorStartConfirm' : 'messages.penColorChangeConfirm'
+        this.#setStatus(this.#t(statusKey, { color: colorLabel }), 'info')
+        if (typeof window?.confirm !== 'function') return true
+        return window.confirm(this.#t(confirmKey, { color: colorLabel }))
+    }
+
+    /**
      * Opens Web Serial and refreshes UI.
      * @returns {Promise<void>}
      */
@@ -1952,7 +2067,16 @@ class AppController {
             return
         }
 
+        const drawBatches = this.#buildDrawColorBatches(this.state.strokes)
+        const totalStrokes = drawBatches.reduce((sum, batch) => sum + (Array.isArray(batch.strokes) ? batch.strokes.length : 0), 0)
+        if (totalStrokes <= 0) {
+            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
+            return
+        }
+
         let connectingBeforeDraw = false
+        let drawCanceledByUser = false
+        let drawAbortedByStop = false
         this.isDrawing = true
         this.#syncConnectionUi()
 
@@ -1966,31 +2090,75 @@ class AppController {
                 this.#syncConnectionUi()
             }
 
-            this.#startDrawProgressUi()
             let lastProgressDone = -1
             let lastProgressTotal = -1
-            await this.serial.drawStrokes(this.state.strokes, this.state.drawConfig, {
-                onStatus: (text) => this.#setStatus(text, 'info'),
-                onProgress: (done, total, detail) => {
-                    if (done !== lastProgressDone || total !== lastProgressTotal) {
-                        lastProgressDone = done
-                        lastProgressTotal = total
-                        this.#setStatus(this.#t('messages.drawingProgress', { done, total }), 'info')
+            let completedStrokes = 0
+            let drawProgressStarted = false
+
+            for (let batchIndex = 0; batchIndex < drawBatches.length; batchIndex += 1) {
+                const batch = drawBatches[batchIndex]
+                if (!Array.isArray(batch?.strokes) || batch.strokes.length <= 0) continue
+
+                if (Number.isInteger(batch.colorIndex)) {
+                    const confirmed = this.#confirmDrawColorBatchReady(batchIndex, batch.colorIndex)
+                    if (!confirmed) {
+                        drawCanceledByUser = true
+                        break
                     }
-                    const fallbackRemainingRatio = total > 0 ? Math.max(0, 1 - done / total) : 0
-                    const remainingRatio = Number.isFinite(Number(detail?.remainingRatio))
-                        ? Math.max(0, Math.min(1, Number(detail.remainingRatio)))
-                        : fallbackRemainingRatio
-                    const remainingMs = Number.isFinite(Number(detail?.remainingMs))
-                        ? Math.max(0, Number(detail.remainingMs))
-                        : null
-                    this.#updateDrawProgressUi(remainingRatio, remainingMs)
                 }
-            })
-            this.#setStatus(this.#t('messages.drawCompleted'), 'success')
+
+                if (!drawProgressStarted) {
+                    this.#startDrawProgressUi()
+                    drawProgressStarted = true
+                }
+
+                const batchStrokeCount = batch.strokes.length
+                const batchDrawConfig = {
+                    ...this.state.drawConfig,
+                    returnHome: Boolean(this.state.drawConfig.returnHome) && batchIndex === drawBatches.length - 1
+                }
+
+                await this.serial.drawStrokes(batch.strokes, batchDrawConfig, {
+                    onStatus: (text) => this.#setStatus(text, 'info'),
+                    onProgress: (done, _total, detail) => {
+                        const normalizedDone = Math.max(0, Math.min(batchStrokeCount, Math.round(Number(done) || 0)))
+                        const globalDone = Math.max(0, Math.min(totalStrokes, completedStrokes + normalizedDone))
+                        if (globalDone !== lastProgressDone || totalStrokes !== lastProgressTotal) {
+                            lastProgressDone = globalDone
+                            lastProgressTotal = totalStrokes
+                            this.#setStatus(this.#t('messages.drawingProgress', { done: globalDone, total: totalStrokes }), 'info')
+                        }
+                        const fallbackRemainingRatio = totalStrokes > 0 ? Math.max(0, 1 - globalDone / totalStrokes) : 0
+                        const remainingRatio =
+                            drawBatches.length === 1 && Number.isFinite(Number(detail?.remainingRatio))
+                                ? Math.max(0, Math.min(1, Number(detail.remainingRatio)))
+                                : fallbackRemainingRatio
+                        const remainingMs =
+                            drawBatches.length === 1 && Number.isFinite(Number(detail?.remainingMs))
+                                ? Math.max(0, Number(detail.remainingMs))
+                                : null
+                        this.#updateDrawProgressUi(remainingRatio, remainingMs)
+                    }
+                })
+
+                if (this.serial.abortDrawing) {
+                    drawAbortedByStop = true
+                    break
+                }
+
+                completedStrokes += batchStrokeCount
+            }
+
+            if (drawCanceledByUser) {
+                this.#setStatus(this.#t('messages.drawCanceledByUser'), 'info')
+            } else if (!drawAbortedByStop) {
+                this.#setStatus(this.#t('messages.drawCompleted'), 'success')
+            }
         } catch (error) {
             if (connectingBeforeDraw) {
                 this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            } else if (drawCanceledByUser) {
+                this.#setStatus(this.#t('messages.drawCanceledByUser'), 'info')
             } else {
                 this.#setStatus(this.#t('messages.drawFailed', { message: error.message }), 'error')
             }
@@ -3118,6 +3286,10 @@ class AppController {
             this.state.drawConfig.returnHome = AppController.#parseBoolean(patch.returnHome, this.state.drawConfig.returnHome)
             didMutateState = true
         }
+        if (Object.hasOwn(patch, 'printColorMode')) {
+            this.state.drawConfig.printColorMode = AppController.#normalizePrintColorMode(patch.printColorMode)
+            didMutateState = true
+        }
         if (Object.hasOwn(patch, 'engraverEnabled')) {
             this.state.drawConfig.engraverEnabled = AppController.#parseBoolean(
                 patch.engraverEnabled,
@@ -3541,6 +3713,15 @@ class AppController {
         const decimalIndex = text.indexOf('.')
         if (decimalIndex < 0) return 0
         return Math.max(0, text.length - decimalIndex - 1)
+    }
+
+    /**
+     * Normalizes the draw color mode setting.
+     * @param {unknown} value
+     * @returns {'single' | 'per-color'}
+     */
+    static #normalizePrintColorMode(value) {
+        return String(value || '').trim().toLowerCase() === 'per-color' ? 'per-color' : 'single'
     }
 
     /**

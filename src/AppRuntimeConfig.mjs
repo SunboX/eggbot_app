@@ -55,6 +55,7 @@ export class AppRuntimeConfig {
                 reverseEggMotor: false,
                 wrapAround: true,
                 returnHome: false,
+                printColorMode: 'single',
                 engraverEnabled: false,
                 curveSmoothing: 0.2,
                 setupApplyAction: 'toggle',
