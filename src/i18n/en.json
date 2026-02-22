@@ -97,7 +97,8 @@
         "servoUp": "Servo up value (`SC,4`)",
         "servoDown": "Servo down value (`SC,5`)",
         "invertPen": "Invert pen up/down (`SP`) logic",
-        "stopDraw": "Stop draw"
+        "stopDraw": "Stop draw",
+        "drawProgressAria": "Drawing progress"
     },
     "controlDialog": {
         "title": "EggBot Control",
@@ -206,6 +207,9 @@
         "connectingBeforeDraw": "Connecting EggBot before drawing...",
         "connectBeforeDraw": "Connect EggBot before drawing.",
         "drawingProgress": "Drawing in progress: stroke {{done}}/{{total}}",
+        "drawingRemainingPercent": "Remaining: {{percent}}%",
+        "drawingRemainingTime": "Remaining time: {{time}}",
+        "drawingRemainingTimeUnknown": "--:--",
         "drawCompleted": "EggBot draw command stream completed.",
         "drawFailed": "Draw failed: {{message}}",
         "connectingBeforeManualControl": "Connecting EggBot for manual control...",

@@ -202,6 +202,51 @@
     flex: 0 0 auto;
 }
 
+.draw-progress {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.draw-progress[hidden] {
+    display: none;
+}
+
+.draw-progress-track {
+    position: relative;
+    width: 100%;
+    height: 0.74rem;
+    border-radius: 999px;
+    border: 1px solid rgba(146, 89, 24, 0.5);
+    background: linear-gradient(180deg, rgba(244, 223, 182, 0.6), rgba(226, 194, 137, 0.5));
+    overflow: hidden;
+}
+
+.draw-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #c18d2d, #8b2a1a);
+    border-radius: 999px;
+    transition: width 180ms linear;
+}
+
+.draw-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.82rem;
+    color: #6b4523;
+    font-variant-numeric: tabular-nums;
+}
+
+.draw-progress-remaining {
+    font-weight: 700;
+    color: #6a2f1d;
+}
+
+.draw-progress-time {
+    white-space: nowrap;
+}
+
 .page-footer {
     margin-top: 1rem;
 }

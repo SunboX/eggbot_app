@@ -347,7 +347,7 @@ export class EggBotSerial {
      * Draws generated strokes on the connected EggBot.
      * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
      * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean }} drawConfig
-     * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number) => void }} [callbacks]
+     * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number, detail?: { completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }) => void }} [callbacks]
      * @returns {Promise<void>}
      */
     async drawStrokes(strokes, drawConfig, callbacks = {}) {
@@ -418,6 +418,10 @@ export class EggBotSerial {
             await this.#setPen(false, cfg)
 
             const total = drawableStrokes.length
+            const estimatedTotalMs = this.#estimateDrawDurationMs(drawableStrokes, cfg, current)
+            const progressStartedAtMs = Date.now()
+            let completedMs = cfg.penRaiseDelayMs
+            onProgress(0, total, this.#buildProgressDetail(0, total, completedMs, estimatedTotalMs, progressStartedAtMs))
 
             for (let strokeIndex = 0; strokeIndex < total; strokeIndex += 1) {
                 if (this.abortDrawing) break
@@ -426,28 +430,65 @@ export class EggBotSerial {
                 if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: moving to start`)
-                await this.#moveTo(preparedStroke[0], current, cfg.penUpSpeed, cfg)
+                await this.#moveTo(preparedStroke[0], current, cfg.penUpSpeed, cfg, (durationMs) => {
+                    completedMs += durationMs
+                    onProgress(
+                        strokeIndex,
+                        total,
+                        this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
+                    )
+                })
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: pen down`)
                 await this.#setPen(true, cfg)
+                completedMs += cfg.penLowerDelayMs
+                onProgress(
+                    strokeIndex,
+                    total,
+                    this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
+                )
 
                 for (let pointIndex = 1; pointIndex < preparedStroke.length; pointIndex += 1) {
                     if (this.abortDrawing) break
-                    await this.#moveTo(preparedStroke[pointIndex], current, cfg.penDownSpeed, cfg)
+                    await this.#moveTo(preparedStroke[pointIndex], current, cfg.penDownSpeed, cfg, (durationMs) => {
+                        completedMs += durationMs
+                        onProgress(
+                            strokeIndex,
+                            total,
+                            this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
+                        )
+                    })
                 }
 
                 await this.#setPen(false, cfg)
-                onProgress(strokeIndex + 1, total)
+                completedMs += cfg.penRaiseDelayMs
+                onProgress(
+                    strokeIndex + 1,
+                    total,
+                    this.#buildProgressDetail(strokeIndex + 1, total, completedMs, estimatedTotalMs, progressStartedAtMs)
+                )
             }
 
             if (!this.abortDrawing && cfg.returnHome) {
                 onStatus('Returning to home position...')
-                await this.#moveTo({ x: 0, y: 0 }, current, cfg.penUpSpeed, cfg)
+                await this.#moveTo({ x: 0, y: 0 }, current, cfg.penUpSpeed, cfg, (durationMs) => {
+                    completedMs += durationMs
+                    onProgress(
+                        total,
+                        total,
+                        this.#buildProgressDetail(total, total, completedMs, estimatedTotalMs, progressStartedAtMs)
+                    )
+                })
             }
 
             if (this.abortDrawing) {
                 onStatus('Draw aborted by user.')
             } else {
+                onProgress(
+                    total,
+                    total,
+                    this.#buildProgressDetail(total, total, estimatedTotalMs, estimatedTotalMs, progressStartedAtMs)
+                )
                 onStatus('Draw finished.')
             }
         } finally {
@@ -592,18 +633,134 @@ export class EggBotSerial {
     }
 
     /**
+     * Builds one normalized progress detail payload.
+     * @param {number} done
+     * @param {number} total
+     * @param {number} completedMs
+     * @param {number} estimatedTotalMs
+     * @param {number} startedAtMs
+     * @returns {{ completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }}
+     */
+    #buildProgressDetail(done, total, completedMs, estimatedTotalMs, startedAtMs) {
+        const safeTotal = Math.max(0, Math.round(Number(total) || 0))
+        const normalizedDone = Math.max(0, Math.min(safeTotal, Math.round(Number(done) || 0)))
+        const normalizedEstimatedTotalMs = Math.max(0, Math.round(Number(estimatedTotalMs) || 0))
+        const normalizedCompletedMs = Math.max(
+            0,
+            Math.min(
+                normalizedEstimatedTotalMs || Math.max(0, Math.round(Number(completedMs) || 0)),
+                Math.round(Number(completedMs) || 0)
+            )
+        )
+        const fallbackRatio = safeTotal > 0 ? normalizedDone / safeTotal : 1
+        const completedRatio =
+            normalizedEstimatedTotalMs > 0 ? Math.min(1, normalizedCompletedMs / normalizedEstimatedTotalMs) : fallbackRatio
+        const remainingRatio = Math.max(0, 1 - completedRatio)
+        const remainingMs = Math.max(0, normalizedEstimatedTotalMs - normalizedCompletedMs)
+        const elapsedMs = Math.max(0, Date.now() - Math.max(0, Math.round(Number(startedAtMs) || 0)))
+        return {
+            completedRatio,
+            remainingRatio,
+            estimatedTotalMs: normalizedEstimatedTotalMs,
+            completedMs: normalizedCompletedMs,
+            remainingMs,
+            elapsedMs
+        }
+    }
+
+    /**
+     * Estimates total draw duration for prepared strokes.
+     * @param {Array<Array<{x:number,y:number}>>} drawableStrokes
+     * @param {{ penUpSpeed: number, penDownSpeed: number, penMotorSpeed: number, eggMotorSpeed: number, penRaiseDelayMs: number, penLowerDelayMs: number, returnHome: boolean }} cfg
+     * @param {{x:number,y:number}} start
+     * @returns {number}
+     */
+    #estimateDrawDurationMs(drawableStrokes, cfg, start) {
+        const current = {
+            x: Math.round(Number(start?.x) || 0),
+            y: Math.round(Number(start?.y) || 0)
+        }
+        let totalMs = cfg.penRaiseDelayMs
+        const preparedStrokeList = Array.isArray(drawableStrokes) ? drawableStrokes : []
+
+        for (let strokeIndex = 0; strokeIndex < preparedStrokeList.length; strokeIndex += 1) {
+            const preparedStroke = preparedStrokeList[strokeIndex]
+            if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
+
+            totalMs += this.#estimateMoveDurationMs(preparedStroke[0], current, cfg.penUpSpeed, cfg)
+            totalMs += cfg.penLowerDelayMs
+
+            for (let pointIndex = 1; pointIndex < preparedStroke.length; pointIndex += 1) {
+                totalMs += this.#estimateMoveDurationMs(preparedStroke[pointIndex], current, cfg.penDownSpeed, cfg)
+            }
+
+            totalMs += cfg.penRaiseDelayMs
+        }
+
+        if (cfg.returnHome) {
+            totalMs += this.#estimateMoveDurationMs({ x: 0, y: 0 }, current, cfg.penUpSpeed, cfg)
+        }
+
+        return Math.max(0, Math.round(totalMs))
+    }
+
+    /**
+     * Estimates one move duration and mutates the provided point to target.
+     * @param {{x:number,y:number}} target
+     * @param {{x:number,y:number}} current
+     * @param {number} speedStepsPerSecond
+     * @param {{ penMotorSpeed: number, eggMotorSpeed: number }} cfg
+     * @returns {number}
+     */
+    #estimateMoveDurationMs(target, current, speedStepsPerSecond, cfg) {
+        let dx = Math.round(target.x - current.x)
+        let dy = Math.round(target.y - current.y)
+        if (dx === 0 && dy === 0) return 0
+
+        const settleDelayMs = 6
+        const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
+        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
+        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
+        const effectivePenSpeed = Math.min(profileSpeed, penMotorSpeed)
+        const effectiveEggSpeed = Math.min(profileSpeed, eggMotorSpeed)
+        const maxChunk = 1200
+        let totalMs = 0
+
+        while (dx !== 0 || dy !== 0) {
+            const scale = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / maxChunk))
+            const stepX = Math.trunc(dx / scale)
+            const stepY = Math.trunc(dy / scale)
+            const chunkX = stepX === 0 ? Math.sign(dx) : stepX
+            const chunkY = stepY === 0 ? Math.sign(dy) : stepY
+            const penDurationMs = (Math.abs(chunkY) / effectivePenSpeed) * 1000
+            const eggDurationMs = (Math.abs(chunkX) / effectiveEggSpeed) * 1000
+            const durationMs = Math.max(8, Math.round(Math.max(penDurationMs, eggDurationMs)))
+            totalMs += durationMs + settleDelayMs
+
+            current.x += chunkX
+            current.y += chunkY
+            dx -= chunkX
+            dy -= chunkY
+        }
+
+        return totalMs
+    }
+
+    /**
      * Moves steppers to the target point.
      * @param {{x:number,y:number}} target
      * @param {{x:number,y:number}} current
      * @param {number} speedStepsPerSecond
      * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean, penMotorSpeed: number, eggMotorSpeed: number }} cfg
+     * @param {(durationMs: number) => void} [onChunkComplete]
      * @returns {Promise<void>}
      */
-    async #moveTo(target, current, speedStepsPerSecond, cfg) {
+    async #moveTo(target, current, speedStepsPerSecond, cfg, onChunkComplete) {
         let dx = Math.round(target.x - current.x)
         let dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return
 
+        const settleDelayMs = 6
         const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
         const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
         const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
@@ -625,12 +782,15 @@ export class EggBotSerial {
             const axis2Egg = cfg.reverseEggMotor ? -chunkX : chunkX
 
             await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
-            await EggBotSerial.#sleep(durationMs + 6)
+            await EggBotSerial.#sleep(durationMs + settleDelayMs)
 
             current.x += chunkX
             current.y += chunkY
             dx -= chunkX
             dy -= chunkY
+            if (typeof onChunkComplete === 'function') {
+                onChunkComplete(durationMs + settleDelayMs)
+            }
         }
     }
 
