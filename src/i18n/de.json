@@ -116,8 +116,7 @@
         "plot": {
             "title": "Willkommen in der EggBot-Oberfläche!",
             "lineOne": "Drücke „Anwenden“, um das Plotten zu starten.",
-            "lineTwo": "In den anderen Tabs kannst du Einstellungen anpassen und weitere EggBot-Funktionen nutzen.",
-            "help": "Hilfe: http://wiki.evilmadscientist.com/eggbot"
+            "lineTwo": "In den anderen Tabs kannst du Einstellungen anpassen und weitere EggBot-Funktionen nutzen."
         },
         "setup": {
             "title": "EggBot: Basis-Setup",
