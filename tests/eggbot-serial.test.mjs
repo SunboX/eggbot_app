@@ -69,15 +69,13 @@ function installBrowserMocks(overrides = {}) {
 }
 
 /**
- * Builds one serial port mock that emits a version line.
+ * Builds one serial port mock that emits predefined read chunks.
  * @param {{ usbVendorId?: number, usbProductId?: number }} [info]
- * @param {string} [versionLine]
+ * @param {Uint8Array[]} [chunks]
  * @returns {SerialPort & { openCalls: number, closeCalls: number, openOptions: Record<string, any>[] }}
  */
-function createMockPort(info = {}, versionLine = 'EBBv3.0') {
-    const encoder = new TextEncoder()
+function createMockPortFromChunks(info = {}, chunks = []) {
     let chunkIndex = 0
-    const chunks = [encoder.encode(`${versionLine}\r\n`)]
 
     const reader = {
         canceled: false,
@@ -134,6 +132,18 @@ function createMockPort(info = {}, versionLine = 'EBBv3.0') {
 }
 
 /**
+ * Builds one serial port mock that emits a version line.
+ * @param {{ usbVendorId?: number, usbProductId?: number }} [info]
+ * @param {string} [versionLine]
+ * @returns {SerialPort & { openCalls: number, closeCalls: number, openOptions: Record<string, any>[] }}
+ */
+function createMockPort(info = {}, versionLine = 'EBBv3.0') {
+    const encoder = new TextEncoder()
+    const chunks = [encoder.encode(`${versionLine}\r\n`)]
+    return createMockPortFromChunks(info, chunks)
+}
+
+/**
  * Installs a minimal fast-timer window mock for draw-loop tests.
  * @returns {() => void}
  */
@@ -184,6 +194,28 @@ test('EggBotSerial.connectForDraw should use remembered granted port without cho
         assert.equal(rememberedPort.openCalls, 1)
         assert.equal(rememberedPort.openOptions[0]?.baudRate, 115200)
         assert.equal(mockedBrowser.requestPortCalls(), 0)
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.connectForDraw should sanitize mojibake artifacts in version responses', async () => {
+    const versionSuffix = new TextEncoder().encode('EBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a\r\n')
+    const versionChunk = new Uint8Array(4 + versionSuffix.length)
+    versionChunk.set([0x26, 0xa9, 0x28, 0xa9], 0)
+    versionChunk.set(versionSuffix, 4)
+    const requestedPort = createMockPortFromChunks({ usbVendorId: 0xfeed, usbProductId: 0xbeef }, [versionChunk])
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [],
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.connectForDraw()
+
+        assert.equal(version, 'EBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a')
     } finally {
         await serial.disconnect()
         mockedBrowser.restore()

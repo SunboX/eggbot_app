@@ -169,16 +169,57 @@ export class EggBotSerial {
     }
 
     /**
+     * Queries and normalizes one EBB firmware version response.
+     * @param {{ timeoutMs?: number }} [options]
+     * @returns {Promise<string>}
+     */
+    async queryVersion(options = {}) {
+        const timeoutMs = Number(options.timeoutMs) || 1500
+        const versionLine = await this.sendCommand('v', { expectResponse: true, timeoutMs })
+        return EggBotSerial.#normalizeVersionLine(versionLine) || 'Connected'
+    }
+
+    /**
      * Tries to read one version line from EBB.
      * @returns {Promise<string>}
      */
     async #probeVersion() {
         try {
-            const versionLine = await this.sendCommand('v', { expectResponse: true, timeoutMs: 1500 })
-            return versionLine || 'Connected'
+            return await this.queryVersion({ timeoutMs: 1500 })
         } catch (_error) {
             return 'Connected (no version response)'
         }
+    }
+
+    /**
+     * Removes serial-decoding artifacts from one response line.
+     * @param {unknown} value
+     * @returns {string}
+     */
+    static #sanitizeResponseLine(value) {
+        return String(value || '')
+            .replace(/[\u0000-\u001F\u007F\uFFFD]/g, '')
+            .trim()
+    }
+
+    /**
+     * Normalizes one raw version response line into display-safe text.
+     * @param {unknown} line
+     * @returns {string}
+     */
+    static #normalizeVersionLine(line) {
+        let normalized = EggBotSerial.#sanitizeResponseLine(line)
+        if (!normalized) return ''
+
+        const versionTokenMatch = /(EBB|EiBotBoard|Eggduino|Firmware)/i.exec(normalized)
+        if (versionTokenMatch?.index && versionTokenMatch.index > 0) {
+            const prefix = normalized.slice(0, versionTokenMatch.index)
+            if (/^[^A-Za-z0-9]*$/.test(prefix)) {
+                normalized = normalized.slice(versionTokenMatch.index)
+            }
+        }
+        normalized = normalized.replace(/\s+/g, ' ').trim()
+        return normalized
     }
 
     /**

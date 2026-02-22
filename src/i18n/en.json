@@ -111,7 +111,7 @@
             "manual": "Manual",
             "resume": "Resume",
             "layers": "Ebenen",
-            "advanced": "*"
+            "advanced": "Mapping"
         },
         "plot": {
             "title": "Welcome to the EggBot interface!",
