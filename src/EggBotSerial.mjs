@@ -32,6 +32,22 @@ export class EggBotSerial {
     }
 
     /**
+     * Returns true when Web Serial is available.
+     * @returns {boolean}
+     */
+    static isSupported() {
+        return typeof navigator !== 'undefined' && Boolean(navigator?.serial)
+    }
+
+    /**
+     * Returns one user-facing transport label.
+     * @returns {string}
+     */
+    get connectionKindLabel() {
+        return 'Web Serial'
+    }
+
+    /**
      * Returns true when a serial connection is open.
      * @returns {boolean}
      */
@@ -138,7 +154,7 @@ export class EggBotSerial {
      * Throws if Web Serial is unavailable.
      */
     #assertSerialSupport() {
-        if (!('serial' in navigator)) {
+        if (!EggBotSerial.isSupported()) {
             throw new Error('Web Serial is not supported in this browser.')
         }
     }
@@ -450,7 +466,7 @@ export class EggBotSerial {
      */
     async drawStrokes(strokes, drawConfig, callbacks = {}) {
         if (!this.isConnected) {
-            throw new Error('No EggBot connected. Connect via Web Serial first.')
+            throw new Error(`No EggBot connected. Connect via ${this.connectionKindLabel} first.`)
         }
         if (this.drawing) {
             throw new Error('A draw run is already active.')

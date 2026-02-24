@@ -88,6 +88,19 @@
     background: rgba(255, 250, 239, 0.64);
 }
 
+[data-machine-wifi-options] {
+    display: grid;
+    gap: 0.55rem;
+}
+
+[data-machine-baud-rate-row][hidden] {
+    display: none;
+}
+
+[data-machine-wifi-options][hidden] {
+    display: none;
+}
+
 .inline-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

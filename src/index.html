@@ -226,12 +226,34 @@
                     <section class="section">
                         <h2 data-i18n="machine.connectionTitle">EggBot connection</h2>
                         <label>
+                            <span data-i18n="machine.connectionTransport">Transport</span>
+                            <select data-connection-transport>
+                                <option value="serial" data-i18n="machine.transportSerial">USB serial</option>
+                                <option value="ble" data-i18n="machine.transportBle">Bluetooth LE</option>
+                                <option value="wifi" data-i18n="machine.transportWifi">Wi-Fi (WebSocket)</option>
+                            </select>
+                        </label>
+                        <label data-machine-baud-rate-row>
                             <span data-i18n="machine.baudRate">Baud rate</span>
                             <input type="number" min="300" step="1" data-baud-rate />
                         </label>
+                        <div data-machine-wifi-options hidden>
+                            <label>
+                                <span data-i18n="machine.wifiHost">Wi-Fi host / IP</span>
+                                <input type="text" autocomplete="off" spellcheck="false" placeholder="192.168.1.42" data-wifi-host />
+                            </label>
+                            <label>
+                                <span data-i18n="machine.wifiPort">Wi-Fi port</span>
+                                <input type="number" min="1" max="65535" step="1" data-wifi-port />
+                            </label>
+                            <label class="inline-check">
+                                <input type="checkbox" data-wifi-secure />
+                                <span data-i18n="machine.wifiSecure">Use secure WebSocket (`wss://`)</span>
+                            </label>
+                        </div>
                         <div class="inline-row compact">
-                            <button class="ghost" type="button" data-serial-connect data-i18n="machine.connectSerial">
-                                Connect USB serial
+                            <button class="ghost" type="button" data-serial-connect data-i18n="machine.connect">
+                                Connect
                             </button>
                             <button class="ghost" type="button" data-serial-disconnect data-i18n="machine.disconnect">
                                 Disconnect
@@ -917,25 +939,282 @@
 
         <div class="webmcp-declarative" aria-hidden="true">
             <form
-                data-webmcp-form-design
-                toolname="eggbot_form_apply_design"
-                tooldescription="Apply EggBot design settings."
+                data-webmcp-form-get-state
+                toolname="eggbot_form_get_state"
+                tooldescription="Return the current EggBot app state snapshot."
                 toolautosubmit
             >
-                <input type="number" name="seed" />
-                <input type="text" name="preset" />
-                <input type="number" name="symmetry" />
-                <input type="number" step="0.01" name="density" />
-                <input type="number" name="bands" />
-                <input type="number" step="0.01" name="ornamentSize" />
-                <input type="number" step="0.01" name="ornamentCount" />
-                <input type="number" step="0.01" name="ornamentDistribution" />
-                <input type="number" step="0.1" name="lineWidth" />
-                <input type="number" step="0.05" name="importHeightScale" />
-                <input type="checkbox" name="showHorizontalLines" value="true" />
-                <input type="checkbox" name="rerollSeed" value="true" />
-                <input type="checkbox" name="regenerate" value="true" />
+                <button type="submit">Get state</button>
+            </form>
+
+            <form
+                data-webmcp-form-design
+                toolname="eggbot_form_apply_design"
+                tooldescription="Apply EggBot design and pattern-generation settings."
+                toolautosubmit
+            >
+                <input
+                    type="text"
+                    name="projectName"
+                    toolparamtitle="Project Name"
+                    toolparamdescription="Optional project name to apply."
+                />
+                <input type="number" name="seed" toolparamdescription="Optional numeric random seed." />
+                <input
+                    type="text"
+                    name="preset"
+                    toolparamdescription="Optional motif preset key, such as traditional-mix."
+                />
+                <input type="number" name="symmetry" toolparamdescription="Optional symmetry value between 2 and 24." />
+                <input type="number" step="0.01" name="density" toolparamdescription="Optional density value between 0.05 and 1." />
+                <input type="number" name="bands" toolparamdescription="Optional number of ornament bands." />
+                <input type="number" step="0.01" name="ornamentSize" toolparamdescription="Optional ornament size scale." />
+                <input type="number" step="0.01" name="ornamentCount" toolparamdescription="Optional ornament count scale." />
+                <input
+                    type="number"
+                    step="0.01"
+                    name="ornamentDistribution"
+                    toolparamdescription="Optional ornament distribution scale."
+                />
+                <input type="number" step="0.1" name="lineWidth" toolparamdescription="Optional line width in preview pixels." />
+                <input
+                    type="number"
+                    step="0.05"
+                    name="importHeightScale"
+                    toolparamdescription="Optional drawable height scale."
+                />
+                <select
+                    name="showHorizontalLines"
+                    toolparamdescription="Optional boolean. Set to true or false to toggle horizontal guide rings."
+                >
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select
+                    name="fillPatterns"
+                    toolparamdescription="Optional boolean. Set to true or false to toggle shape fills."
+                >
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select
+                    name="rerollSeed"
+                    toolparamdescription="Optional boolean. True rerolls seed before rendering."
+                >
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select
+                    name="regenerate"
+                    toolparamdescription="Optional boolean. True forces pattern regeneration."
+                >
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
                 <button type="submit">Apply design</button>
+            </form>
+
+            <form
+                data-webmcp-form-color
+                toolname="eggbot_form_apply_color"
+                tooldescription="Apply EggBot color settings."
+                toolautosubmit
+            >
+                <input type="text" name="baseColor" toolparamdescription="Optional base egg color as CSS color value." />
+                <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    step="1"
+                    name="colorCount"
+                    toolparamdescription="Optional number of active drawing colors from 1 to 6."
+                />
+                <input type="text" name="palette1" toolparamdescription="Optional drawing color #1 as CSS color value." />
+                <input type="text" name="palette2" toolparamdescription="Optional drawing color #2 as CSS color value." />
+                <input type="text" name="palette3" toolparamdescription="Optional drawing color #3 as CSS color value." />
+                <input type="text" name="palette4" toolparamdescription="Optional drawing color #4 as CSS color value." />
+                <input type="text" name="palette5" toolparamdescription="Optional drawing color #5 as CSS color value." />
+                <input type="text" name="palette6" toolparamdescription="Optional drawing color #6 as CSS color value." />
+                <button type="submit">Apply colors</button>
+            </form>
+
+            <form
+                data-webmcp-form-motifs
+                toolname="eggbot_form_apply_motifs"
+                tooldescription="Apply EggBot motif toggles."
+                toolautosubmit
+            >
+                <select name="dots" toolparamdescription="Optional boolean toggle for Punkte motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="rays" toolparamdescription="Optional boolean toggle for Strahlen motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="honeycomb" toolparamdescription="Optional boolean toggle for Waben motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="wolfTeeth" toolparamdescription="Optional boolean toggle for Wolfszaehne motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="pineBranch" toolparamdescription="Optional boolean toggle for pine-branch motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="diamonds" toolparamdescription="Optional boolean toggle for diamond motif.">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <button type="submit">Apply motifs</button>
+            </form>
+
+            <form
+                data-webmcp-form-draw-config
+                toolname="eggbot_form_apply_draw_config"
+                tooldescription="Apply EggBot machine and draw configuration settings."
+                toolautosubmit
+            >
+                <select name="connectionTransport" toolparamdescription="Optional transport selection.">
+                    <option value=""></option>
+                    <option value="serial">serial</option>
+                    <option value="ble">ble</option>
+                    <option value="wifi">wifi</option>
+                </select>
+                <input type="number" name="baudRate" />
+                <input type="text" name="wifiHost" />
+                <input type="number" name="wifiPort" />
+                <select name="wifiSecure">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <input type="number" name="stepsPerTurn" />
+                <input type="number" name="penRangeSteps" />
+                <input type="number" step="0.01" name="msPerStep" />
+                <input type="number" name="servoUp" />
+                <input type="number" name="servoDown" />
+                <select name="invertPen">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <input type="number" step="0.1" name="penUpPercent" />
+                <input type="number" step="0.1" name="penDownPercent" />
+                <input type="number" name="penDownSpeed" />
+                <input type="number" name="penUpSpeed" />
+                <input type="number" name="penMotorSpeed" />
+                <input type="number" name="eggMotorSpeed" />
+                <input type="number" name="penRaiseRate" />
+                <input type="number" name="penRaiseDelayMs" />
+                <input type="number" name="penLowerRate" />
+                <input type="number" name="penLowerDelayMs" />
+                <select name="reversePenMotor">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="reverseEggMotor">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="wrapAround">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="returnHome">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select name="printColorMode">
+                    <option value=""></option>
+                    <option value="single">single</option>
+                    <option value="per-color">per-color</option>
+                </select>
+                <select name="engraverEnabled">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <input type="number" step="0.01" name="curveSmoothing" />
+                <select name="setupApplyAction">
+                    <option value=""></option>
+                    <option value="toggle">toggle</option>
+                    <option value="raise-off">raise-off</option>
+                </select>
+                <select name="manualCommand">
+                    <option value=""></option>
+                    <option value="disable-motors">disable-motors</option>
+                    <option value="enable-motors">enable-motors</option>
+                    <option value="raise-pen">raise-pen</option>
+                    <option value="lower-pen">lower-pen</option>
+                    <option value="walk-egg">walk-egg</option>
+                    <option value="walk-pen">walk-pen</option>
+                    <option value="query-version">query-version</option>
+                </select>
+                <input type="number" name="manualWalkDistance" />
+                <select name="activeControlTab">
+                    <option value=""></option>
+                    <option value="plot">plot</option>
+                    <option value="setup">setup</option>
+                    <option value="timing">timing</option>
+                    <option value="options">options</option>
+                    <option value="manual">manual</option>
+                    <option value="resume">resume</option>
+                    <option value="layers">layers</option>
+                    <option value="advanced">advanced</option>
+                </select>
+                <button type="submit">Apply draw config</button>
+            </form>
+
+            <form
+                data-webmcp-form-reroll-seed
+                toolname="eggbot_form_reroll_seed"
+                tooldescription="Generate a new seed and regenerate the pattern."
+                toolautosubmit
+            >
+                <button type="submit">Reroll seed</button>
+            </form>
+
+            <form
+                data-webmcp-form-regenerate
+                toolname="eggbot_form_regenerate_pattern"
+                tooldescription="Regenerate the current pattern output."
+                toolautosubmit
+            >
+                <button type="submit">Regenerate pattern</button>
+            </form>
+
+            <form
+                data-webmcp-form-import-svg
+                toolname="eggbot_form_import_svg_text"
+                tooldescription="Import an EggBot pattern from raw SVG text."
+                toolautosubmit
+            >
+                <textarea name="svgText" toolparamdescription="Raw SVG text to import." required></textarea>
+                <input type="text" name="fileName" toolparamdescription="Optional SVG file name hint." />
+                <input
+                    type="number"
+                    step="0.05"
+                    name="importHeightScale"
+                    toolparamdescription="Optional imported pattern height scale."
+                />
+                <button type="submit">Import SVG text</button>
             </form>
 
             <form
@@ -946,6 +1225,33 @@
             >
                 <textarea name="project"></textarea>
                 <button type="submit">Apply project</button>
+            </form>
+
+            <form
+                data-webmcp-form-get-project-json
+                toolname="eggbot_form_get_project_json"
+                tooldescription="Return normalized EggBot project JSON."
+                toolautosubmit
+            >
+                <button type="submit">Get project JSON</button>
+            </form>
+
+            <form
+                data-webmcp-form-get-share-url
+                toolname="eggbot_form_get_share_url"
+                tooldescription="Return a share URL for the current EggBot project."
+                toolautosubmit
+            >
+                <button type="submit">Get share URL</button>
+            </form>
+
+            <form
+                data-webmcp-form-build-export-svg
+                toolname="eggbot_form_build_export_svg"
+                tooldescription="Return SVG export text for the current EggBot pattern."
+                toolautosubmit
+            >
+                <button type="submit">Build export SVG</button>
             </form>
 
             <form
@@ -960,7 +1266,10 @@
                     <option value="draw">draw</option>
                     <option value="stop">stop</option>
                 </select>
-                <input type="checkbox" name="confirm" value="true" />
+                <select name="confirm">
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                </select>
                 <button type="submit">Run machine action</button>
             </form>
 
@@ -978,8 +1287,24 @@
                 </select>
                 <input type="text" name="name" />
                 <input type="text" name="id" />
-                <input type="checkbox" name="confirm" value="true" />
+                <select name="confirm">
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                </select>
                 <button type="submit">Run local action</button>
+            </form>
+
+            <form
+                data-webmcp-form-locale
+                toolname="eggbot_form_set_locale"
+                tooldescription="Set the EggBot app locale."
+                toolautosubmit
+            >
+                <select name="locale">
+                    <option value="en">en</option>
+                    <option value="de">de</option>
+                </select>
+                <button type="submit">Set locale</button>
             </form>
         </div>
 

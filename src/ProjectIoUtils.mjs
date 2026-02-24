@@ -90,7 +90,19 @@ export class ProjectIoUtils {
                 diamonds: ProjectIoUtils.#toBoolean(state?.motifs?.diamonds, true)
             },
             drawConfig: {
+                connectionTransport: ['serial', 'ble', 'wifi'].includes(
+                    String(state?.drawConfig?.connectionTransport || '')
+                        .trim()
+                        .toLowerCase()
+                )
+                    ? String(state?.drawConfig?.connectionTransport || '')
+                          .trim()
+                          .toLowerCase()
+                    : 'serial',
                 baudRate: Math.max(300, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.baudRate, 115200))),
+                wifiHost: String(state?.drawConfig?.wifiHost || '').trim(),
+                wifiPort: Math.max(1, Math.min(65535, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.wifiPort, 1337)))),
+                wifiSecure: ProjectIoUtils.#toBoolean(state?.drawConfig?.wifiSecure, false),
                 stepsPerTurn: Math.max(100, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.stepsPerTurn, 3200))),
                 penRangeSteps: Math.max(100, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penRangeSteps, 1500))),
                 msPerStep: Math.max(0.2, Math.min(20, ProjectIoUtils.#toNumber(state?.drawConfig?.msPerStep, 1.8))),

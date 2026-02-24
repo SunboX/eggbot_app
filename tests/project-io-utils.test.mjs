@@ -27,8 +27,12 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.ornamentCount, 1)
     assert.equal(normalized.ornamentDistribution, 1)
     assert.equal(typeof normalized.fillPatterns, 'boolean')
+    assert.equal(typeof normalized.drawConfig.connectionTransport, 'string')
     assert.equal(typeof normalized.drawConfig.baudRate, 'number')
     assert.equal(normalized.drawConfig.baudRate, 115200)
+    assert.equal(typeof normalized.drawConfig.wifiHost, 'string')
+    assert.equal(typeof normalized.drawConfig.wifiPort, 'number')
+    assert.equal(typeof normalized.drawConfig.wifiSecure, 'boolean')
     assert.equal(typeof normalized.drawConfig.stepsPerTurn, 'number')
     assert.equal(typeof normalized.drawConfig.penDownSpeed, 'number')
     assert.equal(typeof normalized.drawConfig.penMotorSpeed, 'number')
@@ -42,7 +46,9 @@ test('Default drawing palette should not include white by default', () => {
     const defaults = AppRuntimeConfig.createDefaultState()
     const normalizedHex = defaults.palette.map((value) => String(value).trim().toLowerCase())
 
+    assert.equal(defaults.drawConfig.connectionTransport, 'serial')
     assert.equal(defaults.drawConfig.baudRate, 115200)
+    assert.equal(defaults.drawConfig.wifiPort, 1337)
     assert.equal(normalizedHex.includes('#ffffff'), false)
     assert.equal(normalizedHex.includes('#fff'), false)
     assert.equal(normalizedHex.includes('#f3f0e7'), false)
@@ -59,8 +65,10 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     const normalized = ProjectIoUtils.normalizeProjectState({
         fillPatterns: false,
         drawConfig: {
+            connectionTransport: 'unsupported',
             penUpPercent: 999,
             penDownPercent: -10,
+            wifiPort: 999999,
             penDownSpeed: 9000,
             penUpSpeed: -40,
             penMotorSpeed: 99999,
@@ -76,6 +84,8 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
         }
     })
 
+    assert.equal(normalized.drawConfig.connectionTransport, 'serial')
+    assert.equal(normalized.drawConfig.wifiPort, 65535)
     assert.equal(normalized.drawConfig.penUpPercent, 100)
     assert.equal(normalized.drawConfig.penDownPercent, 0)
     assert.equal(normalized.drawConfig.penDownSpeed, 4000)
@@ -111,4 +121,20 @@ test('ProjectIoUtils should keep single print mode when provided', () => {
     })
 
     assert.equal(normalized.drawConfig.printColorMode, 'single')
+})
+
+test('ProjectIoUtils should preserve transport and Wi-Fi draw settings', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        drawConfig: {
+            connectionTransport: 'wifi',
+            wifiHost: '192.168.1.42',
+            wifiPort: 1337,
+            wifiSecure: true
+        }
+    })
+
+    assert.equal(normalized.drawConfig.connectionTransport, 'wifi')
+    assert.equal(normalized.drawConfig.wifiHost, '192.168.1.42')
+    assert.equal(normalized.drawConfig.wifiPort, 1337)
+    assert.equal(normalized.drawConfig.wifiSecure, true)
 })

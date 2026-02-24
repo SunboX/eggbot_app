@@ -12,8 +12,8 @@ Live app: [https://eggbot.app/](https://eggbot.app/)
 - SVG export of current visible pattern
 - local project storage
 - rotatable 3D egg preview
-- direct EggBot drawing via Web Serial (EBB command stream)
-- WebMCP tool surface (imperative tools plus declarative form subset)
+- direct EggBot drawing via Web Serial, BLE, or Wi-Fi/WebSocket (EBB command stream)
+- WebMCP tool surface with full imperative and declarative coverage
 - worker-backed compute/render/import/draw-prep paths with automatic fallback
 
 ## Project Structure
@@ -46,9 +46,10 @@ Open [http://localhost:3000/](http://localhost:3000/).
 
 ## EggBot Notes
 
-- Uses Web Serial API in browser.
+- Supports Web Serial, Web Bluetooth (BLE), and WebSocket (Wi-Fi) transport modes.
 - Uses EBB commands `SC`, `SP`, `EM`, and `SM`.
 - Calibrate `servo up/down` values and motion mapping before production runs.
+- BLE debug mode on localhost: append `?bleDebugScan=1&bleDebugLog=1` to show all nearby BLE devices and print staged logs in DevTools.
 - Start with test eggs and simple patterns.
 
 ## WebMCP Notes
@@ -58,11 +59,8 @@ Open [http://localhost:3000/](http://localhost:3000/).
 - Bridge transport is enabled with wildcard origins (`allowedOrigins: ['*']`).
 - Dangerous actions (`serial connect/disconnect/draw/stop`, local delete) require `confirm: true`.
 - Content-based tools are provided for project JSON, share URL, and SVG export (no file-picker requirement).
-- Declarative subset forms are included for:
-    - `eggbot_form_apply_design`
-    - `eggbot_form_apply_project_json`
-    - `eggbot_form_machine_action`
-    - `eggbot_form_local_project_action`
+- Declarative forms are provided for all WebMCP operations (state reads, design/color/motif/draw config patches, import/export, local storage actions, machine actions, and locale updates).
+- Declarative form fields include `toolparamdescription` metadata to improve generated schema quality for agents.
 - Chrome WebMCP early-preview reference was updated on **February 10, 2026** and documents the experimental native API behind `chrome://flags/#enable-webmcp-testing`.
 
 ## Local Node Server

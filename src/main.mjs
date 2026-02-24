@@ -7,7 +7,7 @@ import { PatternRenderer2D } from './PatternRenderer2D.mjs'
 import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
 import { PatternSvgExportUtils } from './PatternSvgExportUtils.mjs'
 import { EggScene } from './EggScene.mjs'
-import { EggBotSerial } from './EggBotSerial.mjs'
+import { EggBotTransportController } from './EggBotTransportController.mjs'
 import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
@@ -33,6 +33,7 @@ const IDLE_TIMEOUT_SETTINGS_PERSIST_MS = 450
 const LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE = 30
 const LOCAL_PROJECT_RENDER_IDLE_THRESHOLD = 100
 const EGGBOT_CONTROL_TABS = ['plot', 'setup', 'timing', 'options', 'manual', 'resume', 'layers', 'advanced']
+const EGGBOT_TRANSPORTS = ['serial', 'ble', 'wifi']
 const SERVO_VALUE_MIN = 5000
 const SERVO_VALUE_MAX = 25000
 /**
@@ -52,7 +53,7 @@ class AppController {
         this.activeTextureCanvas = this.els.textureCanvas
         this.renderBackendMode = 'main'
         this.eggScene = new EggScene(this.els.eggCanvas)
-        this.serial = new EggBotSerial()
+        this.serial = new EggBotTransportController()
         this.patternComputeWorker = new PatternComputeWorkerClient()
         this.patternImportWorker = new PatternImportWorkerClient()
         this.patternRenderWorker = new PatternRenderWorkerClient()
@@ -539,9 +540,21 @@ class AppController {
             return true
         }
 
+        const transport = this.serial.connectionTransportKind
+        if (!this.serial.isTransportSupported(transport)) {
+            this.#setStatus(
+                this.#t('messages.transportUnsupported', {
+                    transport: this.#formatTransportLabel(transport)
+                }),
+                'error'
+            )
+            this.#syncConnectionUi()
+            return false
+        }
+
         try {
             this.#setStatus(this.#t('messages.connectingBeforeManualControl'), 'loading')
-            const version = await this.serial.connectForDraw({ baudRate: this.#resolveSerialBaudRate() })
+            const version = await this.serial.connectForDraw(this.#buildTransportConnectOptions())
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
             this.#syncConnectionUi()
             return true
@@ -1237,11 +1250,37 @@ class AppController {
             this.state.motifs.diamonds = this.els.motifDiamond.checked
             this.#scheduleRender()
         })
+        this.els.connectionTransport.addEventListener('change', () => {
+            const requestedTransport = String(this.els.connectionTransport.value || '')
+                .trim()
+                .toLowerCase()
+            this.#switchConnectionTransport(requestedTransport).catch((error) => {
+                this.#setStatus(this.#t('messages.transportSwitchFailed', { message: error.message }), 'error')
+                this.#syncConnectionUi()
+            })
+        })
         this.els.baudRate.addEventListener('change', () => {
             this.state.drawConfig.baudRate = Math.max(
                 300,
                 AppController.#parseInteger(this.els.baudRate.value, this.state.drawConfig.baudRate)
             )
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.wifiHost.addEventListener('change', () => {
+            this.state.drawConfig.wifiHost = String(this.els.wifiHost.value || '').trim()
+            this.els.wifiHost.value = this.state.drawConfig.wifiHost
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.wifiPort.addEventListener('change', () => {
+            this.state.drawConfig.wifiPort = Math.max(
+                1,
+                Math.min(65535, AppController.#parseInteger(this.els.wifiPort.value, this.state.drawConfig.wifiPort))
+            )
+            this.els.wifiPort.value = String(this.state.drawConfig.wifiPort)
+            this.#markProjectArtifactsDirty()
+        })
+        this.els.wifiSecure.addEventListener('change', () => {
+            this.state.drawConfig.wifiSecure = this.els.wifiSecure.checked
             this.#markProjectArtifactsDirty()
         })
         this.els.stepsPerTurn.addEventListener('change', () => {
@@ -1570,6 +1609,7 @@ class AppController {
     #handleLocaleChange(locale) {
         this.i18n.setLocale(locale)
         this.#applyLocaleToUi()
+        this.#syncConnectionTransportUi()
         this.#renderPaletteControls()
         if (!this.isDrawing) {
             this.#resetDrawProgressUi()
@@ -1944,8 +1984,23 @@ class AppController {
         this.els.colorCount.value = String(this.state.palette.length)
         this.#syncMotifControls()
         this.#renderPaletteControls()
+        const requestedTransport = this.#resolveConnectionTransportKind()
+        if (this.serial.isConnected && requestedTransport !== this.serial.connectionTransportKind) {
+            this.state.drawConfig.connectionTransport = this.serial.connectionTransportKind
+        } else {
+            this.state.drawConfig.connectionTransport = requestedTransport
+            this.serial.setTransportKind(this.state.drawConfig.connectionTransport)
+        }
+        this.els.connectionTransport.value = this.state.drawConfig.connectionTransport
         this.state.drawConfig.baudRate = this.#resolveSerialBaudRate()
         this.els.baudRate.value = String(this.state.drawConfig.baudRate)
+        this.state.drawConfig.wifiHost = this.#resolveWifiHost()
+        this.state.drawConfig.wifiPort = this.#resolveWifiPort()
+        this.state.drawConfig.wifiSecure = AppController.#parseBoolean(this.state?.drawConfig?.wifiSecure, false)
+        this.els.wifiHost.value = this.state.drawConfig.wifiHost
+        this.els.wifiPort.value = String(this.state.drawConfig.wifiPort)
+        this.els.wifiSecure.checked = this.state.drawConfig.wifiSecure
+        this.#syncConnectionTransportUi()
         this.els.stepsPerTurn.value = String(this.state.drawConfig.stepsPerTurn)
         this.els.penRangeSteps.value = String(this.state.drawConfig.penRangeSteps)
         this.state.drawConfig.msPerStep = Math.max(
@@ -2013,6 +2068,153 @@ class AppController {
      */
     #resolveSerialBaudRate() {
         return Math.max(300, AppController.#parseInteger(this.state?.drawConfig?.baudRate, 115200))
+    }
+
+    /**
+     * Resolves one validated transport mode from draw configuration.
+     * @returns {'serial' | 'ble' | 'wifi'}
+     */
+    #resolveConnectionTransportKind() {
+        const requested = String(this.state?.drawConfig?.connectionTransport || '')
+            .trim()
+            .toLowerCase()
+        return EGGBOT_TRANSPORTS.includes(requested) ? requested : 'serial'
+    }
+
+    /**
+     * Resolves one validated Wi-Fi host from draw configuration.
+     * @returns {string}
+     */
+    #resolveWifiHost() {
+        return String(this.state?.drawConfig?.wifiHost || '').trim()
+    }
+
+    /**
+     * Resolves one validated Wi-Fi port from draw configuration.
+     * @returns {number}
+     */
+    #resolveWifiPort() {
+        return Math.max(1, Math.min(65535, AppController.#parseInteger(this.state?.drawConfig?.wifiPort, 1337)))
+    }
+
+    /**
+     * Resolves one boolean URL query flag.
+     * Empty values are treated as enabled (`?flag` => true).
+     * @param {string[]} names
+     * @param {boolean} fallback
+     * @returns {boolean}
+     */
+    #resolveUrlBooleanFlag(names, fallback) {
+        if (typeof window === 'undefined' || !window.location) return fallback
+        const searchParams = new URLSearchParams(window.location.search || '')
+        for (let index = 0; index < names.length; index += 1) {
+            const name = names[index]
+            if (!searchParams.has(name)) continue
+            const rawValue = searchParams.get(name)
+            if (rawValue === null || rawValue.trim() === '') {
+                return true
+            }
+            return AppController.#parseBoolean(rawValue, fallback)
+        }
+        return fallback
+    }
+
+    /**
+     * Resolves BLE connection debug options from URL query flags.
+     * Supported flags:
+     * - `bleDebugScan=1`: use accept-all BLE chooser mode.
+     * - `bleDebugLog=1`: enable BLE debug logging.
+     * @returns {{ debugScan: boolean, debugLog: boolean }}
+     */
+    #resolveBleConnectDebugOptions() {
+        const debugScan = this.#resolveUrlBooleanFlag(['bleDebugScan', 'ble_debug_scan'], false)
+        const debugLog = this.#resolveUrlBooleanFlag(['bleDebugLog', 'ble_debug_log'], debugScan)
+        return { debugScan, debugLog }
+    }
+
+    /**
+     * Resolves transport-specific connection options.
+     * @returns {{ baudRate?: number, host?: string, port?: number, secure?: boolean, debugScan?: boolean, debugLog?: boolean }}
+     */
+    #buildTransportConnectOptions() {
+        const transport = this.serial.connectionTransportKind
+        if (transport === 'wifi') {
+            const wifiHost = String(this.els.wifiHost.value || this.state?.drawConfig?.wifiHost || '').trim()
+            const wifiPort = Math.max(
+                1,
+                Math.min(65535, AppController.#parseInteger(this.els.wifiPort.value, this.state?.drawConfig?.wifiPort))
+            )
+            const wifiSecure = Boolean(this.els.wifiSecure.checked)
+            this.state.drawConfig.wifiHost = wifiHost
+            this.state.drawConfig.wifiPort = wifiPort
+            this.state.drawConfig.wifiSecure = wifiSecure
+            return {
+                host: wifiHost,
+                port: wifiPort,
+                secure: wifiSecure
+            }
+        }
+        if (transport === 'ble') {
+            return this.#resolveBleConnectDebugOptions()
+        }
+        return {
+            baudRate: this.#resolveSerialBaudRate()
+        }
+    }
+
+    /**
+     * Updates transport-specific machine controls and labels.
+     */
+    #syncConnectionTransportUi() {
+        const transport = this.serial.connectionTransportKind
+        this.els.machineBaudRateRow.hidden = transport !== 'serial'
+        this.els.machineWifiOptions.hidden = transport !== 'wifi'
+        this.els.connectionTransport.value = transport
+
+        const connectLabel = `${this.#t('machine.connect')} ${this.#formatTransportLabel(transport)}`
+        this.els.serialConnect.textContent = connectLabel
+    }
+
+    /**
+     * Switches active transport and keeps UI/state in sync.
+     * @param {string} requestedTransport
+     * @returns {Promise<void>}
+     */
+    async #switchConnectionTransport(requestedTransport) {
+        const normalizedTransport = EGGBOT_TRANSPORTS.includes(requestedTransport) ? requestedTransport : 'serial'
+        await this.serial.switchTransportKind(normalizedTransport)
+        this.state.drawConfig.connectionTransport = normalizedTransport
+        this.#markProjectArtifactsDirty()
+        this.#syncConnectionTransportUi()
+
+        if (!this.serial.isTransportSupported(normalizedTransport)) {
+            this.#setStatus(
+                this.#t('messages.transportUnsupported', {
+                    transport: this.#formatTransportLabel(normalizedTransport)
+                }),
+                'error'
+            )
+        } else {
+            this.#setStatus(
+                this.#t('messages.transportSwitched', {
+                    transport: this.#formatTransportLabel(normalizedTransport)
+                }),
+                'info'
+            )
+        }
+
+        this.#syncConnectionUi()
+    }
+
+    /**
+     * Formats one localized transport label.
+     * @param {'serial' | 'ble' | 'wifi'} transport
+     * @returns {string}
+     */
+    #formatTransportLabel(transport) {
+        if (transport === 'ble') return this.#t('machine.transportBle')
+        if (transport === 'wifi') return this.#t('machine.transportWifi')
+        return this.#t('machine.transportSerial')
     }
 
     /**
@@ -2101,12 +2303,17 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #restoreSerialConnectionAfterReload() {
-        if (!('serial' in navigator)) {
+        if (this.serial.connectionTransportKind !== 'serial') {
+            this.#syncConnectionUi()
+            return
+        }
+        if (!this.serial.isTransportSupported('serial')) {
+            this.#syncConnectionUi()
             return
         }
 
         try {
-            const version = await this.serial.reconnectIfPreviouslyConnected({ baudRate: this.#resolveSerialBaudRate() })
+            const version = await this.serial.reconnectIfPreviouslyConnected(this.#buildTransportConnectOptions())
             if (!version) return
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
         } catch (error) {
@@ -2120,8 +2327,20 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #connectSerial() {
+        const transport = this.serial.connectionTransportKind
+        if (!this.serial.isTransportSupported(transport)) {
+            this.#setStatus(
+                this.#t('messages.transportUnsupported', {
+                    transport: this.#formatTransportLabel(transport)
+                }),
+                'error'
+            )
+            this.#syncConnectionUi()
+            return
+        }
+
         try {
-            const version = await this.serial.connect({ baudRate: this.#resolveSerialBaudRate() })
+            const version = await this.serial.connect(this.#buildTransportConnectOptions())
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
             this.#syncConnectionUi()
         } catch (error) {
@@ -2170,9 +2389,17 @@ class AppController {
 
         try {
             if (!this.serial.isConnected) {
+                const transport = this.serial.connectionTransportKind
+                if (!this.serial.isTransportSupported(transport)) {
+                    throw new Error(
+                        this.#t('messages.transportUnsupported', {
+                            transport: this.#formatTransportLabel(transport)
+                        })
+                    )
+                }
                 connectingBeforeDraw = true
                 this.#setStatus(this.#t('messages.connectingBeforeDraw'), 'loading')
-                const version = await this.serial.connectForDraw({ baudRate: this.#resolveSerialBaudRate() })
+                const version = await this.serial.connectForDraw(this.#buildTransportConnectOptions())
                 connectingBeforeDraw = false
                 this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
                 this.#syncConnectionUi()
@@ -2266,11 +2493,14 @@ class AppController {
      * Syncs machine control button enabled states.
      */
     #syncConnectionUi() {
-        const serialSupported = 'serial' in navigator
+        const transport = this.serial.connectionTransportKind
+        const transportSupported = this.serial.isTransportSupported(transport)
         const connected = this.serial.isConnected
-        this.els.serialConnect.disabled = connected || this.isDrawing || !serialSupported
+        this.els.connectionTransport.disabled = connected || this.isDrawing
+        this.#syncConnectionTransportUi()
+        this.els.serialConnect.disabled = connected || this.isDrawing || !transportSupported
         this.els.serialDisconnect.disabled = !connected || this.isDrawing
-        this.els.drawButton.disabled = this.isDrawing || !serialSupported
+        this.els.drawButton.disabled = this.isDrawing || !transportSupported
         this.els.stopButton.disabled = !this.isDrawing || !connected
     }
     /**
@@ -3008,6 +3238,7 @@ class AppController {
             ...project,
             strokesCount: Array.isArray(this.state.strokes) ? this.state.strokes.length : 0,
             serialConnected: Boolean(this.serial?.isConnected),
+            connectionTransport: this.serial.connectionTransportKind,
             isDrawing: Boolean(this.isDrawing),
             importedPatternActive: Boolean(this.importedPattern),
             importedPatternName: this.importedPattern ? String(this.importedPattern.name || '') : '',
@@ -3049,6 +3280,11 @@ class AppController {
             this.#clearImportedPattern()
         }
 
+        if (Object.hasOwn(patch, 'projectName')) {
+            const projectName = String(patch.projectName || '').trim()
+            this.state.projectName = projectName || this.#t('project.defaultName')
+            didMutateState = true
+        }
         if (Object.hasOwn(patch, 'preset')) {
             this.state.preset = String(patch.preset || this.state.preset)
             this.state.motifs = AppRuntimeConfig.presetMotifs(this.state.preset)
@@ -3163,6 +3399,11 @@ class AppController {
                 shouldRender = true
             }
         }
+        if (Object.hasOwn(patch, 'colorCount')) {
+            const colorCount = Math.max(1, Math.min(6, AppController.#parseInteger(patch.colorCount, this.state.palette.length)))
+            this.#normalizePaletteLength(colorCount)
+            shouldRender = true
+        }
 
         if (shouldRender) {
             this.#markProjectArtifactsDirty()
@@ -3235,15 +3476,42 @@ class AppController {
      * @param {Record<string, any>} args
      * @returns {Record<string, any>}
      */
-    #webMcpSetDrawConfig(args) {
+    async #webMcpSetDrawConfig(args) {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let didMutateState = false
+        let requestedTransportSwitch = null
+
+        if (Object.hasOwn(patch, 'connectionTransport')) {
+            const requestedTransport = String(patch.connectionTransport || '')
+                .trim()
+                .toLowerCase()
+            if (EGGBOT_TRANSPORTS.includes(requestedTransport)) {
+                this.state.drawConfig.connectionTransport = requestedTransport
+                requestedTransportSwitch = requestedTransport
+                didMutateState = true
+            }
+        }
 
         if (Object.hasOwn(patch, 'baudRate')) {
             this.state.drawConfig.baudRate = Math.max(
                 300,
                 AppController.#parseInteger(patch.baudRate, this.state.drawConfig.baudRate)
             )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'wifiHost')) {
+            this.state.drawConfig.wifiHost = String(patch.wifiHost || '').trim()
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'wifiPort')) {
+            this.state.drawConfig.wifiPort = Math.max(
+                1,
+                Math.min(65535, AppController.#parseInteger(patch.wifiPort, this.state.drawConfig.wifiPort))
+            )
+            didMutateState = true
+        }
+        if (Object.hasOwn(patch, 'wifiSecure')) {
+            this.state.drawConfig.wifiSecure = AppController.#parseBoolean(patch.wifiSecure, this.state.drawConfig.wifiSecure)
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'stepsPerTurn')) {
@@ -3437,6 +3705,10 @@ class AppController {
                 this.activeEggBotControlTab = requestedTab
                 didMutateState = true
             }
+        }
+
+        if (requestedTransportSwitch) {
+            await this.serial.switchTransportKind(requestedTransportSwitch)
         }
 
         if (didMutateState) {
@@ -3738,7 +4010,7 @@ class AppController {
     async #webMcpSerialConnect() {
         await this.#connectSerial()
         return {
-            message: 'Serial connection attempt completed.',
+            message: 'Connection attempt completed.',
             state: this.#webMcpStateSnapshot()
         }
     }
@@ -3750,7 +4022,7 @@ class AppController {
     async #webMcpSerialDisconnect() {
         await this.#disconnectSerial()
         return {
-            message: 'Serial disconnect attempt completed.',
+            message: 'Disconnect attempt completed.',
             state: this.#webMcpStateSnapshot()
         }
     }
