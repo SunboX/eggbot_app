@@ -87,7 +87,7 @@
         "connectionTransport": "Transport",
         "transportSerial": "USB-Seriell",
         "transportBle": "Bluetooth LE",
-        "transportWifi": "WLAN (WebSocket)",
+        "transportWifi": "WiFi",
         "baudRate": "Baudrate",
         "wifiHost": "WLAN-Host / IP",
         "wifiPort": "WLAN-Port",
