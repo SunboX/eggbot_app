@@ -1,16 +1,28 @@
 # EggBot Connection
 
-## Supported connection mode
+## Supported connection modes
 
-The app uses Web Serial directly from the browser.
+The app supports three browser-side transports:
+
+- Web Serial (`USB`)
+- Web Bluetooth (`BLE`, Chromium only in secure context)
+- WebSocket (`Wi-Fi`, usually `ws://<eggs-esp32-ip>:1337/`)
+
+## BLE diagnostics
+
+- To debug missing devices in Chrome chooser, open the app with `?bleDebugScan=1&bleDebugLog=1`.
+- `bleDebugScan=1` switches chooser request to `acceptAllDevices` and still requests the EggDuino UART service as optional.
+- `bleDebugLog=1` prints staged BLE logs (`request`, `gatt`, `service`, `chars`, `notify`) to browser DevTools.
 
 ## Reload and reconnect behavior
 
 - A full page reload destroys the JavaScript context and releases the open serial handle.
-- The app keeps reconnect seamless by retrying when you press `Draw`.
+- For Web Serial, the app keeps reconnect seamless by retrying when you press `Draw`.
 - First it checks already granted ports with `navigator.serial.getPorts()`.
 - If exactly one safe candidate can be selected (including remembered last-used USB vendor/product ID), it reconnects directly.
 - If no safe candidate exists, `Draw` falls back to `navigator.serial.requestPort()` and shows the browser chooser.
+- BLE reconnect is user-initiated (Web Bluetooth security model).
+- Wi-Fi reconnect is attempted when you press `Connect`/`Draw` with configured host and port.
 
 ## EBB commands used
 

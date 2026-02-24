@@ -34,7 +34,11 @@ export class AppRuntimeConfig {
                 diamonds: true
             },
             drawConfig: {
+                connectionTransport: 'serial',
                 baudRate: 115200,
+                wifiHost: '',
+                wifiPort: 1337,
+                wifiSecure: false,
                 stepsPerTurn: 3200,
                 penRangeSteps: 1500,
                 msPerStep: 1.8,

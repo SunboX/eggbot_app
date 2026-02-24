@@ -27,10 +27,21 @@ const IMPERATIVE_TOOL_NAMES = [
 ]
 
 const DECLARATIVE_ALIAS_NAMES = [
+    'eggbot_form_get_state',
     'eggbot_form_apply_design',
+    'eggbot_form_apply_color',
+    'eggbot_form_apply_motifs',
+    'eggbot_form_apply_draw_config',
+    'eggbot_form_reroll_seed',
+    'eggbot_form_regenerate_pattern',
+    'eggbot_form_import_svg_text',
     'eggbot_form_apply_project_json',
+    'eggbot_form_get_project_json',
+    'eggbot_form_get_share_url',
+    'eggbot_form_build_export_svg',
     'eggbot_form_machine_action',
-    'eggbot_form_local_project_action'
+    'eggbot_form_local_project_action',
+    'eggbot_form_set_locale'
 ]
 
 /**
@@ -201,7 +212,7 @@ test('WebMcpBridge should return structured response contract', async () => {
     }
 })
 
-test('WebMcpBridge should expose printColorMode in draw-config schema', () => {
+test('WebMcpBridge should expose transport and printColorMode in draw-config schema', () => {
     const navigatorMock = installModelContextMock()
     const commandMocks = createCommandMocks()
 
@@ -216,6 +227,10 @@ test('WebMcpBridge should expose printColorMode in draw-config schema', () => {
             .imperativeTools()
             .find((tool) => tool.name === 'eggbot_set_draw_config')
         assert.ok(drawConfigTool)
+        assert.equal(drawConfigTool.inputSchema?.properties?.connectionTransport?.type, 'string')
+        assert.deepEqual(drawConfigTool.inputSchema?.properties?.connectionTransport?.enum, ['serial', 'ble', 'wifi'])
+        assert.equal(drawConfigTool.inputSchema?.properties?.wifiHost?.type, 'string')
+        assert.equal(drawConfigTool.inputSchema?.properties?.wifiPort?.type, 'integer')
         assert.equal(drawConfigTool.inputSchema?.properties?.printColorMode?.type, 'string')
         assert.deepEqual(drawConfigTool.inputSchema?.properties?.printColorMode?.enum, ['single', 'per-color'])
     } finally {

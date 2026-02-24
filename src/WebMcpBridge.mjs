@@ -37,6 +37,7 @@
  * name: string,
  * description: string,
  * inputSchema: Record<string, unknown>,
+ * annotations?: Record<string, unknown>,
  * execute: (args?: Record<string, unknown>) => Promise<Record<string, unknown>>
  * }} WebMcpToolDescriptor
  */
@@ -65,10 +66,21 @@ const TOOL_ACTIONS = {
 }
 
 const DECLARATIVE_TOOL_ACTIONS = {
+    getState: 'eggbot_form_get_state',
     applyDesign: 'eggbot_form_apply_design',
+    applyColor: 'eggbot_form_apply_color',
+    applyMotifs: 'eggbot_form_apply_motifs',
+    applyDrawConfig: 'eggbot_form_apply_draw_config',
+    rerollSeed: 'eggbot_form_reroll_seed',
+    regeneratePattern: 'eggbot_form_regenerate_pattern',
+    importSvgText: 'eggbot_form_import_svg_text',
     applyProjectJson: 'eggbot_form_apply_project_json',
+    getProjectJson: 'eggbot_form_get_project_json',
+    getShareUrl: 'eggbot_form_get_share_url',
+    buildExportSvg: 'eggbot_form_build_export_svg',
     machineAction: 'eggbot_form_machine_action',
-    localProjectAction: 'eggbot_form_local_project_action'
+    localProjectAction: 'eggbot_form_local_project_action',
+    setLocale: 'eggbot_form_set_locale'
 }
 
 /**
@@ -155,6 +167,7 @@ export class WebMcpBridge {
                 name: TOOL_ACTIONS.getState,
                 description: 'Return the current full EggBot app state snapshot.',
                 inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
                 execute: async () => this.#executeGetState()
             },
             {
@@ -163,6 +176,7 @@ export class WebMcpBridge {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        projectName: { type: 'string' },
                         seed: { type: 'integer' },
                         preset: { type: 'string' },
                         symmetry: { type: 'integer' },
@@ -189,6 +203,7 @@ export class WebMcpBridge {
                     type: 'object',
                     properties: {
                         baseColor: { type: 'string' },
+                        colorCount: { type: 'integer', minimum: 1, maximum: 6 },
                         palette: {
                             type: 'array',
                             items: { type: 'string' },
@@ -227,7 +242,11 @@ export class WebMcpBridge {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        connectionTransport: { type: 'string', enum: ['serial', 'ble', 'wifi'] },
                         baudRate: { type: 'integer' },
+                        wifiHost: { type: 'string' },
+                        wifiPort: { type: 'integer' },
+                        wifiSecure: { type: 'boolean' },
                         stepsPerTurn: { type: 'integer' },
                         penRangeSteps: { type: 'integer' },
                         msPerStep: { type: 'number' },
@@ -310,24 +329,28 @@ export class WebMcpBridge {
                 name: TOOL_ACTIONS.getProjectJson,
                 description: 'Return a normalized project payload and suggested filename.',
                 inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
                 execute: async () => this.#runCommand(TOOL_ACTIONS.getProjectJson, () => this.#commands.getProjectJson())
             },
             {
                 name: TOOL_ACTIONS.getShareUrl,
                 description: 'Return a share URL embedding current project state.',
                 inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
                 execute: async () => this.#runCommand(TOOL_ACTIONS.getShareUrl, () => this.#commands.getShareUrl())
             },
             {
                 name: TOOL_ACTIONS.buildExportSvg,
                 description: 'Return SVG export text and suggested filename for current pattern.',
                 inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
                 execute: async () => this.#runCommand(TOOL_ACTIONS.buildExportSvg, () => this.#commands.buildExportSvg())
             },
             {
                 name: TOOL_ACTIONS.localProjectsList,
                 description: 'List locally stored project entries.',
                 inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
                 execute: async () => this.#runCommand(TOOL_ACTIONS.localProjectsList, () => this.#commands.localProjectsList())
             },
             {
@@ -471,11 +494,19 @@ export class WebMcpBridge {
     #buildDeclarativeAliasToolDescriptors() {
         return [
             {
+                name: DECLARATIVE_TOOL_ACTIONS.getState,
+                description: 'Declarative alias: return current app state snapshot.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
+                execute: async () => this.#executeGetState(DECLARATIVE_TOOL_ACTIONS.getState)
+            },
+            {
                 name: DECLARATIVE_TOOL_ACTIONS.applyDesign,
                 description: 'Declarative alias: apply design settings patch.',
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        projectName: { type: 'string' },
                         seed: { type: 'integer' },
                         preset: { type: 'string' },
                         symmetry: { type: 'integer' },
@@ -496,6 +527,122 @@ export class WebMcpBridge {
                 execute: async (args = {}) => this.#executeSetDesignSettings(args, DECLARATIVE_TOOL_ACTIONS.applyDesign)
             },
             {
+                name: DECLARATIVE_TOOL_ACTIONS.applyColor,
+                description: 'Declarative alias: apply palette and base color settings.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        baseColor: { type: 'string' },
+                        colorCount: { type: 'integer', minimum: 1, maximum: 6 },
+                        palette: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            minItems: 1,
+                            maxItems: 6
+                        }
+                    },
+                    additionalProperties: false
+                },
+                execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyColor, () =>
+                    this.#commands.setColorSettings(WebMcpBridge.#toObjectArgs(args))
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.applyMotifs,
+                description: 'Declarative alias: patch motif toggles.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        dots: { type: 'boolean' },
+                        rays: { type: 'boolean' },
+                        honeycomb: { type: 'boolean' },
+                        wolfTeeth: { type: 'boolean' },
+                        pineBranch: { type: 'boolean' },
+                        diamonds: { type: 'boolean' }
+                    },
+                    additionalProperties: false
+                },
+                execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyMotifs, () =>
+                    this.#commands.setMotifSettings(WebMcpBridge.#toObjectArgs(args))
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.applyDrawConfig,
+                description: 'Declarative alias: patch EggBot draw configuration.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        connectionTransport: { type: 'string', enum: ['serial', 'ble', 'wifi'] },
+                        baudRate: { type: 'integer' },
+                        wifiHost: { type: 'string' },
+                        wifiPort: { type: 'integer' },
+                        wifiSecure: { type: 'boolean' },
+                        stepsPerTurn: { type: 'integer' },
+                        penRangeSteps: { type: 'integer' },
+                        msPerStep: { type: 'number' },
+                        servoUp: { type: 'integer' },
+                        servoDown: { type: 'integer' },
+                        invertPen: { type: 'boolean' },
+                        penUpPercent: { type: 'number' },
+                        penDownPercent: { type: 'number' },
+                        penDownSpeed: { type: 'integer' },
+                        penUpSpeed: { type: 'integer' },
+                        penMotorSpeed: { type: 'integer' },
+                        eggMotorSpeed: { type: 'integer' },
+                        penRaiseRate: { type: 'integer' },
+                        penRaiseDelayMs: { type: 'integer' },
+                        penLowerRate: { type: 'integer' },
+                        penLowerDelayMs: { type: 'integer' },
+                        reversePenMotor: { type: 'boolean' },
+                        reverseEggMotor: { type: 'boolean' },
+                        wrapAround: { type: 'boolean' },
+                        returnHome: { type: 'boolean' },
+                        printColorMode: { type: 'string', enum: ['single', 'per-color'] },
+                        engraverEnabled: { type: 'boolean' },
+                        curveSmoothing: { type: 'number' },
+                        setupApplyAction: { type: 'string' },
+                        manualCommand: { type: 'string' },
+                        manualWalkDistance: { type: 'integer' },
+                        activeControlTab: { type: 'string' }
+                    },
+                    additionalProperties: false
+                },
+                execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyDrawConfig, () =>
+                    this.#commands.setDrawConfig(WebMcpBridge.#toObjectArgs(args))
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.rerollSeed,
+                description: 'Declarative alias: reroll seed and regenerate pattern.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                execute: async () => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.rerollSeed, () => this.#commands.rerollSeed())
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.regeneratePattern,
+                description: 'Declarative alias: regenerate current pattern output.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                execute: async () => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.regeneratePattern, () =>
+                    this.#commands.regeneratePattern()
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.importSvgText,
+                description: 'Declarative alias: import SVG text as the active pattern.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        svgText: { type: 'string' },
+                        fileName: { type: 'string' },
+                        importHeightScale: { type: 'number' }
+                    },
+                    required: ['svgText'],
+                    additionalProperties: false
+                },
+                execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.importSvgText, () =>
+                    this.#commands.importSvgText(WebMcpBridge.#toObjectArgs(args))
+                )
+            },
+            {
                 name: DECLARATIVE_TOOL_ACTIONS.applyProjectJson,
                 description: 'Declarative alias: apply project JSON payload.',
                 inputSchema: {
@@ -508,6 +655,31 @@ export class WebMcpBridge {
                 },
                 execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyProjectJson, () =>
                     this.#commands.applyProjectJson(WebMcpBridge.#toObjectArgs(args))
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.getProjectJson,
+                description: 'Declarative alias: return current project JSON payload.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
+                execute: async () => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.getProjectJson, () =>
+                    this.#commands.getProjectJson()
+                )
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.getShareUrl,
+                description: 'Declarative alias: return share URL for current project.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
+                execute: async () => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.getShareUrl, () => this.#commands.getShareUrl())
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.buildExportSvg,
+                description: 'Declarative alias: return SVG export payload.',
+                inputSchema: WebMcpBridge.#emptyObjectSchema(),
+                annotations: { readOnlyHint: 'true' },
+                execute: async () => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.buildExportSvg, () =>
+                    this.#commands.buildExportSvg()
                 )
             },
             {
@@ -545,20 +717,36 @@ export class WebMcpBridge {
                     additionalProperties: false
                 },
                 execute: async (args = {}) => this.#executeDeclarativeLocalProjectAction(WebMcpBridge.#toObjectArgs(args))
+            },
+            {
+                name: DECLARATIVE_TOOL_ACTIONS.setLocale,
+                description: 'Declarative alias: set application locale.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        locale: { type: 'string', enum: ['en', 'de'] }
+                    },
+                    required: ['locale'],
+                    additionalProperties: false
+                },
+                execute: async (args = {}) => this.#runCommand(DECLARATIVE_TOOL_ACTIONS.setLocale, () =>
+                    this.#commands.setLocale(WebMcpBridge.#toObjectArgs(args))
+                )
             }
         ]
     }
 
     /**
      * Executes the state snapshot command.
+     * @param {string} [action=TOOL_ACTIONS.getState]
      * @returns {Promise<Record<string, unknown>>}
      */
-    async #executeGetState() {
+    async #executeGetState(action = TOOL_ACTIONS.getState) {
         try {
             const state = await this.#commands.getState()
-            return this.#buildSuccessResponse(TOOL_ACTIONS.getState, 'State snapshot ready.', undefined, state)
+            return this.#buildSuccessResponse(action, 'State snapshot ready.', undefined, state)
         } catch (error) {
-            return this.#buildErrorResponse(TOOL_ACTIONS.getState, WebMcpBridge.#toErrorMessage(error))
+            return this.#buildErrorResponse(action, WebMcpBridge.#toErrorMessage(error))
         }
     }
 
@@ -699,25 +887,36 @@ export class WebMcpBridge {
      * Binds declarative form submit handlers to command callbacks.
      */
     #bindDeclarativeFormSubmitHandlers() {
-        const designForm = this.#root.querySelector('[data-webmcp-form-design]')
-        if (WebMcpBridge.#isFormElement(designForm)) {
-            this.#attachSubmitHandler(designForm, () => this.#handleDesignDeclarativeSubmit(designForm))
-        }
+        this.#bindDeclarativeForm('[data-webmcp-form-get-state]', (form) => this.#handleGetStateDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-design]', (form) => this.#handleDesignDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-color]', (form) => this.#handleColorDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-motifs]', (form) => this.#handleMotifDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-draw-config]', (form) => this.#handleDrawConfigDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-reroll-seed]', (form) => this.#handleRerollDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-regenerate]', (form) => this.#handleRegenerateDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-import-svg]', (form) => this.#handleImportSvgDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-project]', (form) => this.#handleProjectDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-get-project-json]', (form) =>
+            this.#handleGetProjectJsonDeclarativeSubmit(form)
+        )
+        this.#bindDeclarativeForm('[data-webmcp-form-get-share-url]', (form) => this.#handleGetShareUrlDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-build-export-svg]', (form) =>
+            this.#handleBuildExportSvgDeclarativeSubmit(form)
+        )
+        this.#bindDeclarativeForm('[data-webmcp-form-machine]', (form) => this.#handleMachineDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-local]', (form) => this.#handleLocalDeclarativeSubmit(form))
+        this.#bindDeclarativeForm('[data-webmcp-form-locale]', (form) => this.#handleLocaleDeclarativeSubmit(form))
+    }
 
-        const projectForm = this.#root.querySelector('[data-webmcp-form-project]')
-        if (WebMcpBridge.#isFormElement(projectForm)) {
-            this.#attachSubmitHandler(projectForm, () => this.#handleProjectDeclarativeSubmit(projectForm))
-        }
-
-        const machineForm = this.#root.querySelector('[data-webmcp-form-machine]')
-        if (WebMcpBridge.#isFormElement(machineForm)) {
-            this.#attachSubmitHandler(machineForm, () => this.#handleMachineDeclarativeSubmit(machineForm))
-        }
-
-        const localForm = this.#root.querySelector('[data-webmcp-form-local]')
-        if (WebMcpBridge.#isFormElement(localForm)) {
-            this.#attachSubmitHandler(localForm, () => this.#handleLocalDeclarativeSubmit(localForm))
-        }
+    /**
+     * Binds one declarative form by selector when present.
+     * @param {string} selector
+     * @param {(form: HTMLFormElement) => Promise<Record<string, unknown>>} callback
+     */
+    #bindDeclarativeForm(selector, callback) {
+        const form = this.#root.querySelector(selector)
+        if (!WebMcpBridge.#isFormElement(form)) return
+        this.#attachSubmitHandler(form, () => callback(form))
     }
 
     /**
@@ -742,6 +941,15 @@ export class WebMcpBridge {
     }
 
     /**
+     * Handles declarative get-state form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleGetStateDeclarativeSubmit(_form) {
+        return this.#executeGetState(DECLARATIVE_TOOL_ACTIONS.getState)
+    }
+
+    /**
      * Handles declarative design form submissions.
      * @param {HTMLFormElement} form
      * @returns {Promise<Record<string, unknown>>}
@@ -750,6 +958,8 @@ export class WebMcpBridge {
         const formData = WebMcpBridge.#createFormData(form)
         const args = {}
 
+        const maybeProjectName = WebMcpBridge.#toOptionalString(formData.get('projectName'))
+        if (maybeProjectName) args.projectName = maybeProjectName
         const maybeSeed = WebMcpBridge.#toOptionalInt(formData.get('seed'))
         if (maybeSeed !== undefined) args.seed = maybeSeed
         const maybePreset = WebMcpBridge.#toOptionalString(formData.get('preset'))
@@ -771,20 +981,165 @@ export class WebMcpBridge {
         const maybeImportHeightScale = WebMcpBridge.#toOptionalNumber(formData.get('importHeightScale'))
         if (maybeImportHeightScale !== undefined) args.importHeightScale = maybeImportHeightScale
 
-        if (formData.has('showHorizontalLines')) {
-            args.showHorizontalLines = WebMcpBridge.#isTruthy(formData.get('showHorizontalLines'))
-        }
-        if (formData.has('fillPatterns')) {
-            args.fillPatterns = WebMcpBridge.#isTruthy(formData.get('fillPatterns'))
-        }
-        if (formData.has('rerollSeed')) {
-            args.rerollSeed = WebMcpBridge.#isTruthy(formData.get('rerollSeed'))
-        }
-        if (formData.has('regenerate')) {
-            args.regenerate = WebMcpBridge.#isTruthy(formData.get('regenerate'))
-        }
+        const maybeShowHorizontalLines = WebMcpBridge.#toOptionalBoolean(formData.get('showHorizontalLines'))
+        if (maybeShowHorizontalLines !== undefined) args.showHorizontalLines = maybeShowHorizontalLines
+        const maybeFillPatterns = WebMcpBridge.#toOptionalBoolean(formData.get('fillPatterns'))
+        if (maybeFillPatterns !== undefined) args.fillPatterns = maybeFillPatterns
+        const maybeRerollSeed = WebMcpBridge.#toOptionalBoolean(formData.get('rerollSeed'))
+        if (maybeRerollSeed !== undefined) args.rerollSeed = maybeRerollSeed
+        const maybeRegenerate = WebMcpBridge.#toOptionalBoolean(formData.get('regenerate'))
+        if (maybeRegenerate !== undefined) args.regenerate = maybeRegenerate
 
         return this.#executeSetDesignSettings(args, DECLARATIVE_TOOL_ACTIONS.applyDesign)
+    }
+
+    /**
+     * Handles declarative color form submissions.
+     * @param {HTMLFormElement} form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleColorDeclarativeSubmit(form) {
+        const formData = WebMcpBridge.#createFormData(form)
+        const args = {}
+
+        const maybeBaseColor = WebMcpBridge.#toOptionalString(formData.get('baseColor'))
+        if (maybeBaseColor) args.baseColor = maybeBaseColor
+        const maybeColorCount = WebMcpBridge.#toOptionalInt(formData.get('colorCount'))
+        if (maybeColorCount !== undefined) args.colorCount = maybeColorCount
+
+        const palette = []
+        const maybePalette = formData.getAll('palette')
+            .map((value) => WebMcpBridge.#toOptionalString(value))
+            .filter(Boolean)
+        if (maybePalette.length) {
+            palette.push(...maybePalette)
+        } else {
+            const paletteFieldNames = ['palette1', 'palette2', 'palette3', 'palette4', 'palette5', 'palette6']
+            paletteFieldNames.forEach((fieldName) => {
+                const maybeColor = WebMcpBridge.#toOptionalString(formData.get(fieldName))
+                if (!maybeColor) return
+                palette.push(maybeColor)
+            })
+        }
+        if (palette.length) {
+            args.palette = palette
+        }
+
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyColor, () => this.#commands.setColorSettings(args))
+    }
+
+    /**
+     * Handles declarative motif form submissions.
+     * @param {HTMLFormElement} form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleMotifDeclarativeSubmit(form) {
+        const formData = WebMcpBridge.#createFormData(form)
+        const args = {}
+        const motifFields = ['dots', 'rays', 'honeycomb', 'wolfTeeth', 'pineBranch', 'diamonds']
+        motifFields.forEach((fieldName) => {
+            const maybeValue = WebMcpBridge.#toOptionalBoolean(formData.get(fieldName))
+            if (maybeValue === undefined) return
+            args[fieldName] = maybeValue
+        })
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyMotifs, () => this.#commands.setMotifSettings(args))
+    }
+
+    /**
+     * Handles declarative draw-config form submissions.
+     * @param {HTMLFormElement} form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleDrawConfigDeclarativeSubmit(form) {
+        const formData = WebMcpBridge.#createFormData(form)
+        const args = {}
+
+        const stringFields = ['connectionTransport', 'wifiHost', 'printColorMode', 'setupApplyAction', 'manualCommand', 'activeControlTab']
+        const integerFields = [
+            'baudRate',
+            'wifiPort',
+            'stepsPerTurn',
+            'penRangeSteps',
+            'servoUp',
+            'servoDown',
+            'penDownSpeed',
+            'penUpSpeed',
+            'penMotorSpeed',
+            'eggMotorSpeed',
+            'penRaiseRate',
+            'penRaiseDelayMs',
+            'penLowerRate',
+            'penLowerDelayMs',
+            'manualWalkDistance'
+        ]
+        const numberFields = ['msPerStep', 'penUpPercent', 'penDownPercent', 'curveSmoothing']
+        const booleanFields = [
+            'wifiSecure',
+            'invertPen',
+            'reversePenMotor',
+            'reverseEggMotor',
+            'wrapAround',
+            'returnHome',
+            'engraverEnabled'
+        ]
+
+        stringFields.forEach((fieldName) => {
+            const maybeValue = WebMcpBridge.#toOptionalString(formData.get(fieldName))
+            if (!maybeValue) return
+            args[fieldName] = maybeValue
+        })
+        integerFields.forEach((fieldName) => {
+            const maybeValue = WebMcpBridge.#toOptionalInt(formData.get(fieldName))
+            if (maybeValue === undefined) return
+            args[fieldName] = maybeValue
+        })
+        numberFields.forEach((fieldName) => {
+            const maybeValue = WebMcpBridge.#toOptionalNumber(formData.get(fieldName))
+            if (maybeValue === undefined) return
+            args[fieldName] = maybeValue
+        })
+        booleanFields.forEach((fieldName) => {
+            const maybeValue = WebMcpBridge.#toOptionalBoolean(formData.get(fieldName))
+            if (maybeValue === undefined) return
+            args[fieldName] = maybeValue
+        })
+
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyDrawConfig, () => this.#commands.setDrawConfig(args))
+    }
+
+    /**
+     * Handles declarative reroll-seed form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleRerollDeclarativeSubmit(_form) {
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.rerollSeed, () => this.#commands.rerollSeed())
+    }
+
+    /**
+     * Handles declarative regenerate form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleRegenerateDeclarativeSubmit(_form) {
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.regeneratePattern, () => this.#commands.regeneratePattern())
+    }
+
+    /**
+     * Handles declarative SVG import form submissions.
+     * @param {HTMLFormElement} form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleImportSvgDeclarativeSubmit(form) {
+        const formData = WebMcpBridge.#createFormData(form)
+        const args = {}
+        const svgText = WebMcpBridge.#toOptionalString(formData.get('svgText'))
+        if (svgText) args.svgText = svgText
+        const fileName = WebMcpBridge.#toOptionalString(formData.get('fileName'))
+        if (fileName) args.fileName = fileName
+        const importHeightScale = WebMcpBridge.#toOptionalNumber(formData.get('importHeightScale'))
+        if (importHeightScale !== undefined) args.importHeightScale = importHeightScale
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.importSvgText, () => this.#commands.importSvgText(args))
     }
 
     /**
@@ -798,6 +1153,33 @@ export class WebMcpBridge {
         return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.applyProjectJson, () =>
             this.#commands.applyProjectJson({ project })
         )
+    }
+
+    /**
+     * Handles declarative project-json export form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleGetProjectJsonDeclarativeSubmit(_form) {
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.getProjectJson, () => this.#commands.getProjectJson())
+    }
+
+    /**
+     * Handles declarative share-url form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleGetShareUrlDeclarativeSubmit(_form) {
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.getShareUrl, () => this.#commands.getShareUrl())
+    }
+
+    /**
+     * Handles declarative SVG-export form submissions.
+     * @param {HTMLFormElement} _form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleBuildExportSvgDeclarativeSubmit(_form) {
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.buildExportSvg, () => this.#commands.buildExportSvg())
     }
 
     /**
@@ -826,6 +1208,20 @@ export class WebMcpBridge {
             id: String(formData.get('id') || ''),
             confirm: WebMcpBridge.#isTruthy(formData.get('confirm'))
         })
+    }
+
+    /**
+     * Handles declarative locale form submissions.
+     * @param {HTMLFormElement} form
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async #handleLocaleDeclarativeSubmit(form) {
+        const formData = WebMcpBridge.#createFormData(form)
+        return this.#runCommand(DECLARATIVE_TOOL_ACTIONS.setLocale, () =>
+            this.#commands.setLocale({
+                locale: String(formData.get('locale') || '').trim()
+            })
+        )
     }
 
     /**
@@ -902,6 +1298,22 @@ export class WebMcpBridge {
     static #toOptionalString(value) {
         const normalized = String(value || '').trim()
         return normalized || undefined
+    }
+
+    /**
+     * Converts unknown to an optional boolean.
+     * @param {FormDataEntryValue | null} value
+     * @returns {boolean | undefined}
+     */
+    static #toOptionalBoolean(value) {
+        if (value === null || value === undefined) return undefined
+        const normalized = String(value || '')
+            .trim()
+            .toLowerCase()
+        if (!normalized) return undefined
+        if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+        if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+        return undefined
     }
 
     /**

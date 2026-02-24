@@ -93,6 +93,7 @@ test('WebMcpBridge should route state patch and project apply arguments', async 
         const applyProjectTool = pickTool(tools, 'eggbot_apply_project_json')
 
         await setDesignTool.execute({
+            projectName: 'Demo Project',
             seed: 111,
             symmetry: 12,
             density: 0.64,
@@ -103,6 +104,7 @@ test('WebMcpBridge should route state patch and project apply arguments', async 
         })
 
         assert.deepEqual(calls.design, {
+            projectName: 'Demo Project',
             seed: 111,
             symmetry: 12,
             density: 0.64,
