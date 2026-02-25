@@ -12,6 +12,7 @@ import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
+import { DrawProgressTimeUtils } from './DrawProgressTimeUtils.mjs'
 import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
 import { PatternRenderWorkerClient } from './PatternRenderWorkerClient.mjs'
@@ -231,9 +232,11 @@ class AppController {
         const normalizedRemainingRatio = Math.max(0, Math.min(1, Number(remainingRatio) || 0))
         const completedPercent = Math.max(0, Math.min(100, Math.round((1 - normalizedRemainingRatio) * 100)))
         const remainingPercent = Math.max(0, Math.min(100, 100 - completedPercent))
-        const normalizedRemainingMs = Number.isFinite(Number(remainingMs))
-            ? Math.max(0, Math.round(Number(remainingMs)))
-            : this.#estimateRemainingMsFromRatio(normalizedRemainingRatio)
+        const normalizedRemainingMsFromDetail = DrawProgressTimeUtils.normalizeRemainingMs(remainingMs)
+        const normalizedRemainingMs =
+            normalizedRemainingMsFromDetail === null
+                ? this.#estimateRemainingMsFromRatio(normalizedRemainingRatio)
+                : normalizedRemainingMsFromDetail
 
         this.els.drawProgressFill.style.width = `${completedPercent}%`
         this.els.drawProgressTrack.setAttribute('aria-valuenow', String(completedPercent))
