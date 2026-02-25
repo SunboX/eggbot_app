@@ -12,6 +12,7 @@ import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
+import { DrawProgressSmoother } from './DrawProgressSmoother.mjs'
 import { DrawProgressTimeUtils } from './DrawProgressTimeUtils.mjs'
 import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
@@ -79,6 +80,7 @@ class AppController {
         this.activeEggBotControlTab = 'plot'
         this.setupActionTogglePenDown = false
         this.drawProgressStartedAtMs = 0
+        this.drawProgressSmoother = new DrawProgressSmoother()
         this.pendingPenColorDialogResolve = null
         this.autoGenerateOrnamentControls = [
             this.els.preset,
@@ -205,6 +207,7 @@ class AppController {
      */
     #startDrawProgressUi() {
         this.drawProgressStartedAtMs = Date.now()
+        this.drawProgressSmoother.reset()
         this.els.drawProgress.hidden = false
         this.#updateDrawProgressUi(1, null)
     }
@@ -214,6 +217,7 @@ class AppController {
      */
     #resetDrawProgressUi() {
         this.drawProgressStartedAtMs = 0
+        this.drawProgressSmoother.reset()
         this.els.drawProgress.hidden = true
         this.els.drawProgressFill.style.width = '0%'
         this.els.drawProgressTrack.setAttribute('aria-valuenow', '0')
@@ -233,10 +237,11 @@ class AppController {
         const completedPercent = Math.max(0, Math.min(100, Math.round((1 - normalizedRemainingRatio) * 100)))
         const remainingPercent = Math.max(0, Math.min(100, 100 - completedPercent))
         const normalizedRemainingMsFromDetail = DrawProgressTimeUtils.normalizeRemainingMs(remainingMs)
-        const normalizedRemainingMs =
+        const rawRemainingMs =
             normalizedRemainingMsFromDetail === null
                 ? this.#estimateRemainingMsFromRatio(normalizedRemainingRatio)
                 : normalizedRemainingMsFromDetail
+        const normalizedRemainingMs = this.drawProgressSmoother.update(rawRemainingMs)
 
         this.els.drawProgressFill.style.width = `${completedPercent}%`
         this.els.drawProgressTrack.setAttribute('aria-valuenow', String(completedPercent))
