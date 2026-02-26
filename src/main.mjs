@@ -8,6 +8,7 @@ import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
 import { PatternSvgExportUtils } from './PatternSvgExportUtils.mjs'
 import { EggScene } from './EggScene.mjs'
 import { EggBotTransportController } from './EggBotTransportController.mjs'
+import { BleLinuxChromiumHints } from './BleLinuxChromiumHints.mjs'
 import { ProjectFilenameUtils } from './ProjectFilenameUtils.mjs'
 import { ProjectIoUtils } from './ProjectIoUtils.mjs'
 import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
@@ -179,6 +180,58 @@ class AppController {
         this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
+    }
+
+    /**
+     * Appends Linux/Chromium BLE troubleshooting details when applicable.
+     * @param {string} message
+     * @param {'serial' | 'ble'} [transport=this.serial.connectionTransportKind]
+     * @returns {string}
+     */
+    #appendBleTroubleshootingHint(message, transport = this.serial.connectionTransportKind) {
+        const normalizedMessage = String(message || '')
+        if (!this.#shouldShowBleTroubleshootingHint(transport)) {
+            return normalizedMessage
+        }
+        return `${normalizedMessage}\n\n${this.#t('messages.bleLinuxChromiumTroubleshooting')}`
+    }
+
+    /**
+     * Returns true when Linux/Chromium BLE troubleshooting details should be shown.
+     * @param {unknown} transport
+     * @returns {boolean}
+     */
+    #shouldShowBleTroubleshootingHint(transport) {
+        const userAgent = typeof navigator === 'undefined' ? '' : navigator?.userAgent
+        const brands = typeof navigator === 'undefined' ? [] : navigator?.userAgentData?.brands
+        return BleLinuxChromiumHints.shouldShowBleTroubleshooting({
+            transportKind: transport,
+            userAgent,
+            brands
+        })
+    }
+
+    /**
+     * Builds one connection-failed status message.
+     * @param {unknown} error
+     * @returns {string}
+     */
+    #formatConnectionFailedStatusMessage(error) {
+        const reason = String(error?.message || error || '')
+        const baseMessage = this.#t('messages.serialConnectFailed', { message: reason })
+        return this.#appendBleTroubleshootingHint(baseMessage)
+    }
+
+    /**
+     * Builds one transport-unsupported status message.
+     * @param {'serial' | 'ble'} transport
+     * @returns {string}
+     */
+    #formatTransportUnsupportedStatusMessage(transport) {
+        const message = this.#t('messages.transportUnsupported', {
+            transport: this.#formatTransportLabel(transport)
+        })
+        return this.#appendBleTroubleshootingHint(message, transport)
     }
 
     /**
@@ -551,12 +604,7 @@ class AppController {
 
         const transport = this.serial.connectionTransportKind
         if (!this.serial.isTransportSupported(transport)) {
-            this.#setStatus(
-                this.#t('messages.transportUnsupported', {
-                    transport: this.#formatTransportLabel(transport)
-                }),
-                'error'
-            )
+            this.#setStatus(this.#formatTransportUnsupportedStatusMessage(transport), 'error')
             this.#syncConnectionUi()
             return false
         }
@@ -568,7 +616,7 @@ class AppController {
             this.#syncConnectionUi()
             return true
         } catch (error) {
-            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            this.#setStatus(this.#formatConnectionFailedStatusMessage(error), 'error')
             this.#syncConnectionUi()
             return false
         }
@@ -2185,12 +2233,7 @@ class AppController {
         this.#syncConnectionTransportUi()
 
         if (!this.serial.isTransportSupported(normalizedTransport)) {
-            this.#setStatus(
-                this.#t('messages.transportUnsupported', {
-                    transport: this.#formatTransportLabel(normalizedTransport)
-                }),
-                'error'
-            )
+            this.#setStatus(this.#formatTransportUnsupportedStatusMessage(normalizedTransport), 'error')
         } else {
             this.#setStatus(
                 this.#t('messages.transportSwitched', {
@@ -2313,7 +2356,7 @@ class AppController {
             if (!version) return
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
         } catch (error) {
-            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            this.#setStatus(this.#formatConnectionFailedStatusMessage(error), 'error')
         } finally {
             this.#syncConnectionUi()
         }
@@ -2325,12 +2368,7 @@ class AppController {
     async #connectSerial() {
         const transport = this.serial.connectionTransportKind
         if (!this.serial.isTransportSupported(transport)) {
-            this.#setStatus(
-                this.#t('messages.transportUnsupported', {
-                    transport: this.#formatTransportLabel(transport)
-                }),
-                'error'
-            )
+            this.#setStatus(this.#formatTransportUnsupportedStatusMessage(transport), 'error')
             this.#syncConnectionUi()
             return
         }
@@ -2340,7 +2378,7 @@ class AppController {
             this.#setStatus(this.#t('messages.eggbotConnected', { version }), 'success')
             this.#syncConnectionUi()
         } catch (error) {
-            this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+            this.#setStatus(this.#formatConnectionFailedStatusMessage(error), 'error')
             this.#syncConnectionUi()
         }
     }
@@ -2387,11 +2425,7 @@ class AppController {
             if (!this.serial.isConnected) {
                 const transport = this.serial.connectionTransportKind
                 if (!this.serial.isTransportSupported(transport)) {
-                    throw new Error(
-                        this.#t('messages.transportUnsupported', {
-                            transport: this.#formatTransportLabel(transport)
-                        })
-                    )
+                    throw new Error(this.#formatTransportUnsupportedStatusMessage(transport))
                 }
                 connectingBeforeDraw = true
                 this.#setStatus(this.#t('messages.connectingBeforeDraw'), 'loading')
@@ -2471,7 +2505,7 @@ class AppController {
             }
         } catch (error) {
             if (connectingBeforeDraw) {
-                this.#setStatus(this.#t('messages.serialConnectFailed', { message: error.message }), 'error')
+                this.#setStatus(this.#formatConnectionFailedStatusMessage(error), 'error')
             } else if (drawCanceledByUser) {
                 this.#setStatus(this.#t('messages.drawCanceledByUser'), 'info')
             } else {
