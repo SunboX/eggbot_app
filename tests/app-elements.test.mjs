@@ -23,5 +23,5 @@ test('AppElements should expose EggBot manual result element from index markup',
     assert.ok(elements.machineWifiOptions)
     assert.ok(elements.wifiHost)
     assert.ok(elements.wifiPort)
-    assert.ok(elements.wifiSecure)
+    assert.equal(elements.wifiSecure, null)
 })

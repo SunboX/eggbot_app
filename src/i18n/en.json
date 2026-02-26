@@ -91,7 +91,6 @@
         "baudRate": "Baud rate",
         "wifiHost": "Wi-Fi host / IP",
         "wifiPort": "Wi-Fi port",
-        "wifiSecure": "Use secure WebSocket (`wss://`)",
         "connect": "Connect",
         "connectSerial": "Connect USB serial",
         "disconnect": "Disconnect",

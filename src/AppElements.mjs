@@ -58,7 +58,7 @@ export class AppElements {
             machineWifiOptions: query('[data-machine-wifi-options]'),
             wifiHost: query('[data-wifi-host]'),
             wifiPort: query('[data-wifi-port]'),
-            wifiSecure: query('[data-wifi-secure]'),
+            wifiSecure: queryOptional('[data-wifi-secure]'),
             baudRate: query('[data-baud-rate]'),
             serialConnect: query('[data-serial-connect]'),
             serialDisconnect: query('[data-serial-disconnect]'),
