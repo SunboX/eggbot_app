@@ -268,6 +268,7 @@ export class WebMcpBridge {
                         wrapAround: { type: 'boolean' },
                         returnHome: { type: 'boolean' },
                         printColorMode: { type: 'string', enum: ['single', 'per-color'] },
+                        inkscapeSvgCompatMode: { type: 'boolean' },
                         engraverEnabled: { type: 'boolean' },
                         curveSmoothing: { type: 'number' },
                         setupApplyAction: { type: 'string' },
@@ -598,6 +599,7 @@ export class WebMcpBridge {
                         wrapAround: { type: 'boolean' },
                         returnHome: { type: 'boolean' },
                         printColorMode: { type: 'string', enum: ['single', 'per-color'] },
+                        inkscapeSvgCompatMode: { type: 'boolean' },
                         engraverEnabled: { type: 'boolean' },
                         curveSmoothing: { type: 'number' },
                         setupApplyAction: { type: 'string' },
@@ -1080,6 +1082,7 @@ export class WebMcpBridge {
             'reverseEggMotor',
             'wrapAround',
             'returnHome',
+            'inkscapeSvgCompatMode',
             'engraverEnabled'
         ]
 

@@ -60,6 +60,7 @@ export class AppRuntimeConfig {
                 wrapAround: true,
                 returnHome: false,
                 printColorMode: 'per-color',
+                inkscapeSvgCompatMode: false,
                 engraverEnabled: false,
                 curveSmoothing: 0.2,
                 setupApplyAction: 'toggle',

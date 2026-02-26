@@ -233,6 +233,7 @@ test('WebMcpBridge should expose transport and printColorMode in draw-config sch
         assert.equal(drawConfigTool.inputSchema?.properties?.wifiPort?.type, 'integer')
         assert.equal(drawConfigTool.inputSchema?.properties?.printColorMode?.type, 'string')
         assert.deepEqual(drawConfigTool.inputSchema?.properties?.printColorMode?.enum, ['single', 'per-color'])
+        assert.equal(drawConfigTool.inputSchema?.properties?.inkscapeSvgCompatMode?.type, 'boolean')
     } finally {
         navigatorMock.restore()
     }

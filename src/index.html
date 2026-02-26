@@ -739,6 +739,12 @@
                             Separate-color mode pauses before each color to let you change pens.
                         </p>
                         <label class="inline-check">
+                            <input type="checkbox" data-control-inkscape-svg-compat-mode />
+                            <span data-i18n="controlDialog.options.inkscapeSvgCompatMode">
+                                Inkscape SVG compatibility mode (import without remapping)
+                            </span>
+                        </label>
+                        <label class="inline-check">
                             <input type="checkbox" data-control-enable-engraver />
                             <span data-i18n="controlDialog.options.enableEngraver">Enable engraver, if attached</span>
                         </label>
@@ -1139,6 +1145,11 @@
                     <option value=""></option>
                     <option value="single">single</option>
                     <option value="per-color">per-color</option>
+                </select>
+                <select name="inkscapeSvgCompatMode">
+                    <option value=""></option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
                 </select>
                 <select name="engraverEnabled">
                     <option value=""></option>

@@ -156,6 +156,7 @@
             "printColorModeSingle": "Draw all strokes with one pen color",
             "printColorModePerColor": "Draw each palette color separately",
             "printColorModeHint": "Separate-color mode pauses before each color to let you change pens.",
+            "inkscapeSvgCompatMode": "Inkscape SVG compatibility mode (keep imported SVG geometry unchanged)",
             "enableEngraver": "Enable engraver, if attached",
             "curveSmoothing": "Curve smoothing (lower for more):"
         },

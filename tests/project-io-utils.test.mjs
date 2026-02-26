@@ -40,6 +40,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(typeof normalized.drawConfig.penUpPercent, 'number')
     assert.equal(typeof normalized.drawConfig.wrapAround, 'boolean')
     assert.equal(typeof normalized.drawConfig.printColorMode, 'string')
+    assert.equal(typeof normalized.drawConfig.inkscapeSvgCompatMode, 'boolean')
 })
 
 test('Default drawing palette should not include white by default', () => {
@@ -49,6 +50,7 @@ test('Default drawing palette should not include white by default', () => {
     assert.equal(defaults.drawConfig.connectionTransport, 'serial')
     assert.equal(defaults.drawConfig.baudRate, 115200)
     assert.equal(defaults.drawConfig.wifiPort, 1337)
+    assert.equal(defaults.drawConfig.inkscapeSvgCompatMode, false)
     assert.equal(normalizedHex.includes('#ffffff'), false)
     assert.equal(normalizedHex.includes('#fff'), false)
     assert.equal(normalizedHex.includes('#f3f0e7'), false)
@@ -80,6 +82,7 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
             curveSmoothing: 8,
             manualWalkDistance: 999999,
             printColorMode: 'unsupported',
+            inkscapeSvgCompatMode: 'true',
             activeControlTab: 'manual'
         }
     })
@@ -99,6 +102,7 @@ test('ProjectIoUtils should clamp extended EggBot control payload fields', () =>
     assert.equal(normalized.drawConfig.curveSmoothing, 2)
     assert.equal(normalized.drawConfig.manualWalkDistance, 64000)
     assert.equal(normalized.drawConfig.printColorMode, 'per-color')
+    assert.equal(normalized.drawConfig.inkscapeSvgCompatMode, true)
     assert.equal(normalized.drawConfig.activeControlTab, 'manual')
     assert.equal(normalized.fillPatterns, false)
 })

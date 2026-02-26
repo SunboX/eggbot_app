@@ -158,6 +158,7 @@ export class ProjectIoUtils {
                     .toLowerCase() === 'single'
                     ? 'single'
                     : 'per-color',
+                inkscapeSvgCompatMode: ProjectIoUtils.#toBoolean(state?.drawConfig?.inkscapeSvgCompatMode, false),
                 engraverEnabled: ProjectIoUtils.#toBoolean(state?.drawConfig?.engraverEnabled, false),
                 curveSmoothing: Math.max(0, Math.min(2, ProjectIoUtils.#toNumber(state?.drawConfig?.curveSmoothing, 0.2))),
                 setupApplyAction:

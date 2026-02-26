@@ -8,7 +8,7 @@ export class SvgPatternImportWorkerParser {
     /**
      * Parses SVG text into renderer strokes.
      * @param {string} svgText
-     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number }} [options]
+     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number, preserveRawHeight?: boolean }} [options]
      * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio: number }}
      */
     static parse(svgText, options = {}) {
@@ -39,10 +39,15 @@ export class SvgPatternImportWorkerParser {
 
         const maxColors = SvgPatternImportWorkerGeometry.clampInt(options.maxColors, 6, 1, 12)
         const sampleSpacing = Math.max(0.6, Number(options.sampleSpacing) || 3)
-        const heightScale = SvgPatternImportWorkerGeometry.clamp(Number(options.heightScale) || 1, 0.1, 3)
-        const heightReference = Math.max(1, Number(options.heightReference) || 800)
-        const baseHeightRatio = viewBox.height / Math.max(viewBox.height, heightReference)
-        const heightRatio = SvgPatternImportWorkerGeometry.clamp(baseHeightRatio * heightScale, 0.02, 3)
+        const preserveRawHeight = options.preserveRawHeight === true
+        const heightScale = preserveRawHeight
+            ? 1
+            : SvgPatternImportWorkerGeometry.clamp(Number(options.heightScale) || 1, 0.1, 3)
+        const heightReference = preserveRawHeight ? 1 : Math.max(1, Number(options.heightReference) || 800)
+        const baseHeightRatio = preserveRawHeight ? 1 : viewBox.height / Math.max(viewBox.height, heightReference)
+        const heightRatio = preserveRawHeight
+            ? 1
+            : SvgPatternImportWorkerGeometry.clamp(baseHeightRatio * heightScale, 0.02, 3)
         const colorToIndex = new Map()
         const palette = []
         const strokes = []

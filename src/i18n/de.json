@@ -156,6 +156,7 @@
             "printColorModeSingle": "Alles mit einer Stiftfarbe zeichnen",
             "printColorModePerColor": "Jede Palettenfarbe getrennt zeichnen",
             "printColorModeHint": "Im getrennten Farbmodus pausiert der Lauf vor jeder Farbe für den Stiftwechsel.",
+            "inkscapeSvgCompatMode": "Inkscape-SVG-Kompatibilitätsmodus (importierte SVG-Geometrie unverändert lassen)",
             "enableEngraver": "Gravieraufsatz aktivieren (falls vorhanden)",
             "curveSmoothing": "Kurvenglättung (niedriger = mehr):"
         },
