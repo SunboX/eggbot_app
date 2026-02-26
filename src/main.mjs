@@ -1287,10 +1287,12 @@ class AppController {
             this.els.wifiPort.value = String(this.state.drawConfig.wifiPort)
             this.#markProjectArtifactsDirty()
         })
-        this.els.wifiSecure.addEventListener('change', () => {
-            this.state.drawConfig.wifiSecure = this.els.wifiSecure.checked
-            this.#markProjectArtifactsDirty()
-        })
+        if (this.els.wifiSecure) {
+            this.els.wifiSecure.addEventListener('change', () => {
+                this.state.drawConfig.wifiSecure = this.els.wifiSecure.checked
+                this.#markProjectArtifactsDirty()
+            })
+        }
         this.els.stepsPerTurn.addEventListener('change', () => {
             this.state.drawConfig.stepsPerTurn = Math.max(
                 100,
@@ -2007,7 +2009,9 @@ class AppController {
         this.state.drawConfig.wifiSecure = AppController.#parseBoolean(this.state?.drawConfig?.wifiSecure, false)
         this.els.wifiHost.value = this.state.drawConfig.wifiHost
         this.els.wifiPort.value = String(this.state.drawConfig.wifiPort)
-        this.els.wifiSecure.checked = this.state.drawConfig.wifiSecure
+        if (this.els.wifiSecure) {
+            this.els.wifiSecure.checked = this.state.drawConfig.wifiSecure
+        }
         this.#syncConnectionTransportUi()
         this.els.stepsPerTurn.value = String(this.state.drawConfig.stepsPerTurn)
         this.els.penRangeSteps.value = String(this.state.drawConfig.penRangeSteps)
@@ -2152,7 +2156,9 @@ class AppController {
                 1,
                 Math.min(65535, AppController.#parseInteger(this.els.wifiPort.value, this.state?.drawConfig?.wifiPort))
             )
-            const wifiSecure = Boolean(this.els.wifiSecure.checked)
+            const wifiSecure = this.els.wifiSecure
+                ? Boolean(this.els.wifiSecure.checked)
+                : AppController.#parseBoolean(this.state?.drawConfig?.wifiSecure, false)
             this.state.drawConfig.wifiHost = wifiHost
             this.state.drawConfig.wifiPort = wifiPort
             this.state.drawConfig.wifiSecure = wifiSecure
