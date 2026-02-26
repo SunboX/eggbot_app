@@ -476,6 +476,101 @@ test('EggBotSerial.drawStrokes should preserve command ordering and progress wit
     }
 })
 
+test('EggBotSerial.drawStrokes should convert pen lift rates from percent-per-second to EBB SC units', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 10, y: 0 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penRaiseRate: 50,
+                penLowerRate: 20
+            }
+        )
+
+        assert.equal(commands.includes('SC,11,250'), true)
+        assert.equal(commands.includes('SC,12,100'), true)
+    } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should use diagonal distance timing like the Inkscape EggBot extension', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 30, y: 40 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.4 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 200,
+                penUpSpeed: 200,
+                penMotorSpeed: 4000,
+                eggMotorSpeed: 4000
+            }
+        )
+
+        assert.equal(commands.some((command) => /^SM,250,40,30$/.test(command)), true)
+    } finally {
+        restoreTimers()
+    }
+})
+
 test('EggBotSerial.drawStrokes should abort cleanly when stop is requested during path preprocessing', async () => {
     const restoreTimers = installFastWindowTimers()
     const { serial, commands } = createConnectedDrawSerial()

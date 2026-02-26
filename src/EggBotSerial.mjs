@@ -170,6 +170,16 @@ export class EggBotSerial {
     }
 
     /**
+     * Converts one servo speed in %/s to EBB SC,11/12 units.
+     * @param {unknown} value
+     * @returns {number}
+     */
+    static #toEbbServoRate(value) {
+        const percentPerSecond = Math.max(1, Math.min(100, Math.round(Number(value) || 0)))
+        return Math.max(1, percentPerSecond * 5)
+    }
+
+    /**
      * Opens and initializes one serial port.
      * @param {SerialPort} port
      * @param {{ baudRate?: number }} [options]
@@ -515,14 +525,14 @@ export class EggBotSerial {
             await this.sendCommand(`SC,5,${cfg.servoDown}`)
             if (Number.isFinite(Number(drawConfig.penRaiseRate))) {
                 try {
-                    await this.sendCommand(`SC,11,${cfg.penRaiseRate}`)
+                    await this.sendCommand(`SC,11,${EggBotSerial.#toEbbServoRate(cfg.penRaiseRate)}`)
                 } catch (_error) {
                     // Ignore unsupported EBB servo-rate slots.
                 }
             }
             if (Number.isFinite(Number(drawConfig.penLowerRate))) {
                 try {
-                    await this.sendCommand(`SC,12,${cfg.penLowerRate}`)
+                    await this.sendCommand(`SC,12,${EggBotSerial.#toEbbServoRate(cfg.penLowerRate)}`)
                 } catch (_error) {
                     // Ignore unsupported EBB servo-rate slots.
                 }
@@ -819,6 +829,27 @@ export class EggBotSerial {
     }
 
     /**
+     * Resolves one move duration using Inkscape EggBot timing semantics.
+     * @param {number} deltaX
+     * @param {number} deltaY
+     * @param {number} speedStepsPerSecond
+     * @param {{ penMotorSpeed: number, eggMotorSpeed: number }} cfg
+     * @returns {number}
+     */
+    #resolveMoveDurationMs(deltaX, deltaY, speedStepsPerSecond, cfg) {
+        const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
+        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
+        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
+
+        const distanceSteps = Math.hypot(deltaX, deltaY)
+        const profileDurationMs = distanceSteps > 0 ? Math.ceil((distanceSteps / profileSpeed) * 1000) : 0
+        const penDurationMs = Math.ceil((Math.abs(deltaY) / penMotorSpeed) * 1000)
+        const eggDurationMs = Math.ceil((Math.abs(deltaX) / eggMotorSpeed) * 1000)
+
+        return Math.max(1, profileDurationMs, penDurationMs, eggDurationMs)
+    }
+
+    /**
      * Estimates one move duration and mutates the provided point to target.
      * @param {{x:number,y:number}} target
      * @param {{x:number,y:number}} current
@@ -832,11 +863,6 @@ export class EggBotSerial {
         if (dx === 0 && dy === 0) return 0
 
         const settleDelayMs = 6
-        const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
-        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
-        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
-        const effectivePenSpeed = Math.min(profileSpeed, penMotorSpeed)
-        const effectiveEggSpeed = Math.min(profileSpeed, eggMotorSpeed)
         const maxChunk = 1200
         let totalMs = 0
 
@@ -846,9 +872,7 @@ export class EggBotSerial {
             const stepY = Math.trunc(dy / scale)
             const chunkX = stepX === 0 ? Math.sign(dx) : stepX
             const chunkY = stepY === 0 ? Math.sign(dy) : stepY
-            const penDurationMs = (Math.abs(chunkY) / effectivePenSpeed) * 1000
-            const eggDurationMs = (Math.abs(chunkX) / effectiveEggSpeed) * 1000
-            const durationMs = Math.max(8, Math.round(Math.max(penDurationMs, eggDurationMs)))
+            const durationMs = this.#resolveMoveDurationMs(chunkX, chunkY, speedStepsPerSecond, cfg)
             totalMs += durationMs + settleDelayMs
 
             current.x += chunkX
@@ -875,11 +899,6 @@ export class EggBotSerial {
         if (dx === 0 && dy === 0) return
 
         const settleDelayMs = 6
-        const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
-        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
-        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
-        const effectivePenSpeed = Math.min(profileSpeed, penMotorSpeed)
-        const effectiveEggSpeed = Math.min(profileSpeed, eggMotorSpeed)
         const maxChunk = 1200
         while (dx !== 0 || dy !== 0) {
             if (this.abortDrawing) return
@@ -888,9 +907,7 @@ export class EggBotSerial {
             const stepY = Math.trunc(dy / scale)
             const chunkX = stepX === 0 ? Math.sign(dx) : stepX
             const chunkY = stepY === 0 ? Math.sign(dy) : stepY
-            const penDurationMs = (Math.abs(chunkY) / effectivePenSpeed) * 1000
-            const eggDurationMs = (Math.abs(chunkX) / effectiveEggSpeed) * 1000
-            const durationMs = Math.max(8, Math.round(Math.max(penDurationMs, eggDurationMs)))
+            const durationMs = this.#resolveMoveDurationMs(chunkX, chunkY, speedStepsPerSecond, cfg)
             // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
             const axis1Pen = cfg.reversePenMotor ? -chunkY : chunkY
             const axis2Egg = cfg.reverseEggMotor ? -chunkX : chunkX
