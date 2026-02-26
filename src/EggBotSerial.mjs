@@ -858,30 +858,15 @@ export class EggBotSerial {
      * @returns {number}
      */
     #estimateMoveDurationMs(target, current, speedStepsPerSecond, cfg) {
-        let dx = Math.round(target.x - current.x)
-        let dy = Math.round(target.y - current.y)
+        const dx = Math.round(target.x - current.x)
+        const dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return 0
 
         const settleDelayMs = 6
-        const maxChunk = 1200
-        let totalMs = 0
-
-        while (dx !== 0 || dy !== 0) {
-            const scale = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / maxChunk))
-            const stepX = Math.trunc(dx / scale)
-            const stepY = Math.trunc(dy / scale)
-            const chunkX = stepX === 0 ? Math.sign(dx) : stepX
-            const chunkY = stepY === 0 ? Math.sign(dy) : stepY
-            const durationMs = this.#resolveMoveDurationMs(chunkX, chunkY, speedStepsPerSecond, cfg)
-            totalMs += durationMs + settleDelayMs
-
-            current.x += chunkX
-            current.y += chunkY
-            dx -= chunkX
-            dy -= chunkY
-        }
-
-        return totalMs
+        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond, cfg)
+        current.x = Math.round(target.x)
+        current.y = Math.round(target.y)
+        return durationMs + settleDelayMs
     }
 
     /**
@@ -894,34 +879,25 @@ export class EggBotSerial {
      * @returns {Promise<void>}
      */
     async #moveTo(target, current, speedStepsPerSecond, cfg, onChunkComplete) {
-        let dx = Math.round(target.x - current.x)
-        let dy = Math.round(target.y - current.y)
+        const dx = Math.round(target.x - current.x)
+        const dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return
 
         const settleDelayMs = 6
-        const maxChunk = 1200
-        while (dx !== 0 || dy !== 0) {
-            if (this.abortDrawing) return
-            const scale = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / maxChunk))
-            const stepX = Math.trunc(dx / scale)
-            const stepY = Math.trunc(dy / scale)
-            const chunkX = stepX === 0 ? Math.sign(dx) : stepX
-            const chunkY = stepY === 0 ? Math.sign(dy) : stepY
-            const durationMs = this.#resolveMoveDurationMs(chunkX, chunkY, speedStepsPerSecond, cfg)
-            // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
-            const axis1Pen = cfg.reversePenMotor ? -chunkY : chunkY
-            const axis2Egg = cfg.reverseEggMotor ? -chunkX : chunkX
+        if (this.abortDrawing) return
 
-            await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
-            await EggBotSerial.#sleep(durationMs + settleDelayMs)
+        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond, cfg)
+        // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
+        const axis1Pen = cfg.reversePenMotor ? -dy : dy
+        const axis2Egg = cfg.reverseEggMotor ? -dx : dx
 
-            current.x += chunkX
-            current.y += chunkY
-            dx -= chunkX
-            dy -= chunkY
-            if (typeof onChunkComplete === 'function') {
-                onChunkComplete(durationMs + settleDelayMs)
-            }
+        await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
+        await EggBotSerial.#sleep(durationMs + settleDelayMs)
+
+        current.x = Math.round(target.x)
+        current.y = Math.round(target.y)
+        if (typeof onChunkComplete === 'function') {
+            onChunkComplete(durationMs + settleDelayMs)
         }
     }
 
