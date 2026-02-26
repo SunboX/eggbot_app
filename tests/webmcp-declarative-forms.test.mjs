@@ -41,6 +41,7 @@ function createDeclarativeFixture() {
                     <input name="connectionTransport" />
                     <input name="wifiSecure" />
                     <input name="printColorMode" />
+                    <input name="inkscapeSvgCompatMode" />
                     <input name="manualWalkDistance" />
                     <button type="submit">submit</button>
                 </form>
@@ -374,6 +375,7 @@ test('WebMcpBridge should parse declarative draw-config form into setDrawConfig 
         form.querySelector('[name="connectionTransport"]').value = 'ble'
         form.querySelector('[name="wifiSecure"]').value = 'false'
         form.querySelector('[name="printColorMode"]').value = 'single'
+        form.querySelector('[name="inkscapeSvgCompatMode"]').value = 'true'
         form.querySelector('[name="manualWalkDistance"]').value = '2400'
 
         const response = await dispatchDeclarativeSubmit(form, window)
@@ -383,6 +385,7 @@ test('WebMcpBridge should parse declarative draw-config form into setDrawConfig 
             connectionTransport: 'ble',
             wifiSecure: false,
             printColorMode: 'single',
+            inkscapeSvgCompatMode: true,
             manualWalkDistance: 2400
         })
     } finally {

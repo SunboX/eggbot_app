@@ -103,6 +103,7 @@ export class AppElements {
             controlReturnHome: query('[data-control-return-home]'),
             controlPrintColorModeSingle: query('[data-control-print-color-mode-single]'),
             controlPrintColorModePerColor: query('[data-control-print-color-mode-per-color]'),
+            controlInkscapeSvgCompatMode: query('[data-control-inkscape-svg-compat-mode]'),
             controlEnableEngraver: query('[data-control-enable-engraver]'),
             controlCurveSmoothing: query('[data-control-curve-smoothing]'),
             controlManualCommand: query('[data-control-manual-command]'),

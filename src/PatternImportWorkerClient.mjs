@@ -10,7 +10,7 @@ export class PatternImportWorkerClient {
     /**
      * Parses SVG text in the worker thread.
      * @param {string} svgText
-     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number }} [options]
+     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number, preserveRawHeight?: boolean }} [options]
      * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
      */
     parse(svgText, options = {}) {

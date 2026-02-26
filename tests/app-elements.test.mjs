@@ -24,4 +24,6 @@ test('AppElements should expose EggBot manual result element from index markup',
     assert.ok(elements.wifiHost)
     assert.ok(elements.wifiPort)
     assert.equal(elements.wifiSecure, null)
+    assert.ok(elements.controlInkscapeSvgCompatMode)
+    assert.equal(elements.controlInkscapeSvgCompatMode.getAttribute('data-control-inkscape-svg-compat-mode'), '')
 })

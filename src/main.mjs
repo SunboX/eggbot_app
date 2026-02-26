@@ -718,6 +718,7 @@ class AppController {
         this.state.drawConfig.wrapAround = this.state.drawConfig.wrapAround !== false
         this.state.drawConfig.returnHome = Boolean(this.state.drawConfig.returnHome)
         this.state.drawConfig.printColorMode = AppController.#normalizePrintColorMode(this.state.drawConfig.printColorMode)
+        this.state.drawConfig.inkscapeSvgCompatMode = Boolean(this.state.drawConfig.inkscapeSvgCompatMode)
         this.state.drawConfig.engraverEnabled = Boolean(this.state.drawConfig.engraverEnabled)
         this.state.drawConfig.curveSmoothing = Math.max(
             0,
@@ -729,6 +730,7 @@ class AppController {
         this.els.controlReturnHome.checked = this.state.drawConfig.returnHome
         this.els.controlPrintColorModeSingle.checked = this.state.drawConfig.printColorMode === 'single'
         this.els.controlPrintColorModePerColor.checked = this.state.drawConfig.printColorMode === 'per-color'
+        this.els.controlInkscapeSvgCompatMode.checked = this.state.drawConfig.inkscapeSvgCompatMode
         this.els.controlEnableEngraver.checked = this.state.drawConfig.engraverEnabled
         this.els.controlCurveSmoothing.value = this.state.drawConfig.curveSmoothing.toFixed(2)
 
@@ -1225,40 +1227,8 @@ class AppController {
             this.#scheduleRender()
         })
         this.els.importHeightScale.addEventListener('change', async () => {
-            if (!this.importedPattern?.svgText || this.isPatternImporting) return
-            clearTimeout(this.renderDebounceTimer)
-            this.isPatternImporting = true
-            this.#syncPatternImportUi()
-            this.#setStatus(this.#t('messages.patternImportParsing', { name: this.importedPattern.name }), 'loading')
-            try {
-                const parsed = await this.#parseImportedPattern(this.importedPattern.svgText)
-                if (!this.importedPattern) return
-                this.importedPattern.strokes = parsed.strokes
-                this.importedPattern.heightRatio = parsed.heightRatio
-                this.importedPattern.heightScale = this.state.importHeightScale
-                this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: this.importedPattern.name }), 'loading')
-                await this.#renderImportedPreviewAndWait()
-                this.#setStatus(
-                    this.#t('messages.patternImported', {
-                        name: this.importedPattern.name,
-                        count: this.state.strokes.length
-                    }),
-                    'success'
-                )
-            } catch (error) {
-                if (error?.message === 'no-drawable-geometry') {
-                    this.#setStatus(this.#t('messages.noDrawableGeometry'), 'error')
-                } else if (error?.message === 'invalid-svg') {
-                    this.#setStatus(this.#t('messages.invalidSvgFile'), 'error')
-                } else if (error?.message === 'preview-timeout' || error?.message === 'preview-render-failed') {
-                    this.#setStatus(this.#t('messages.previewPreparationFailed'), 'error')
-                } else {
-                    this.#setStatus(this.#t('messages.patternImportFailed', { message: error.message }), 'error')
-                }
-            } finally {
-                this.isPatternImporting = false
-                this.#syncPatternImportUi()
-            }
+            if (this.#isInkscapeSvgCompatModeEnabled()) return
+            await this.#reparseImportedPatternFromCurrentSettings()
         })
         this.els.showHorizontalLines.addEventListener('change', () => {
             this.state.showHorizontalLines = this.els.showHorizontalLines.checked
@@ -1510,6 +1480,12 @@ class AppController {
             this.state.drawConfig.printColorMode = 'per-color'
             this.#markProjectArtifactsDirty()
         })
+        this.els.controlInkscapeSvgCompatMode.addEventListener('change', async () => {
+            this.state.drawConfig.inkscapeSvgCompatMode = this.els.controlInkscapeSvgCompatMode.checked
+            this.#markProjectArtifactsDirty()
+            if (!this.importedPattern?.svgText) return
+            await this.#reparseImportedPatternFromCurrentSettings()
+        })
         this.els.controlEnableEngraver.addEventListener('change', () => {
             this.state.drawConfig.engraverEnabled = this.els.controlEnableEngraver.checked
             this.#markProjectArtifactsDirty()
@@ -1678,12 +1654,23 @@ class AppController {
     }
 
     /**
+     * Returns true when Inkscape SVG compatibility mode is enabled.
+     * @returns {boolean}
+     */
+    #isInkscapeSvgCompatModeEnabled() {
+        return Boolean(this.state?.drawConfig?.inkscapeSvgCompatMode)
+    }
+
+    /**
      * Resolves currently active render height ratio.
      * @returns {number}
      */
     #resolveActiveRenderHeightRatio() {
         if (!this.importedPattern) {
             return PatternStrokeScaleUtils.clampRatio(this.state.importHeightScale)
+        }
+        if (this.#isInkscapeSvgCompatModeEnabled()) {
+            return 1
         }
         return ImportedPatternScaleUtils.resolvePreviewHeightRatio({
             parsedHeightRatio: this.importedPattern.heightRatio,
@@ -1727,6 +1714,9 @@ class AppController {
     #buildRenderedStrokes() {
         const activeHeightRatio = this.#resolveActiveRenderHeightRatio()
         if (this.importedPattern) {
+            if (this.#isInkscapeSvgCompatModeEnabled()) {
+                return this.importedPattern.strokes
+            }
             const sourceHeightRatio = PatternStrokeScaleUtils.clampRatio(this.importedPattern.heightRatio)
             return PatternStrokeScaleUtils.rescaleStrokes(this.importedPattern.strokes, sourceHeightRatio, activeHeightRatio)
         }
@@ -2263,6 +2253,9 @@ class AppController {
      */
     #buildDrawColorBatches(strokes) {
         const sourceStrokes = Array.isArray(strokes) ? strokes : []
+        if (this.importedPattern && this.#isInkscapeSvgCompatModeEnabled()) {
+            return [{ colorIndex: null, strokes: sourceStrokes }]
+        }
         const colorMode = AppController.#normalizePrintColorMode(this.state?.drawConfig?.printColorMode)
         if (colorMode !== 'per-color') {
             return [{ colorIndex: null, strokes: sourceStrokes }]
@@ -2541,6 +2534,90 @@ class AppController {
         this.els.loadPattern.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
         this.els.status.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
     }
+
+    /**
+     * Resolves parse options for imported SVG handling.
+     * @returns {{ maxColors: number, heightScale: number, heightReference: number, preserveRawHeight?: boolean }}
+     */
+    #resolveImportedPatternParseOptions() {
+        if (this.#isInkscapeSvgCompatModeEnabled()) {
+            return {
+                maxColors: 6,
+                heightScale: 1,
+                heightReference: 1,
+                preserveRawHeight: true
+            }
+        }
+        return {
+            maxColors: 6,
+            heightScale: this.state.importHeightScale,
+            heightReference: IMPORT_HEIGHT_REFERENCE
+        }
+    }
+
+    /**
+     * Resolves and stores parse-time height scale metadata.
+     * @returns {number}
+     */
+    #resolveImportedPatternStoredHeightScale() {
+        return this.#isInkscapeSvgCompatModeEnabled() ? 1 : this.state.importHeightScale
+    }
+
+    /**
+     * Applies shared status mapping for imported-pattern parse/render failures.
+     * @param {unknown} error
+     */
+    #setImportedPatternErrorStatus(error) {
+        if (error?.message === 'no-drawable-geometry') {
+            this.#setStatus(this.#t('messages.noDrawableGeometry'), 'error')
+            return
+        }
+        if (error?.message === 'invalid-svg') {
+            this.#setStatus(this.#t('messages.invalidSvgFile'), 'error')
+            return
+        }
+        if (error?.message === 'preview-timeout' || error?.message === 'preview-render-failed') {
+            this.#setStatus(this.#t('messages.previewPreparationFailed'), 'error')
+            return
+        }
+        this.#setStatus(this.#t('messages.patternImportFailed', { message: String(error?.message || error) }), 'error')
+    }
+
+    /**
+     * Re-parses the active imported SVG using current import mode settings.
+     * @returns {Promise<void>}
+     */
+    async #reparseImportedPatternFromCurrentSettings() {
+        if (!this.importedPattern?.svgText || this.isPatternImporting) return
+        const importedPatternName = String(this.importedPattern.name || this.#t('project.defaultName'))
+        clearTimeout(this.renderDebounceTimer)
+        this.isPatternImporting = true
+        this.#syncPatternImportUi()
+        this.#setStatus(this.#t('messages.patternImportParsing', { name: importedPatternName }), 'loading')
+
+        try {
+            const parsed = await this.#parseImportedPattern(this.importedPattern.svgText)
+            if (!this.importedPattern) return
+            this.importedPattern.strokes = parsed.strokes
+            this.importedPattern.heightRatio = parsed.heightRatio
+            this.importedPattern.heightScale = this.#resolveImportedPatternStoredHeightScale()
+            this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: importedPatternName }), 'loading')
+            await this.#renderImportedPreviewAndWait()
+            this.#setStatus(
+                this.#t('messages.patternImported', {
+                    name: importedPatternName,
+                    count: this.state.strokes.length
+                }),
+                'success'
+            )
+        } catch (error) {
+            this.#setImportedPatternErrorStatus(error)
+        } finally {
+            this.isPatternImporting = false
+            this.#syncPatternImportUi()
+        }
+    }
+
     /**
      * Enables/disables auto-generated ornament controls for imported SVG mode.
      */
@@ -2557,11 +2634,7 @@ class AppController {
      * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
      */
     async #parseImportedPattern(svgText) {
-        return this.patternImportWorker.parse(svgText, {
-            maxColors: 6,
-            heightScale: this.state.importHeightScale,
-            heightReference: IMPORT_HEIGHT_REFERENCE
-        })
+        return this.patternImportWorker.parse(svgText, this.#resolveImportedPatternParseOptions())
     }
     /**
      * Imports an SVG pattern file and switches render mode to imported strokes.
@@ -2592,7 +2665,7 @@ class AppController {
                 strokes: parsed.strokes,
                 svgText,
                 heightRatio: parsed.heightRatio,
-                heightScale: this.state.importHeightScale
+                heightScale: this.#resolveImportedPatternStoredHeightScale()
             }
             this.#syncAutoGenerateOrnamentControlsUi()
             if (parsed.palette.length) {
@@ -3476,6 +3549,7 @@ class AppController {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let didMutateState = false
         let requestedTransportSwitch = null
+        let shouldReparseImportedPattern = false
 
         if (Object.hasOwn(patch, 'connectionTransport')) {
             const requestedTransport = String(patch.connectionTransport || '')
@@ -3648,6 +3722,17 @@ class AppController {
             this.state.drawConfig.printColorMode = AppController.#normalizePrintColorMode(patch.printColorMode)
             didMutateState = true
         }
+        if (Object.hasOwn(patch, 'inkscapeSvgCompatMode')) {
+            const nextCompatMode = AppController.#parseBoolean(
+                patch.inkscapeSvgCompatMode,
+                this.state.drawConfig.inkscapeSvgCompatMode
+            )
+            if (nextCompatMode !== this.state.drawConfig.inkscapeSvgCompatMode) {
+                shouldReparseImportedPattern = Boolean(this.importedPattern?.svgText)
+            }
+            this.state.drawConfig.inkscapeSvgCompatMode = nextCompatMode
+            didMutateState = true
+        }
         if (Object.hasOwn(patch, 'engraverEnabled')) {
             this.state.drawConfig.engraverEnabled = AppController.#parseBoolean(
                 patch.engraverEnabled,
@@ -3712,6 +3797,9 @@ class AppController {
         }
 
         this.#syncControlsFromState()
+        if (shouldReparseImportedPattern) {
+            await this.#reparseImportedPatternFromCurrentSettings()
+        }
         return {
             message: 'Draw configuration updated.',
             state: this.#webMcpStateSnapshot()
@@ -3773,7 +3861,7 @@ class AppController {
                 strokes: parsed.strokes,
                 svgText,
                 heightRatio: parsed.heightRatio,
-                heightScale: this.state.importHeightScale
+                heightScale: this.#resolveImportedPatternStoredHeightScale()
             }
             this.#syncAutoGenerateOrnamentControlsUi()
             if (parsed.palette.length) {
