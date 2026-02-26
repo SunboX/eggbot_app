@@ -12,7 +12,7 @@ Live app: [https://eggbot.app/](https://eggbot.app/)
 - SVG export of current visible pattern
 - local project storage
 - rotatable 3D egg preview
-- direct EggBot drawing via Web Serial, BLE, or Wi-Fi/WebSocket (EBB command stream)
+- direct EggBot drawing via Web Serial or BLE (EBB command stream)
 - WebMCP tool surface with full imperative and declarative coverage
 - worker-backed compute/render/import/draw-prep paths with automatic fallback
 
@@ -46,7 +46,7 @@ Open [http://localhost:3000/](http://localhost:3000/).
 
 ## EggBot Notes
 
-- Supports Web Serial, Web Bluetooth (BLE), and WebSocket (Wi-Fi) transport modes.
+- Supports Web Serial and Web Bluetooth (BLE) transport modes.
 - Uses EBB commands `SC`, `SP`, `EM`, and `SM`.
 - Calibrate `servo up/down` values and motion mapping before production runs.
 - BLE debug mode on localhost: append `?bleDebugScan=1&bleDebugLog=1` to show all nearby BLE devices and print staged logs in DevTools.

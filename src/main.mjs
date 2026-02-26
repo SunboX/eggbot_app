@@ -21,6 +21,7 @@ import { PatternImportControlUtils } from './PatternImportControlUtils.mjs'
 import { WebMcpBridge } from './WebMcpBridge.mjs'
 import { IdleScheduler } from './IdleScheduler.mjs'
 import { SvgProjectNameUtils } from './SvgProjectNameUtils.mjs'
+import { FileInputPromptUtils } from './FileInputPromptUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
 const SETTINGS_STORAGE_KEY = 'eggbot.settings.v1'
 const IMPORT_HEIGHT_REFERENCE = 800
@@ -35,7 +36,7 @@ const IDLE_TIMEOUT_SETTINGS_PERSIST_MS = 450
 const LOCAL_PROJECT_RENDER_IDLE_CHUNK_SIZE = 30
 const LOCAL_PROJECT_RENDER_IDLE_THRESHOLD = 100
 const EGGBOT_CONTROL_TABS = ['plot', 'setup', 'timing', 'options', 'manual', 'resume', 'layers', 'advanced']
-const EGGBOT_TRANSPORTS = ['serial', 'ble', 'wifi']
+const EGGBOT_TRANSPORTS = ['serial', 'ble']
 const SERVO_VALUE_MIN = 5000
 const SERVO_VALUE_MAX = 25000
 /**
@@ -2084,7 +2085,7 @@ class AppController {
 
     /**
      * Resolves one validated transport mode from draw configuration.
-     * @returns {'serial' | 'ble' | 'wifi'}
+     * @returns {'serial' | 'ble'}
      */
     #resolveConnectionTransportKind() {
         const requested = String(this.state?.drawConfig?.connectionTransport || '')
@@ -2146,28 +2147,10 @@ class AppController {
 
     /**
      * Resolves transport-specific connection options.
-     * @returns {{ baudRate?: number, host?: string, port?: number, secure?: boolean, debugScan?: boolean, debugLog?: boolean }}
+     * @returns {{ baudRate?: number, debugScan?: boolean, debugLog?: boolean }}
      */
     #buildTransportConnectOptions() {
         const transport = this.serial.connectionTransportKind
-        if (transport === 'wifi') {
-            const wifiHost = String(this.els.wifiHost.value || this.state?.drawConfig?.wifiHost || '').trim()
-            const wifiPort = Math.max(
-                1,
-                Math.min(65535, AppController.#parseInteger(this.els.wifiPort.value, this.state?.drawConfig?.wifiPort))
-            )
-            const wifiSecure = this.els.wifiSecure
-                ? Boolean(this.els.wifiSecure.checked)
-                : AppController.#parseBoolean(this.state?.drawConfig?.wifiSecure, false)
-            this.state.drawConfig.wifiHost = wifiHost
-            this.state.drawConfig.wifiPort = wifiPort
-            this.state.drawConfig.wifiSecure = wifiSecure
-            return {
-                host: wifiHost,
-                port: wifiPort,
-                secure: wifiSecure
-            }
-        }
         if (transport === 'ble') {
             return this.#resolveBleConnectDebugOptions()
         }
@@ -2182,7 +2165,7 @@ class AppController {
     #syncConnectionTransportUi() {
         const transport = this.serial.connectionTransportKind
         this.els.machineBaudRateRow.hidden = transport !== 'serial'
-        this.els.machineWifiOptions.hidden = transport !== 'wifi'
+        this.els.machineWifiOptions.hidden = true
         this.els.connectionTransport.value = transport
 
         const connectLabel = `${this.#t('machine.connect')} ${this.#formatTransportLabel(transport)}`
@@ -2222,12 +2205,11 @@ class AppController {
 
     /**
      * Formats one localized transport label.
-     * @param {'serial' | 'ble' | 'wifi'} transport
+     * @param {'serial' | 'ble'} transport
      * @returns {string}
      */
     #formatTransportLabel(transport) {
         if (transport === 'ble') return this.#t('machine.transportBle')
-        if (transport === 'wifi') return this.#t('machine.transportWifi')
         return this.#t('machine.transportSerial')
     }
 
@@ -2641,26 +2623,9 @@ class AppController {
             })
             return handle ? handle.getFile() : null
         }
-        return new Promise((resolve) => {
-            const input = this.els.patternInput
-            const onChange = () => {
-                cleanup()
-                resolve(input.files?.[0] ?? null)
-            }
-            const onFocus = () => {
-                window.setTimeout(() => {
-                    cleanup()
-                    resolve(null)
-                }, 0)
-            }
-            const cleanup = () => {
-                input.removeEventListener('change', onChange)
-                window.removeEventListener('focus', onFocus)
-            }
-            input.value = ''
-            input.addEventListener('change', onChange)
-            window.addEventListener('focus', onFocus, { once: true })
-            input.click()
+        return FileInputPromptUtils.promptSingleFile({
+            input: this.els.patternInput,
+            windowObject: window
         })
     }
     /**
@@ -2895,26 +2860,9 @@ class AppController {
             })
             return handle ? handle.getFile() : null
         }
-        return new Promise((resolve) => {
-            const input = this.els.loadInput
-            const onChange = () => {
-                cleanup()
-                resolve(input.files?.[0] ?? null)
-            }
-            const onFocus = () => {
-                window.setTimeout(() => {
-                    cleanup()
-                    resolve(null)
-                }, 0)
-            }
-            const cleanup = () => {
-                input.removeEventListener('change', onChange)
-                window.removeEventListener('focus', onFocus)
-            }
-            input.value = ''
-            input.addEventListener('change', onChange)
-            window.addEventListener('focus', onFocus, { once: true })
-            input.click()
+        return FileInputPromptUtils.promptSingleFile({
+            input: this.els.loadInput,
+            windowObject: window
         })
     }
     /**
