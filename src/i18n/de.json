@@ -214,6 +214,7 @@
         "transportSwitchFailed": "Transportwechsel fehlgeschlagen: {{message}}",
         "transportUnsupported": "{{transport}} wird in diesem Browser nicht unterstützt.",
         "serialConnectFailed": "Verbindung fehlgeschlagen: {{message}}",
+        "bleLinuxChromiumTroubleshooting": "Hinweis für Linux/Chromium:\nWeb Bluetooth ist auf Linux in Chromium teilweise experimentell.\n- chrome://flags/#enable-experimental-web-platform-features aktivieren\n- BlueZ/Bluetooth-Dienst muss laufen",
         "eggbotDisconnected": "EggBot getrennt.",
         "disconnectFailed": "Trennen fehlgeschlagen: {{message}}",
         "noPatternToDraw": "Noch kein Muster zum Zeichnen vorhanden. Bitte zuerst generieren.",
