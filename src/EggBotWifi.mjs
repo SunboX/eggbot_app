@@ -181,8 +181,12 @@ export class EggBotWifi extends EggBotSerial {
      * @returns {string}
      */
     #resolveSocketUrl(options) {
+        const forceSecureProtocol = EggBotWifi.#isHttpsPage()
         const explicitUrl = String(options?.url || '').trim()
         if (explicitUrl) {
+            if (forceSecureProtocol && /^ws:\/\//i.test(explicitUrl)) {
+                return explicitUrl.replace(/^ws:\/\//i, 'wss://')
+            }
             return explicitUrl
         }
 
@@ -192,10 +196,19 @@ export class EggBotWifi extends EggBotSerial {
         }
 
         const port = EggBotWifi.#normalizePort(options?.port)
-        const secure = Boolean(options?.secure)
+        const secure = forceSecureProtocol || Boolean(options?.secure)
         const protocol = secure ? 'wss' : 'ws'
         const path = EggBotWifi.#normalizePath(options?.path)
         return `${protocol}://${host}:${port}${path}`
+    }
+
+    /**
+     * Returns true when running in one HTTPS page context.
+     * @returns {boolean}
+     */
+    static #isHttpsPage() {
+        if (typeof window === 'undefined' || !window?.location) return false
+        return String(window.location.protocol || '').trim().toLowerCase() === 'https:'
     }
 
     /**

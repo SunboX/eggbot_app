@@ -7,15 +7,20 @@ const BLE_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
 
 /**
  * Installs browser-like timer + localStorage mocks.
+ * @param {{ protocol?: string }} [options]
  * @returns {() => void}
  */
-function installBrowserWindow() {
+function installBrowserWindow(options = {}) {
     const originalWindow = globalThis.window
     const localStorageData = new Map()
+    const protocol = String(options?.protocol || 'http:').trim() || 'http:'
 
     globalThis.window = {
         setTimeout,
         clearTimeout,
+        location: {
+            protocol
+        },
         localStorage: {
             getItem(key) {
                 return localStorageData.has(key) ? localStorageData.get(key) : null
@@ -151,6 +156,25 @@ test('EggBotWifi should parse fragmented websocket response lines', async () => 
         const response = await pending
         assert.equal(response, 'EBBv13.0')
         assert.equal(socket.sent[socket.sent.length - 1], 'v\r')
+    } finally {
+        await wifi.disconnect()
+        globalThis.WebSocket = originalWebSocket
+        restoreWindow()
+    }
+})
+
+test('EggBotWifi should use secure websocket on https pages', async () => {
+    const restoreWindow = installBrowserWindow({ protocol: 'https:' })
+    const originalWebSocket = globalThis.WebSocket
+    const { MockSocket } = createWebSocketMock()
+    globalThis.WebSocket = MockSocket
+
+    const wifi = new EggBotWifi()
+    try {
+        await wifi.connect({ host: '192.168.1.42', port: 1337, secure: false })
+        const socket = MockSocket.instances[0]
+        assert.ok(socket)
+        assert.equal(socket.url, 'wss://192.168.1.42:1337/')
     } finally {
         await wifi.disconnect()
         globalThis.WebSocket = originalWebSocket
