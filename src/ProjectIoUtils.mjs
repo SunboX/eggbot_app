@@ -90,7 +90,7 @@ export class ProjectIoUtils {
                 diamonds: ProjectIoUtils.#toBoolean(state?.motifs?.diamonds, true)
             },
             drawConfig: {
-                connectionTransport: ['serial', 'ble', 'wifi'].includes(
+                connectionTransport: ['serial', 'ble'].includes(
                     String(state?.drawConfig?.connectionTransport || '')
                         .trim()
                         .toLowerCase()

@@ -228,7 +228,7 @@ test('WebMcpBridge should expose transport and printColorMode in draw-config sch
             .find((tool) => tool.name === 'eggbot_set_draw_config')
         assert.ok(drawConfigTool)
         assert.equal(drawConfigTool.inputSchema?.properties?.connectionTransport?.type, 'string')
-        assert.deepEqual(drawConfigTool.inputSchema?.properties?.connectionTransport?.enum, ['serial', 'ble', 'wifi'])
+        assert.deepEqual(drawConfigTool.inputSchema?.properties?.connectionTransport?.enum, ['serial', 'ble'])
         assert.equal(drawConfigTool.inputSchema?.properties?.wifiHost?.type, 'string')
         assert.equal(drawConfigTool.inputSchema?.properties?.wifiPort?.type, 'integer')
         assert.equal(drawConfigTool.inputSchema?.properties?.printColorMode?.type, 'string')

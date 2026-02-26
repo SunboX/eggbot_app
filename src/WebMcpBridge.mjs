@@ -242,7 +242,7 @@ export class WebMcpBridge {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        connectionTransport: { type: 'string', enum: ['serial', 'ble', 'wifi'] },
+                        connectionTransport: { type: 'string', enum: ['serial', 'ble'] },
                         baudRate: { type: 'integer' },
                         wifiHost: { type: 'string' },
                         wifiPort: { type: 'integer' },
@@ -572,7 +572,7 @@ export class WebMcpBridge {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        connectionTransport: { type: 'string', enum: ['serial', 'ble', 'wifi'] },
+                        connectionTransport: { type: 'string', enum: ['serial', 'ble'] },
                         baudRate: { type: 'integer' },
                         wifiHost: { type: 'string' },
                         wifiPort: { type: 'integer' },

@@ -123,7 +123,7 @@ test('ProjectIoUtils should keep single print mode when provided', () => {
     assert.equal(normalized.drawConfig.printColorMode, 'single')
 })
 
-test('ProjectIoUtils should preserve transport and Wi-Fi draw settings', () => {
+test('ProjectIoUtils should reject Wi-Fi transport while preserving Wi-Fi fields', () => {
     const normalized = ProjectIoUtils.normalizeProjectState({
         drawConfig: {
             connectionTransport: 'wifi',
@@ -133,7 +133,7 @@ test('ProjectIoUtils should preserve transport and Wi-Fi draw settings', () => {
         }
     })
 
-    assert.equal(normalized.drawConfig.connectionTransport, 'wifi')
+    assert.equal(normalized.drawConfig.connectionTransport, 'serial')
     assert.equal(normalized.drawConfig.wifiHost, '192.168.1.42')
     assert.equal(normalized.drawConfig.wifiPort, 1337)
     assert.equal(normalized.drawConfig.wifiSecure, true)

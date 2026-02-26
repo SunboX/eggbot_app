@@ -1,8 +1,7 @@
 import { EggBotBle } from './EggBotBle.mjs'
 import { EggBotSerial } from './EggBotSerial.mjs'
-import { EggBotWifi } from './EggBotWifi.mjs'
 
-const TRANSPORTS = ['serial', 'ble', 'wifi']
+const TRANSPORTS = ['serial', 'ble']
 
 /**
  * Multi-transport EggBot connection controller.
@@ -12,12 +11,11 @@ export class EggBotTransportController {
         this.transportKind = 'serial'
         this.serial = new EggBotSerial()
         this.ble = new EggBotBle()
-        this.wifi = new EggBotWifi()
     }
 
     /**
      * Returns current transport kind.
-     * @returns {'serial' | 'ble' | 'wifi'}
+     * @returns {'serial' | 'ble'}
      */
     get connectionTransportKind() {
         return EggBotTransportController.#normalizeTransportKind(this.transportKind)
@@ -25,12 +23,11 @@ export class EggBotTransportController {
 
     /**
      * Returns one active transport instance.
-     * @returns {EggBotSerial | EggBotBle | EggBotWifi}
+     * @returns {EggBotSerial | EggBotBle}
      */
     get #activeTransport() {
         const kind = this.connectionTransportKind
         if (kind === 'ble') return this.ble
-        if (kind === 'wifi') return this.wifi
         return this.serial
     }
 
@@ -95,7 +92,6 @@ export class EggBotTransportController {
     isTransportSupported(kind) {
         const normalized = EggBotTransportController.#normalizeTransportKind(kind)
         if (normalized === 'ble') return EggBotBle.isSupported()
-        if (normalized === 'wifi') return EggBotWifi.isSupported()
         return typeof navigator !== 'undefined' && Boolean(navigator?.serial)
     }
 
@@ -142,7 +138,7 @@ export class EggBotTransportController {
      * @returns {Promise<void>}
      */
     async disconnectAll() {
-        const transports = [this.serial, this.ble, this.wifi]
+        const transports = [this.serial, this.ble]
         for (let index = 0; index < transports.length; index += 1) {
             const transport = transports[index]
             try {
@@ -171,7 +167,6 @@ export class EggBotTransportController {
     stop() {
         this.serial.stop()
         this.ble.stop()
-        this.wifi.stop()
     }
 
     /**
@@ -217,13 +212,12 @@ export class EggBotTransportController {
     disposePathWorker() {
         this.serial.disposePathWorker()
         this.ble.disposePathWorker()
-        this.wifi.disposePathWorker()
     }
 
     /**
      * Normalizes transport mode values.
      * @param {unknown} value
-     * @returns {'serial' | 'ble' | 'wifi'}
+     * @returns {'serial' | 'ble'}
      */
     static #normalizeTransportKind(value) {
         const normalized = String(value || '')

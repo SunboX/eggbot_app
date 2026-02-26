@@ -348,7 +348,7 @@ test('WebMcpBridge should parse declarative draw-config form into setDrawConfig 
                 setMotifSettings: () => ({ message: 'ok' }),
                 setDrawConfig: (args) => {
                     calls.config = args
-                    return { message: 'draw-config-ok', state: { connectionTransport: 'wifi' } }
+                    return { message: 'draw-config-ok', state: { connectionTransport: 'ble' } }
                 },
                 rerollSeed: () => ({ message: 'ok' }),
                 regeneratePattern: () => ({ message: 'ok' }),
@@ -371,7 +371,7 @@ test('WebMcpBridge should parse declarative draw-config form into setDrawConfig 
         bridge.init()
 
         const form = document.querySelector('[data-webmcp-form-draw-config]')
-        form.querySelector('[name="connectionTransport"]').value = 'wifi'
+        form.querySelector('[name="connectionTransport"]').value = 'ble'
         form.querySelector('[name="wifiSecure"]').value = 'false'
         form.querySelector('[name="printColorMode"]').value = 'single'
         form.querySelector('[name="manualWalkDistance"]').value = '2400'
@@ -380,7 +380,7 @@ test('WebMcpBridge should parse declarative draw-config form into setDrawConfig 
         assert.equal(response.structuredContent.action, 'eggbot_form_apply_draw_config')
         assert.equal(response.structuredContent.ok, true)
         assert.deepEqual(calls.config, {
-            connectionTransport: 'wifi',
+            connectionTransport: 'ble',
             wifiSecure: false,
             printColorMode: 'single',
             manualWalkDistance: 2400
