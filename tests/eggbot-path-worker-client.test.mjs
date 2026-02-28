@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EggBotPathWorkerClient } from '../src/EggBotPathWorkerClient.mjs'
+import { AppVersion } from '../src/AppVersion.mjs'
 
 /**
  * Minimal event-target worker stub for path transport tests.
@@ -144,6 +145,7 @@ test('EggBotPathWorkerClient should resolve successful preprocessing responses',
     assert.equal(Array.isArray(result.strokes), true)
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
+    assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
 })
 
 test('EggBotPathWorkerClient warmup should create one reusable worker', async (context) => {
