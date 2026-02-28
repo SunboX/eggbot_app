@@ -20,6 +20,7 @@ import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
 import { PatternRenderWorkerClient } from './PatternRenderWorkerClient.mjs'
 import { PatternImportControlUtils } from './PatternImportControlUtils.mjs'
+import { PatternImportRuntimeGuards } from './PatternImportRuntimeGuards.mjs'
 import { WebMcpBridge } from './WebMcpBridge.mjs'
 import { IdleScheduler } from './IdleScheduler.mjs'
 import { SvgProjectNameUtils } from './SvgProjectNameUtils.mjs'
@@ -2648,6 +2649,15 @@ class AppController {
         if (this.isDrawing) {
             return
         }
+        if (
+            !resumeMode &&
+            PatternImportRuntimeGuards.isDrawStartBlocked({
+                isPatternImporting: this.isPatternImporting
+            })
+        ) {
+            this.#setStatus(this.#t('messages.drawBlockedWhileImporting'), 'info')
+            return
+        }
 
         if (!resumeMode && !(await this.#ensureRenderedStrokesReady())) {
             this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
@@ -2655,9 +2665,13 @@ class AppController {
         }
 
         const resumeStateSource = this.state?.resumeState
+        const drawSourceStrokes = !resumeMode && this.importedPattern ? this.#buildRenderedStrokes() : this.state.strokes
+        if (!resumeMode && this.importedPattern) {
+            this.state.strokes = Array.isArray(drawSourceStrokes) ? drawSourceStrokes : []
+        }
         const drawBatches = resumeMode
             ? this.#cloneDrawBatchesForResume(resumeStateSource?.drawBatches)
-            : this.#buildDrawColorBatches(this.state.strokes)
+            : this.#buildDrawColorBatches(drawSourceStrokes)
         const totalStrokes = drawBatches.reduce((sum, batch) => sum + (Array.isArray(batch.strokes) ? batch.strokes.length : 0), 0)
         if (totalStrokes <= 0) {
             this.#setStatus(resumeMode ? this.#t('messages.resumeUnavailable') : this.#t('messages.noPatternToDraw'), 'error')
@@ -2879,19 +2893,27 @@ class AppController {
         const transport = this.serial.connectionTransportKind
         const transportSupported = this.serial.isTransportSupported(transport)
         const connected = this.serial.isConnected
+        const drawStartBlocked = PatternImportRuntimeGuards.isDrawStartBlocked({
+            isPatternImporting: this.isPatternImporting
+        })
         this.els.connectionTransport.disabled = connected || this.isDrawing
         this.#syncConnectionTransportUi()
         this.els.serialConnect.disabled = connected || this.isDrawing || !transportSupported
         this.els.serialDisconnect.disabled = !connected || this.isDrawing
-        this.els.drawButton.disabled = this.isDrawing || !transportSupported
+        this.els.drawButton.disabled = this.isDrawing || !transportSupported || drawStartBlocked
         this.els.stopButton.disabled = !this.isDrawing || !connected
+        this.#syncPatternImportUi()
         this.#syncResumeUi()
     }
     /**
      * Syncs pattern import loading controls.
      */
     #syncPatternImportUi() {
-        this.els.loadPattern.disabled = this.isPatternImporting
+        const isInteractionBlocked = PatternImportRuntimeGuards.isImportInteractionBlocked({
+            isPatternImporting: this.isPatternImporting,
+            isDrawing: this.isDrawing
+        })
+        this.els.loadPattern.disabled = isInteractionBlocked
         this.els.loadPattern.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
         this.els.status.setAttribute('aria-busy', this.isPatternImporting ? 'true' : 'false')
     }
@@ -2942,7 +2964,18 @@ class AppController {
      * @returns {Promise<void>}
      */
     async #reparseImportedPatternFromCurrentSettings() {
-        if (!this.importedPattern?.svgText || this.isPatternImporting) return
+        if (!this.importedPattern?.svgText) return
+        if (
+            PatternImportRuntimeGuards.isImportInteractionBlocked({
+                isPatternImporting: this.isPatternImporting,
+                isDrawing: this.isDrawing
+            })
+        ) {
+            if (this.isDrawing) {
+                this.#setStatus(this.#t('messages.patternImportBlockedWhileDrawing'), 'info')
+            }
+            return
+        }
         const importedPatternName = String(this.importedPattern.name || this.#t('project.defaultName'))
         clearTimeout(this.renderDebounceTimer)
         this.isPatternImporting = true
@@ -2999,7 +3032,17 @@ class AppController {
     async #loadPatternFromFile() {
         let fileName = 'unknown.svg'
         try {
-            if (this.isPatternImporting) return
+            if (
+                PatternImportRuntimeGuards.isImportInteractionBlocked({
+                    isPatternImporting: this.isPatternImporting,
+                    isDrawing: this.isDrawing
+                })
+            ) {
+                if (this.isDrawing) {
+                    this.#setStatus(this.#t('messages.patternImportBlockedWhileDrawing'), 'info')
+                }
+                return
+            }
             const file = await this.#promptForPatternFile()
             if (!file) {
                 this.#setStatus(this.#t('messages.patternImportCanceled'), 'info')
@@ -4189,6 +4232,9 @@ class AppController {
      * @returns {Promise<Record<string, any>>}
      */
     async #webMcpImportSvgText(args) {
+        if (this.isDrawing) {
+            throw new Error('Pattern import is blocked while a draw run is active.')
+        }
         const svgText = String(args?.svgText || '').trim()
         if (!svgText) {
             throw new Error('Missing svgText.')
