@@ -1,3 +1,5 @@
+import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
+
 /**
  * Worker transport for EggBot draw-path preprocessing.
  */
@@ -76,7 +78,7 @@ export class EggBotPathWorkerClient {
         }
 
         try {
-            const worker = new Worker(new URL('./workers/eggbot-path.worker.mjs', import.meta.url), {
+            const worker = new Worker(WorkerUrlUtils.resolveVersionedWorkerUrl('./workers/eggbot-path.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))

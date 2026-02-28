@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PatternRenderWorkerClient } from '../src/PatternRenderWorkerClient.mjs'
+import { AppVersion } from '../src/AppVersion.mjs'
 
 /**
  * Minimal event-target worker stub for render transport tests.
@@ -158,6 +159,7 @@ test('PatternRenderWorkerClient should initialize and render successfully', asyn
     assert.equal(result.token, 7)
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
+    assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
     assert.equal(getWorkers()[0].messages[0].payload.op, 'init')
     assert.equal(getWorkers()[0].messages[0].transfer[0], offscreen)
     assert.equal(getWorkers()[0].messages[1].payload.op, 'render')

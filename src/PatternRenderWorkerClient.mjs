@@ -1,3 +1,5 @@
+import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
+
 /**
  * Worker transport for texture rasterization using OffscreenCanvas.
  */
@@ -137,7 +139,7 @@ export class PatternRenderWorkerClient {
         }
 
         try {
-            const worker = new Worker(new URL('./workers/pattern-render.worker.mjs', import.meta.url), {
+            const worker = new Worker(WorkerUrlUtils.resolveVersionedWorkerUrl('./workers/pattern-render.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))

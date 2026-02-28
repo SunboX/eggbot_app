@@ -1,3 +1,5 @@
+import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
+
 /**
  * Worker transport for generated-pattern compute tasks.
  */
@@ -85,7 +87,7 @@ export class PatternComputeWorkerClient {
         }
 
         try {
-            const worker = new Worker(new URL('./workers/pattern-compute.worker.mjs', import.meta.url), {
+            const worker = new Worker(WorkerUrlUtils.resolveVersionedWorkerUrl('./workers/pattern-compute.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))

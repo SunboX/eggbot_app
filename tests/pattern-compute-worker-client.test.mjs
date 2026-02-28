@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PatternComputeWorkerClient } from '../src/PatternComputeWorkerClient.mjs'
+import { AppVersion } from '../src/AppVersion.mjs'
 
 /**
  * Minimal event-target worker stub for client transport tests.
@@ -154,6 +155,7 @@ test('PatternComputeWorkerClient should resolve successful compute responses', a
     assert.equal(Array.isArray(second.strokes), true)
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
+    assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
 })
 
 test('PatternComputeWorkerClient should resolve successful export build responses', async (context) => {

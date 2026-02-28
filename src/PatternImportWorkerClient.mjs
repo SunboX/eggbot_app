@@ -1,3 +1,5 @@
+import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
+
 /**
  * Worker transport for loading and parsing imported SVG patterns.
  */
@@ -66,7 +68,7 @@ export class PatternImportWorkerClient {
         }
 
         try {
-            const worker = new Worker(new URL('./workers/pattern-import.worker.mjs', import.meta.url), {
+            const worker = new Worker(WorkerUrlUtils.resolveVersionedWorkerUrl('./workers/pattern-import.worker.mjs', import.meta.url), {
                 type: 'module'
             })
             worker.addEventListener('message', (event) => this.#handleWorkerMessage(event))

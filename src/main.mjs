@@ -16,6 +16,7 @@ import { I18n } from './I18n.mjs'
 import { DrawProgressSmoother } from './DrawProgressSmoother.mjs'
 import { DrawProgressTimeUtils } from './DrawProgressTimeUtils.mjs'
 import { DrawTraceOverlayRenderer } from './DrawTraceOverlayRenderer.mjs'
+import { ImportedRenderSyncUtils } from './ImportedRenderSyncUtils.mjs'
 import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
 import { PatternRenderWorkerClient } from './PatternRenderWorkerClient.mjs'
@@ -2053,9 +2054,11 @@ class AppController {
         try {
             const renderResult = await this.#renderTextureFrame(renderInput, config.token)
             if (renderResult?.stale || config.token !== this.renderToken) return
-            if (!config.importedSvgText) {
+            const postRenderAction = ImportedRenderSyncUtils.resolvePostRenderAction(config.importedSvgText, renderResult)
+            if (postRenderAction.shouldSyncEggTextureNow) {
                 this.#syncEggSceneTexture()
-            } else if (renderResult?.dispatchImportedRenderedEvent) {
+            }
+            if (postRenderAction.shouldDispatchImportedRenderedEvent) {
                 this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
             }
         } catch (error) {

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PatternImportWorkerClient } from '../src/PatternImportWorkerClient.mjs'
+import { AppVersion } from '../src/AppVersion.mjs'
 
 /**
  * Minimal event-target worker stub for import transport tests.
@@ -160,6 +161,7 @@ test('PatternImportWorkerClient should resolve successful parse responses', asyn
     assert.deepEqual(result.palette, ['#111111'])
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
+    assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
 })
 
 test('PatternImportWorkerClient should reject timed-out requests', async (context) => {
