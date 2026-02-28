@@ -11,6 +11,13 @@ Project JSON includes:
 - motif toggles
 - palette and base color
 - draw mapping configuration
+- draw resume checkpoint state (`resumeState`, schema v2)
+
+Version notes:
+
+- Current payload format is `schemaVersion: 2`.
+- Older payloads are still normalized on import.
+- `inkscapeSvgCompatMode` is still accepted from legacy payloads as a deprecated no-op.
 
 ## Local storage
 
@@ -22,5 +29,6 @@ Project JSON includes:
 
 - **Share** creates a URL with an embedded base64url project payload (`project=` parameter).
 - Opening the link restores the design automatically.
+- In schema v2, share links can also carry `resumeState` so interrupted draws can continue after reload.
 
 Because the payload is embedded in the URL, avoid posting links publicly if they should stay private.

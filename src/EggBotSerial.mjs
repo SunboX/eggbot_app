@@ -470,7 +470,7 @@ export class EggBotSerial {
     /**
      * Draws generated strokes on the connected EggBot.
      * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
-     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean }} drawConfig
+     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean, coordinateMode?: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number }} drawConfig
      * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number, detail?: { completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }) => void }} [callbacks]
      * @returns {Promise<void>}
      */
@@ -484,25 +484,34 @@ export class EggBotSerial {
 
         const onStatus = callbacks.onStatus || (() => {})
         const onProgress = callbacks.onProgress || (() => {})
-        const legacyMsPerStep = Math.max(0.2, Math.min(20, Number(drawConfig.msPerStep) || 1.8))
         const cfg = {
             stepsPerTurn: Math.max(100, Math.round(Number(drawConfig.stepsPerTurn) || 3200)),
             penRangeSteps: Math.max(100, Math.round(Number(drawConfig.penRangeSteps) || 1500)),
-            penDownSpeed: Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penDownSpeed) || 1000 / legacyMsPerStep))),
+            penDownSpeed: Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penDownSpeed) || 300))),
             penUpSpeed: 0,
             servoUp: Math.max(0, Math.round(Number(drawConfig.servoUp) || 12000)),
             servoDown: Math.max(0, Math.round(Number(drawConfig.servoDown) || 17000)),
             invertPen: Boolean(drawConfig.invertPen),
             penRaiseRate: Math.max(1, Math.min(100, Math.round(Number(drawConfig.penRaiseRate) || 50))),
             penLowerRate: Math.max(1, Math.min(100, Math.round(Number(drawConfig.penLowerRate) || 20))),
-            penRaiseDelayMs: Math.max(0, Math.min(5000, Math.round(Number(drawConfig.penRaiseDelayMs) || 130))),
-            penLowerDelayMs: Math.max(0, Math.min(5000, Math.round(Number(drawConfig.penLowerDelayMs) || 180))),
-            reversePenMotor: Boolean(drawConfig.reversePenMotor),
-            reverseEggMotor: Boolean(drawConfig.reverseEggMotor),
+            penRaiseDelayMs: Math.max(0, Math.min(5000, Math.round(Number(drawConfig.penRaiseDelayMs) || 200))),
+            penLowerDelayMs: Math.max(0, Math.min(5000, Math.round(Number(drawConfig.penLowerDelayMs) || 400))),
+            reversePenMotor: drawConfig.reversePenMotor !== undefined ? Boolean(drawConfig.reversePenMotor) : true,
+            reverseEggMotor: drawConfig.reverseEggMotor !== undefined ? Boolean(drawConfig.reverseEggMotor) : true,
             wrapAround: drawConfig.wrapAround !== false,
-            returnHome: Boolean(drawConfig.returnHome)
+            returnHome: Boolean(drawConfig.returnHome),
+            coordinateMode:
+                String(drawConfig.coordinateMode || '').trim() === 'document-px-centered'
+                    ? 'document-px-centered'
+                    : 'normalized-uv',
+            documentWidthPx: Math.max(1, Number(drawConfig.documentWidthPx) || 3200),
+            documentHeightPx: Math.max(1, Number(drawConfig.documentHeightPx) || 800),
+            stepScalingFactor: Math.max(1, Math.round(Number(drawConfig.stepScalingFactor) || 2))
         }
-        cfg.penUpSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penUpSpeed) || cfg.penDownSpeed)))
+        cfg.penUpSpeed = Math.max(
+            10,
+            Math.min(4000, Math.round(Number(drawConfig.penUpSpeed) || Math.max(400, cfg.penDownSpeed)))
+        )
         const profileMaxSpeed = Math.max(cfg.penDownSpeed, cfg.penUpSpeed)
         cfg.penMotorSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.penMotorSpeed) || profileMaxSpeed)))
         cfg.eggMotorSpeed = Math.max(10, Math.min(4000, Math.round(Number(drawConfig.eggMotorSpeed) || profileMaxSpeed)))
@@ -511,6 +520,14 @@ export class EggBotSerial {
         this.drawing = true
         const current = { x: 0, y: 0 }
         let drawCommandsIssued = false
+        let tailPauseSent = false
+        let penStateDown = true
+        const setPenState = async (isDown) => {
+            if (penStateDown === isDown) return false
+            await this.#setPen(isDown, cfg)
+            penStateDown = isDown
+            return true
+        }
 
         try {
             onStatus('Preparing draw path...')
@@ -539,7 +556,7 @@ export class EggBotSerial {
             }
             await this.sendCommand('EM,1,1')
             drawCommandsIssued = true
-            await this.#setPen(false, cfg)
+            await setPenState(false)
 
             const total = drawableStrokes.length
             const estimatedTotalMs = this.#estimateDrawDurationMs(drawableStrokes, cfg, current)
@@ -562,10 +579,12 @@ export class EggBotSerial {
                         this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
                     )
                 })
+                if (this.abortDrawing) break
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: pen down`)
-                await this.#setPen(true, cfg)
-                completedMs += cfg.penLowerDelayMs
+                if (await setPenState(true)) {
+                    completedMs += cfg.penLowerDelayMs
+                }
                 onProgress(
                     strokeIndex,
                     total,
@@ -584,8 +603,9 @@ export class EggBotSerial {
                     })
                 }
 
-                await this.#setPen(false, cfg)
-                completedMs += cfg.penRaiseDelayMs
+                if (await setPenState(false)) {
+                    completedMs += cfg.penRaiseDelayMs
+                }
                 onProgress(
                     strokeIndex + 1,
                     total,
@@ -605,6 +625,11 @@ export class EggBotSerial {
                 })
             }
 
+            if (!this.abortDrawing) {
+                await this.sendCommand('SM,10,0,0')
+                tailPauseSent = true
+            }
+
             if (this.abortDrawing) {
                 onStatus('Draw aborted by user.')
             } else {
@@ -618,7 +643,14 @@ export class EggBotSerial {
         } finally {
             if (drawCommandsIssued) {
                 try {
-                    await this.#setPen(false, cfg)
+                    await setPenState(false)
+                } catch (_error) {
+                    // Ignore cleanup failures.
+                }
+                try {
+                    if (!tailPauseSent) {
+                        await this.sendCommand('SM,10,0,0')
+                    }
                 } catch (_error) {
                     // Ignore cleanup failures.
                 }
@@ -735,7 +767,11 @@ export class EggBotSerial {
             drawConfig: {
                 stepsPerTurn: cfg.stepsPerTurn,
                 penRangeSteps: cfg.penRangeSteps,
-                wrapAround: cfg.wrapAround
+                wrapAround: cfg.wrapAround,
+                coordinateMode: cfg.coordinateMode,
+                documentWidthPx: cfg.documentWidthPx,
+                documentHeightPx: cfg.documentHeightPx,
+                stepScalingFactor: cfg.stepScalingFactor
             },
             startX
         }
@@ -811,18 +847,18 @@ export class EggBotSerial {
             const preparedStroke = preparedStrokeList[strokeIndex]
             if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
 
-            totalMs += this.#estimateMoveDurationMs(preparedStroke[0], current, cfg.penUpSpeed, cfg)
+            totalMs += this.#estimateMoveDurationMs(preparedStroke[0], current, cfg.penUpSpeed)
             totalMs += cfg.penLowerDelayMs
 
             for (let pointIndex = 1; pointIndex < preparedStroke.length; pointIndex += 1) {
-                totalMs += this.#estimateMoveDurationMs(preparedStroke[pointIndex], current, cfg.penDownSpeed, cfg)
+                totalMs += this.#estimateMoveDurationMs(preparedStroke[pointIndex], current, cfg.penDownSpeed)
             }
 
             totalMs += cfg.penRaiseDelayMs
         }
 
         if (cfg.returnHome) {
-            totalMs += this.#estimateMoveDurationMs({ x: 0, y: 0 }, current, cfg.penUpSpeed, cfg)
+            totalMs += this.#estimateMoveDurationMs({ x: 0, y: 0 }, current, cfg.penUpSpeed)
         }
 
         return Math.max(0, Math.round(totalMs))
@@ -833,20 +869,12 @@ export class EggBotSerial {
      * @param {number} deltaX
      * @param {number} deltaY
      * @param {number} speedStepsPerSecond
-     * @param {{ penMotorSpeed: number, eggMotorSpeed: number }} cfg
      * @returns {number}
      */
-    #resolveMoveDurationMs(deltaX, deltaY, speedStepsPerSecond, cfg) {
+    #resolveMoveDurationMs(deltaX, deltaY, speedStepsPerSecond) {
         const profileSpeed = Math.max(10, Math.min(4000, Number(speedStepsPerSecond) || 200))
-        const penMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.penMotorSpeed) || profileSpeed))
-        const eggMotorSpeed = Math.max(10, Math.min(4000, Number(cfg.eggMotorSpeed) || profileSpeed))
-
         const distanceSteps = Math.hypot(deltaX, deltaY)
-        const profileDurationMs = distanceSteps > 0 ? Math.ceil((distanceSteps / profileSpeed) * 1000) : 0
-        const penDurationMs = Math.ceil((Math.abs(deltaY) / penMotorSpeed) * 1000)
-        const eggDurationMs = Math.ceil((Math.abs(deltaX) / eggMotorSpeed) * 1000)
-
-        return Math.max(1, profileDurationMs, penDurationMs, eggDurationMs)
+        return Math.max(1, distanceSteps > 0 ? Math.ceil((distanceSteps / profileSpeed) * 1000) : 0)
     }
 
     /**
@@ -854,19 +882,17 @@ export class EggBotSerial {
      * @param {{x:number,y:number}} target
      * @param {{x:number,y:number}} current
      * @param {number} speedStepsPerSecond
-     * @param {{ penMotorSpeed: number, eggMotorSpeed: number }} cfg
      * @returns {number}
      */
-    #estimateMoveDurationMs(target, current, speedStepsPerSecond, cfg) {
+    #estimateMoveDurationMs(target, current, speedStepsPerSecond) {
         const dx = Math.round(target.x - current.x)
         const dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return 0
 
-        const settleDelayMs = 6
-        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond, cfg)
+        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond)
         current.x = Math.round(target.x)
         current.y = Math.round(target.y)
-        return durationMs + settleDelayMs
+        return durationMs
     }
 
     /**
@@ -874,7 +900,7 @@ export class EggBotSerial {
      * @param {{x:number,y:number}} target
      * @param {{x:number,y:number}} current
      * @param {number} speedStepsPerSecond
-     * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean, penMotorSpeed: number, eggMotorSpeed: number }} cfg
+     * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean }} cfg
      * @param {(durationMs: number) => void} [onChunkComplete]
      * @returns {Promise<void>}
      */
@@ -883,21 +909,23 @@ export class EggBotSerial {
         const dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return
 
-        const settleDelayMs = 6
         if (this.abortDrawing) return
 
-        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond, cfg)
+        const durationMs = this.#resolveMoveDurationMs(dx, dy, speedStepsPerSecond)
         // EggBot wiring in this app maps axis-1 to pen carriage and axis-2 to egg rotation.
-        const axis1Pen = cfg.reversePenMotor ? -dy : dy
+        const axis1Pen = cfg.reversePenMotor ? dy : -dy
         const axis2Egg = cfg.reverseEggMotor ? -dx : dx
 
         await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
-        await EggBotSerial.#sleep(durationMs + settleDelayMs)
+        const buttonState = String(await this.sendCommand('QB', { expectResponse: true, timeoutMs: 5000 }) || '').trim()
+        if (buttonState.startsWith('1')) {
+            this.abortDrawing = true
+        }
 
         current.x = Math.round(target.x)
         current.y = Math.round(target.y)
         if (typeof onChunkComplete === 'function') {
-            onChunkComplete(durationMs + settleDelayMs)
+            onChunkComplete(durationMs)
         }
     }
 
@@ -909,18 +937,7 @@ export class EggBotSerial {
      */
     async #setPen(isDown, cfg) {
         const value = isDown ? (cfg.invertPen ? 1 : 0) : cfg.invertPen ? 0 : 1
-        await this.sendCommand(`SP,${value}`)
-        await EggBotSerial.#sleep(isDown ? cfg.penLowerDelayMs : cfg.penRaiseDelayMs)
-    }
-
-    /**
-     * Promise-based timeout.
-     * @param {number} ms
-     * @returns {Promise<void>}
-     */
-    static #sleep(ms) {
-        return new Promise((resolve) => {
-            window.setTimeout(resolve, ms)
-        })
+        const delayMs = isDown ? cfg.penLowerDelayMs : cfg.penRaiseDelayMs
+        await this.sendCommand(`SP,${value},${delayMs}`)
     }
 }

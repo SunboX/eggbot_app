@@ -739,12 +739,6 @@
                             Separate-color mode pauses before each color to let you change pens.
                         </p>
                         <label class="inline-check">
-                            <input type="checkbox" data-control-inkscape-svg-compat-mode />
-                            <span data-i18n="controlDialog.options.inkscapeSvgCompatMode">
-                                Inkscape SVG compatibility mode (import without remapping)
-                            </span>
-                        </label>
-                        <label class="inline-check">
                             <input type="checkbox" data-control-enable-engraver />
                             <span data-i18n="controlDialog.options.enableEngraver">Enable engraver, if attached</span>
                         </label>
@@ -834,9 +828,18 @@
                         hidden
                     >
                         <h3 data-i18n="controlDialog.resume.title">Resume</h3>
-                        <p data-i18n="controlDialog.resume.description">
-                            Resume drawing from paused jobs is not available yet in this web edition.
+                        <p data-i18n="controlDialog.resume.description">Resume the latest paused drawing checkpoint.</p>
+                        <p class="eggbot-note" data-resume-status data-i18n="controlDialog.resume.noneAvailable">
+                            No paused draw checkpoint available.
                         </p>
+                        <div class="eggbot-dialog-actions">
+                            <button type="button" class="primary" data-resume-start data-i18n="controlDialog.resume.start">
+                                Resume drawing
+                            </button>
+                            <button type="button" class="ghost" data-resume-clear data-i18n="controlDialog.resume.clear">
+                                Clear checkpoint
+                            </button>
+                        </div>
                     </section>
 
                     <section

@@ -56,6 +56,148 @@ export class ProjectIoUtils {
     }
 
     /**
+     * Normalizes one stroke point for resume payloads.
+     * @param {unknown} value
+     * @returns {{ u: number, v: number } | null}
+     */
+    static #normalizeResumePoint(value) {
+        if (!ProjectIoUtils.#isPlainObject(value)) return null
+        const u = ProjectIoUtils.#toNumber(value.u, Number.NaN)
+        const v = ProjectIoUtils.#toNumber(value.v, Number.NaN)
+        if (!Number.isFinite(u) || !Number.isFinite(v)) return null
+        return {
+            u: Math.max(-8, Math.min(8, u)),
+            v: Math.max(-8, Math.min(8, v))
+        }
+    }
+
+    /**
+     * Normalizes one stroke for resume payloads.
+     * @param {unknown} value
+     * @returns {{ points: Array<{ u: number, v: number }> } | null}
+     */
+    static #normalizeResumeStroke(value) {
+        if (!ProjectIoUtils.#isPlainObject(value) || !Array.isArray(value.points)) return null
+        const points = []
+        for (let index = 0; index < value.points.length; index += 1) {
+            const normalizedPoint = ProjectIoUtils.#normalizeResumePoint(value.points[index])
+            if (!normalizedPoint) continue
+            points.push(normalizedPoint)
+            if (points.length >= 12000) break
+        }
+        if (points.length < 2) return null
+        return { points }
+    }
+
+    /**
+     * Normalizes persisted draw-resume state.
+     * @param {unknown} value
+     * @returns {{
+     *   status: 'ready' | 'running' | 'paused',
+     *   updatedAt: string,
+     *   totalStrokes: number,
+     *   completedStrokes: number,
+     *   nextBatchIndex: number,
+     *   nextStrokeIndex: number,
+     *   coordinateMode: 'normalized-uv' | 'document-px-centered',
+     *   documentWidthPx: number | null,
+     *   documentHeightPx: number | null,
+     *   stepScalingFactor: number,
+     *   drawBatches: Array<{ colorIndex: number | null, strokes: Array<{ points: Array<{ u: number, v: number }> }> }>
+     * } | null}
+     */
+    static #normalizeResumeState(value) {
+        if (!ProjectIoUtils.#isPlainObject(value) || !Array.isArray(value.drawBatches)) {
+            return null
+        }
+
+        const drawBatches = []
+        let totalStrokes = 0
+        for (let batchIndex = 0; batchIndex < value.drawBatches.length; batchIndex += 1) {
+            if (drawBatches.length >= 120) break
+            const rawBatch = value.drawBatches[batchIndex]
+            if (!ProjectIoUtils.#isPlainObject(rawBatch) || !Array.isArray(rawBatch.strokes)) continue
+
+            const strokes = []
+            for (let strokeIndex = 0; strokeIndex < rawBatch.strokes.length; strokeIndex += 1) {
+                if (totalStrokes >= 6000) break
+                const normalizedStroke = ProjectIoUtils.#normalizeResumeStroke(rawBatch.strokes[strokeIndex])
+                if (!normalizedStroke) continue
+                strokes.push(normalizedStroke)
+                totalStrokes += 1
+            }
+            if (!strokes.length) continue
+
+            const rawColorIndex = Number(rawBatch.colorIndex)
+            const colorIndex = Number.isInteger(rawColorIndex) ? rawColorIndex : null
+            drawBatches.push({
+                colorIndex,
+                strokes
+            })
+
+            if (totalStrokes >= 6000) break
+        }
+
+        if (!drawBatches.length || totalStrokes <= 0) {
+            return null
+        }
+
+        const clampedTotalStrokes = Math.max(1, totalStrokes)
+        const nextBatchIndex = Math.max(
+            0,
+            Math.min(drawBatches.length - 1, Math.trunc(ProjectIoUtils.#toNumber(value.nextBatchIndex, 0)))
+        )
+        const maxStrokeIndex = Math.max(0, drawBatches[nextBatchIndex].strokes.length)
+        const nextStrokeIndex = Math.max(
+            0,
+            Math.min(maxStrokeIndex, Math.trunc(ProjectIoUtils.#toNumber(value.nextStrokeIndex, 0)))
+        )
+
+        let fallbackCompleted = 0
+        for (let index = 0; index < nextBatchIndex; index += 1) {
+            fallbackCompleted += drawBatches[index].strokes.length
+        }
+        fallbackCompleted += nextStrokeIndex
+        const completedStrokes = Math.max(
+            0,
+            Math.min(clampedTotalStrokes, Math.trunc(ProjectIoUtils.#toNumber(value.completedStrokes, fallbackCompleted)))
+        )
+
+        const rawStatus = String(value.status || '')
+            .trim()
+            .toLowerCase()
+        const status = ['ready', 'running', 'paused'].includes(rawStatus) ? rawStatus : 'paused'
+        const coordinateMode =
+            String(value.coordinateMode || '').trim() === 'document-px-centered' ? 'document-px-centered' : 'normalized-uv'
+        const documentWidthPxValue = ProjectIoUtils.#toNumber(value.documentWidthPx, Number.NaN)
+        const documentHeightPxValue = ProjectIoUtils.#toNumber(value.documentHeightPx, Number.NaN)
+        const documentWidthPx =
+            coordinateMode === 'document-px-centered' && Number.isFinite(documentWidthPxValue) && documentWidthPxValue > 0
+                ? Math.max(1, documentWidthPxValue)
+                : null
+        const documentHeightPx =
+            coordinateMode === 'document-px-centered' && Number.isFinite(documentHeightPxValue) && documentHeightPxValue > 0
+                ? Math.max(1, documentHeightPxValue)
+                : null
+        const stepScalingFactor = Math.max(1, Math.min(64, Math.trunc(ProjectIoUtils.#toNumber(value.stepScalingFactor, 2))))
+        const updatedAt = String(value.updatedAt || '').trim() || new Date(0).toISOString()
+
+        return {
+            status,
+            updatedAt,
+            totalStrokes: clampedTotalStrokes,
+            completedStrokes,
+            nextBatchIndex,
+            nextStrokeIndex,
+            coordinateMode,
+            documentWidthPx,
+            documentHeightPx,
+            stepScalingFactor,
+            drawBatches
+        }
+    }
+
+    /**
      * Builds a serializable payload from runtime state.
      * @param {Record<string, any>} state
      * @returns {Record<string, any>}
@@ -63,7 +205,7 @@ export class ProjectIoUtils {
     static buildProjectPayload(state) {
         return {
             version: AppVersion.get(),
-            schemaVersion: 1,
+            schemaVersion: 2,
             projectName: String(state.projectName || '').trim() || 'Sorbische Komposition',
             preset: String(state.preset || 'traditional-mix'),
             seed: Math.trunc(ProjectIoUtils.#toNumber(state.seed, 1)),
@@ -74,7 +216,8 @@ export class ProjectIoUtils {
             ornamentCount: Math.max(0.5, Math.min(2, ProjectIoUtils.#toNumber(state.ornamentCount, 1))),
             ornamentDistribution: Math.max(0.6, Math.min(1.6, ProjectIoUtils.#toNumber(state.ornamentDistribution, 1))),
             lineWidth: Math.max(0.5, Math.min(4, ProjectIoUtils.#toNumber(state.lineWidth, 1.8))),
-            importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 0.85))),
+            importHeightScale: Math.max(0.1, Math.min(3, ProjectIoUtils.#toNumber(state.importHeightScale, 1))),
+            resumeState: ProjectIoUtils.#normalizeResumeState(state.resumeState),
             showHorizontalLines: ProjectIoUtils.#toBoolean(state.showHorizontalLines, true),
             fillPatterns: ProjectIoUtils.#toBoolean(state.fillPatterns, true),
             baseColor: String(state.baseColor || '#efe7ce'),
@@ -129,8 +272,8 @@ export class ProjectIoUtils {
                         )
                     )
                 ),
-                penDownSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penDownSpeed, 200)))),
-                penUpSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penUpSpeed, 200)))),
+                penDownSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penDownSpeed, 300)))),
+                penUpSpeed: Math.max(10, Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penUpSpeed, 400)))),
                 penMotorSpeed: Math.max(
                     10,
                     Math.min(4000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penMotorSpeed, 4000)))
@@ -149,10 +292,10 @@ export class ProjectIoUtils {
                     0,
                     Math.min(5000, Math.trunc(ProjectIoUtils.#toNumber(state?.drawConfig?.penLowerDelayMs, 400)))
                 ),
-                reversePenMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reversePenMotor, false),
-                reverseEggMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reverseEggMotor, false),
+                reversePenMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reversePenMotor, true),
+                reverseEggMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reverseEggMotor, true),
                 wrapAround: ProjectIoUtils.#toBoolean(state?.drawConfig?.wrapAround, true),
-                returnHome: ProjectIoUtils.#toBoolean(state?.drawConfig?.returnHome, false),
+                returnHome: ProjectIoUtils.#toBoolean(state?.drawConfig?.returnHome, true),
                 printColorMode: String(state?.drawConfig?.printColorMode || '')
                     .trim()
                     .toLowerCase() === 'single'
@@ -216,7 +359,8 @@ export class ProjectIoUtils {
             ...payload,
             motifs: { ...payload.motifs },
             drawConfig: { ...payload.drawConfig },
-            palette: [...payload.palette]
+            palette: [...payload.palette],
+            resumeState: payload.resumeState ? { ...payload.resumeState } : null
         }
     }
 }

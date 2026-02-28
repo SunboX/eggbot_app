@@ -15,6 +15,7 @@ import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { I18n } from './I18n.mjs'
 import { DrawProgressSmoother } from './DrawProgressSmoother.mjs'
 import { DrawProgressTimeUtils } from './DrawProgressTimeUtils.mjs'
+import { DrawTraceOverlayRenderer } from './DrawTraceOverlayRenderer.mjs'
 import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
 import { PatternRenderWorkerClient } from './PatternRenderWorkerClient.mjs'
@@ -25,7 +26,7 @@ import { SvgProjectNameUtils } from './SvgProjectNameUtils.mjs'
 import { FileInputPromptUtils } from './FileInputPromptUtils.mjs'
 const LOCAL_STORAGE_KEY = 'eggbot.savedProjects.v1'
 const SETTINGS_STORAGE_KEY = 'eggbot.settings.v1'
-const IMPORT_HEIGHT_REFERENCE = 800
+const IMPORT_HEIGHT_REFERENCE = 1
 const SVG_EXPORT_WIDTH = 2048
 const SVG_EXPORT_HEIGHT = 1024
 const IDLE_TIMEOUT_STARTUP_LOCAL_PROJECTS_MS = 500
@@ -83,6 +84,12 @@ class AppController {
         this.setupActionTogglePenDown = false
         this.drawProgressStartedAtMs = 0
         this.drawProgressSmoother = new DrawProgressSmoother()
+        this.drawTraceOverlayCanvas = null
+        this.drawTraceCompositeCanvas = null
+        this.drawTraceStrokes = []
+        this.drawTracePreviewActive = false
+        this.drawTraceLastCompletedStrokeCount = -1
+        this.drawTraceLastActiveStrokeIndex = -1
         this.pendingPenColorDialogResolve = null
         this.autoGenerateOrnamentControls = [
             this.els.preset,
@@ -124,13 +131,14 @@ class AppController {
             },
             { once: true }
         )
-        this.els.textureCanvas.addEventListener('pattern-rendered', () =>
-            this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
-        )
+        this.els.textureCanvas.addEventListener('pattern-rendered', () => {
+            this.#syncEggSceneTexture()
+        })
         this.#renderPattern()
         this.#syncConnectionUi()
         await this.#restoreSerialConnectionAfterReload()
         this.#syncPatternImportUi()
+        this.#syncResumeUi()
         this.#syncAutoGenerateOrnamentControlsUi()
         this.#resetDrawProgressUi()
         this.#scheduleProjectArtifactsRefreshIdle()
@@ -167,9 +175,100 @@ class AppController {
         const hadImportedPattern = Boolean(this.importedPattern)
         if (hadImportedPattern) {
             this.importedPattern = null
+            this.state.resumeState = null
         }
         this.#syncAutoGenerateOrnamentControlsUi()
+        this.#syncResumeUi()
         return hadImportedPattern
+    }
+
+    /**
+     * Returns true when a paused draw checkpoint is available.
+     * @returns {boolean}
+     */
+    #hasResumeCheckpoint() {
+        return Boolean(
+            this.state?.resumeState &&
+                Array.isArray(this.state.resumeState.drawBatches) &&
+                this.state.resumeState.drawBatches.length > 0 &&
+                Number(this.state.resumeState.completedStrokes) < Number(this.state.resumeState.totalStrokes)
+        )
+    }
+
+    /**
+     * Clears persisted resume state.
+     * @returns {boolean}
+     */
+    #clearResumeState() {
+        if (!this.state?.resumeState) {
+            this.#syncResumeUi()
+            return false
+        }
+        this.state.resumeState = null
+        this.#markProjectArtifactsDirty()
+        this.#syncResumeUi()
+        return true
+    }
+
+    /**
+     * Stores one normalized resume checkpoint payload.
+     * @param {Record<string, any> | null} resumeState
+     */
+    #setResumeState(resumeState) {
+        this.state.resumeState = resumeState ? { ...resumeState } : null
+        this.#markProjectArtifactsDirty()
+        this.#syncResumeUi()
+    }
+
+    /**
+     * Builds a compact draw-batch snapshot for resume persistence.
+     * @param {Array<{ colorIndex?: number | null, strokes: Array<{ points: Array<{u:number,v:number}> }> }>} drawBatches
+     * @returns {Array<{ colorIndex: number | null, strokes: Array<{ points: Array<{u:number,v:number}> }> }>}
+     */
+    #cloneDrawBatchesForResume(drawBatches) {
+        if (!Array.isArray(drawBatches)) return []
+        return drawBatches.map((batch) => ({
+            colorIndex: Number.isInteger(batch?.colorIndex) ? batch.colorIndex : null,
+            strokes: Array.isArray(batch?.strokes)
+                ? batch.strokes
+                      .filter((stroke) => Array.isArray(stroke?.points) && stroke.points.length >= 2)
+                      .map((stroke) => ({
+                          points: stroke.points.map((point) => ({
+                              u: Number(point?.u) || 0,
+                              v: Number(point?.v) || 0
+                          }))
+                      }))
+                : []
+        }))
+    }
+
+    /**
+     * Computes stroke count across draw batches.
+     * @param {Array<{ strokes?: Array<unknown> }>} drawBatches
+     * @returns {number}
+     */
+    #countDrawBatchStrokes(drawBatches) {
+        if (!Array.isArray(drawBatches)) return 0
+        return drawBatches.reduce((sum, batch) => {
+            return sum + (Array.isArray(batch?.strokes) ? batch.strokes.length : 0)
+        }, 0)
+    }
+
+    /**
+     * Refreshes resume-panel controls and status text.
+     */
+    #syncResumeUi() {
+        if (!this.els.resumeStatus || !this.els.resumeStart || !this.els.resumeClear) return
+        const resumeState = this.state?.resumeState
+        const total = Math.max(0, Math.trunc(Number(resumeState?.totalStrokes) || 0))
+        const done = Math.max(0, Math.min(total, Math.trunc(Number(resumeState?.completedStrokes) || 0)))
+        const hasCheckpoint = this.#hasResumeCheckpoint()
+        this.els.resumeStart.disabled = this.isDrawing || !hasCheckpoint
+        this.els.resumeClear.disabled = this.isDrawing || !resumeState
+        this.els.resumeStatus.removeAttribute('data-i18n')
+        this.els.resumeStatus.textContent = hasCheckpoint
+            ? this.#t('controlDialog.resume.available', { done, total })
+            : this.#t('controlDialog.resume.noneAvailable')
     }
     /**
      * Writes status text and type.
@@ -469,6 +568,10 @@ class AppController {
             await this.#applyManualControlAction()
             return
         }
+        if (this.activeEggBotControlTab === 'resume') {
+            await this.#resumeFromCheckpoint()
+            return
+        }
         this.#setStatus(this.#t('messages.controlDialogSettingsApplied'), 'success')
     }
 
@@ -556,7 +659,7 @@ class AppController {
                     4000,
                     AppController.#parseInteger(
                         this.state.drawConfig.eggMotorSpeed,
-                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)
+                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 400)
                     )
                 )
             )
@@ -573,7 +676,7 @@ class AppController {
                     4000,
                     AppController.#parseInteger(
                         this.state.drawConfig.penMotorSpeed,
-                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 200)
+                        AppController.#parseInteger(this.state.drawConfig.penUpSpeed, 400)
                     )
                 )
             )
@@ -730,7 +833,6 @@ class AppController {
         this.els.controlReturnHome.checked = this.state.drawConfig.returnHome
         this.els.controlPrintColorModeSingle.checked = this.state.drawConfig.printColorMode === 'single'
         this.els.controlPrintColorModePerColor.checked = this.state.drawConfig.printColorMode === 'per-color'
-        this.els.controlInkscapeSvgCompatMode.checked = this.state.drawConfig.inkscapeSvgCompatMode
         this.els.controlEnableEngraver.checked = this.state.drawConfig.engraverEnabled
         this.els.controlCurveSmoothing.value = this.state.drawConfig.curveSmoothing.toFixed(2)
 
@@ -902,6 +1004,127 @@ class AppController {
      */
     #resolveActiveTextureCanvas() {
         return this.activeTextureCanvas || this.els.textureCanvas
+    }
+
+    /**
+     * Syncs the 3D egg texture from active render output or draw-trace composite.
+     */
+    #syncEggSceneTexture() {
+        if (this.drawTracePreviewActive) {
+            this.#refreshDrawTraceCompositeTexture()
+            return
+        }
+        this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
+    }
+
+    /**
+     * Ensures draw-trace overlay/composite canvases exist and match the base texture size.
+     * @param {HTMLCanvasElement} baseCanvas
+     */
+    #ensureDrawTraceCanvases(baseCanvas) {
+        const width = Math.max(1, Math.round(Number(baseCanvas?.width) || Number(this.els.textureCanvas.width) || 1))
+        const height = Math.max(1, Math.round(Number(baseCanvas?.height) || Number(this.els.textureCanvas.height) || 1))
+
+        if (!this.drawTraceOverlayCanvas) {
+            this.drawTraceOverlayCanvas = document.createElement('canvas')
+        }
+        if (this.drawTraceOverlayCanvas.width !== width || this.drawTraceOverlayCanvas.height !== height) {
+            this.drawTraceOverlayCanvas.width = width
+            this.drawTraceOverlayCanvas.height = height
+        }
+
+        if (!this.drawTraceCompositeCanvas) {
+            this.drawTraceCompositeCanvas = document.createElement('canvas')
+        }
+        if (this.drawTraceCompositeCanvas.width !== width || this.drawTraceCompositeCanvas.height !== height) {
+            this.drawTraceCompositeCanvas.width = width
+            this.drawTraceCompositeCanvas.height = height
+        }
+    }
+
+    /**
+     * Rebuilds the draw-trace composite texture and applies it to the 3D preview.
+     */
+    #refreshDrawTraceCompositeTexture() {
+        if (!this.drawTracePreviewActive) return
+        const baseCanvas = this.#resolveActiveTextureCanvas()
+        if (!baseCanvas) return
+
+        this.#ensureDrawTraceCanvases(baseCanvas)
+        if (!this.drawTraceCompositeCanvas || !this.drawTraceOverlayCanvas) return
+        const compositeCtx = this.drawTraceCompositeCanvas.getContext('2d')
+        if (!compositeCtx) return
+
+        const width = this.drawTraceCompositeCanvas.width
+        const height = this.drawTraceCompositeCanvas.height
+        compositeCtx.clearRect(0, 0, width, height)
+        compositeCtx.drawImage(baseCanvas, 0, 0, width, height)
+        compositeCtx.drawImage(this.drawTraceOverlayCanvas, 0, 0, width, height)
+        this.eggScene.updateTexture(this.drawTraceCompositeCanvas)
+    }
+
+    /**
+     * Starts a live draw-trace preview for the ordered draw stroke sequence.
+     * @param {Array<{ points?: Array<{u:number,v:number}> }>} strokes
+     */
+    #startDrawTracePreview(strokes) {
+        this.drawTraceStrokes = Array.isArray(strokes) ? strokes : []
+        this.drawTracePreviewActive = this.drawTraceStrokes.length > 0
+        this.drawTraceLastCompletedStrokeCount = -1
+        this.drawTraceLastActiveStrokeIndex = -1
+        if (!this.drawTracePreviewActive) return
+
+        this.#updateDrawTracePreview(0, this.drawTraceStrokes.length)
+    }
+
+    /**
+     * Updates live draw-trace overlay using the current completed stroke count.
+     * @param {number} completedStrokeCount
+     * @param {number} totalStrokeCount
+     */
+    #updateDrawTracePreview(completedStrokeCount, totalStrokeCount) {
+        if (!this.drawTracePreviewActive || !this.drawTraceOverlayCanvas) {
+            const baseCanvas = this.#resolveActiveTextureCanvas()
+            if (!baseCanvas || !this.drawTracePreviewActive) return
+            this.#ensureDrawTraceCanvases(baseCanvas)
+        }
+        if (!this.drawTracePreviewActive || !this.drawTraceOverlayCanvas) return
+
+        const total = Math.max(
+            0,
+            Math.round(Number(totalStrokeCount) || 0),
+            Array.isArray(this.drawTraceStrokes) ? this.drawTraceStrokes.length : 0
+        )
+        const normalizedCompleted = Math.max(0, Math.min(total, Math.round(Number(completedStrokeCount) || 0)))
+        const activeStrokeIndex = normalizedCompleted < total ? normalizedCompleted : -1
+        if (
+            normalizedCompleted === this.drawTraceLastCompletedStrokeCount &&
+            activeStrokeIndex === this.drawTraceLastActiveStrokeIndex
+        ) {
+            return
+        }
+
+        this.drawTraceLastCompletedStrokeCount = normalizedCompleted
+        this.drawTraceLastActiveStrokeIndex = activeStrokeIndex
+        DrawTraceOverlayRenderer.render(this.drawTraceOverlayCanvas, {
+            strokes: this.drawTraceStrokes,
+            completedStrokeCount: normalizedCompleted,
+            activeStrokeIndex,
+            lineWidth: this.state.lineWidth
+        })
+        this.#refreshDrawTraceCompositeTexture()
+    }
+
+    /**
+     * Stops live draw-trace preview and restores regular texture rendering.
+     */
+    #stopDrawTracePreview() {
+        if (!this.drawTracePreviewActive) return
+        this.drawTracePreviewActive = false
+        this.drawTraceStrokes = []
+        this.drawTraceLastCompletedStrokeCount = -1
+        this.drawTraceLastActiveStrokeIndex = -1
+        this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
     }
 
     /**
@@ -1227,7 +1450,6 @@ class AppController {
             this.#scheduleRender()
         })
         this.els.importHeightScale.addEventListener('change', async () => {
-            if (this.#isInkscapeSvgCompatModeEnabled()) return
             await this.#reparseImportedPatternFromCurrentSettings()
         })
         this.els.showHorizontalLines.addEventListener('change', () => {
@@ -1480,12 +1702,6 @@ class AppController {
             this.state.drawConfig.printColorMode = 'per-color'
             this.#markProjectArtifactsDirty()
         })
-        this.els.controlInkscapeSvgCompatMode.addEventListener('change', async () => {
-            this.state.drawConfig.inkscapeSvgCompatMode = this.els.controlInkscapeSvgCompatMode.checked
-            this.#markProjectArtifactsDirty()
-            if (!this.importedPattern?.svgText) return
-            await this.#reparseImportedPatternFromCurrentSettings()
-        })
         this.els.controlEnableEngraver.addEventListener('change', () => {
             this.state.drawConfig.engraverEnabled = this.els.controlEnableEngraver.checked
             this.#markProjectArtifactsDirty()
@@ -1565,6 +1781,14 @@ class AppController {
         this.els.serialConnect.addEventListener('click', () => this.#connectSerial())
         this.els.serialDisconnect.addEventListener('click', () => this.#disconnectSerial())
         this.els.drawButton.addEventListener('click', () => this.#drawCurrentPattern())
+        this.els.resumeStart.addEventListener('click', () => this.#resumeFromCheckpoint())
+        this.els.resumeClear.addEventListener('click', () => {
+            if (this.#clearResumeState()) {
+                this.#setStatus(this.#t('messages.resumeCleared'), 'info')
+            } else {
+                this.#setStatus(this.#t('messages.resumeUnavailable'), 'info')
+            }
+        })
         this.els.loadPattern.addEventListener('click', () => this.#loadPatternFromFile())
         this.els.stopButton.addEventListener('click', () => {
             this.serial.stop()
@@ -1654,11 +1878,12 @@ class AppController {
     }
 
     /**
-     * Returns true when Inkscape SVG compatibility mode is enabled.
+     * Deprecated compatibility hook for legacy project/WebMCP payloads.
+     * Runtime behavior is always v281-compatible now.
      * @returns {boolean}
      */
     #isInkscapeSvgCompatModeEnabled() {
-        return Boolean(this.state?.drawConfig?.inkscapeSvgCompatMode)
+        return false
     }
 
     /**
@@ -1828,7 +2053,7 @@ class AppController {
             const renderResult = await this.#renderTextureFrame(renderInput, config.token)
             if (renderResult?.stale || config.token !== this.renderToken) return
             if (!config.importedSvgText) {
-                this.eggScene.updateTexture(this.#resolveActiveTextureCanvas())
+                this.#syncEggSceneTexture()
             } else if (renderResult?.dispatchImportedRenderedEvent) {
                 this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
             }
@@ -1976,6 +2201,10 @@ class AppController {
      * Schedules a delayed render for slider/input changes.
      */
     #scheduleRender() {
+        if (this.state.resumeState) {
+            this.state.resumeState = null
+            this.#syncResumeUi()
+        }
         this.#markProjectArtifactsDirty()
         clearTimeout(this.renderDebounceTimer)
         this.renderDebounceTimer = window.setTimeout(() => {
@@ -2021,7 +2250,7 @@ class AppController {
         this.els.lineWidth.value = String(this.state.lineWidth)
         this.els.lineWidthLabel.textContent = this.state.lineWidth.toFixed(1)
         this.state.importHeightScale = ImportedPatternScaleUtils.clampScale(
-            AppController.#parseFloat(this.state.importHeightScale, 0.85)
+            AppController.#parseFloat(this.state.importHeightScale, 1)
         )
         this.els.importHeightScale.value = String(this.state.importHeightScale)
         this.els.importHeightScaleLabel.textContent = this.state.importHeightScale.toFixed(2)
@@ -2066,6 +2295,7 @@ class AppController {
         const requestedTab = String(this.state?.drawConfig?.activeControlTab || this.activeEggBotControlTab || 'plot')
         this.activeEggBotControlTab = EGGBOT_CONTROL_TABS.includes(requestedTab) ? requestedTab : 'plot'
         this.#syncEggBotControlTabUi()
+        this.#syncResumeUi()
     }
     /**
      * Syncs motif checkbox states.
@@ -2388,24 +2618,99 @@ class AppController {
         }
         this.#syncConnectionUi()
     }
+
+    /**
+     * Resolves draw-coordinate conversion mode for serial plotting.
+     * Imported SVGs use v281-style document-centered pixel coordinates.
+     * @returns {{ coordinateMode: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number }}
+     */
+    #resolveDrawCoordinateConfig() {
+        if (!this.importedPattern) {
+            return {
+                coordinateMode: 'normalized-uv'
+            }
+        }
+        return {
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: Math.max(1, Number(this.importedPattern.documentWidthPx) || 3200),
+            documentHeightPx: Math.max(1, Number(this.importedPattern.documentHeightPx) || 800),
+            stepScalingFactor: 2
+        }
+    }
+
     /**
      * Executes a draw run for current strokes.
+     * @param {{ resume?: boolean }} [options]
      * @returns {Promise<void>}
      */
-    async #drawCurrentPattern() {
-        if (!(await this.#ensureRenderedStrokesReady())) {
-            this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
-            return
-        }
+    async #drawCurrentPattern(options = {}) {
+        const resumeMode = options?.resume === true
         if (this.isDrawing) {
             return
         }
 
-        const drawBatches = this.#buildDrawColorBatches(this.state.strokes)
-        const totalStrokes = drawBatches.reduce((sum, batch) => sum + (Array.isArray(batch.strokes) ? batch.strokes.length : 0), 0)
-        if (totalStrokes <= 0) {
+        if (!resumeMode && !(await this.#ensureRenderedStrokesReady())) {
             this.#setStatus(this.#t('messages.noPatternToDraw'), 'error')
             return
+        }
+
+        const resumeStateSource = this.state?.resumeState
+        const drawBatches = resumeMode
+            ? this.#cloneDrawBatchesForResume(resumeStateSource?.drawBatches)
+            : this.#buildDrawColorBatches(this.state.strokes)
+        const totalStrokes = drawBatches.reduce((sum, batch) => sum + (Array.isArray(batch.strokes) ? batch.strokes.length : 0), 0)
+        if (totalStrokes <= 0) {
+            this.#setStatus(resumeMode ? this.#t('messages.resumeUnavailable') : this.#t('messages.noPatternToDraw'), 'error')
+            return
+        }
+
+        let startBatchIndex = 0
+        let startStrokeIndex = 0
+        let completedStrokes = 0
+        if (resumeMode) {
+            if (!this.#hasResumeCheckpoint()) {
+                this.#setStatus(this.#t('messages.resumeUnavailable'), 'error')
+                return
+            }
+            startBatchIndex = Math.max(
+                0,
+                Math.min(drawBatches.length - 1, Math.trunc(Number(resumeStateSource?.nextBatchIndex) || 0))
+            )
+            startStrokeIndex = Math.max(
+                0,
+                Math.min(
+                    Array.isArray(drawBatches[startBatchIndex]?.strokes) ? drawBatches[startBatchIndex].strokes.length : 0,
+                    Math.trunc(Number(resumeStateSource?.nextStrokeIndex) || 0)
+                )
+            )
+            for (let index = 0; index < startBatchIndex; index += 1) {
+                completedStrokes += Array.isArray(drawBatches[index]?.strokes) ? drawBatches[index].strokes.length : 0
+            }
+            completedStrokes += startStrokeIndex
+            this.#setStatus(this.#t('messages.resumeStarted', { done: completedStrokes, total: totalStrokes }), 'info')
+        } else {
+            const coordinateConfig = this.#resolveDrawCoordinateConfig()
+            this.#setResumeState({
+                status: 'ready',
+                updatedAt: new Date().toISOString(),
+                totalStrokes,
+                completedStrokes: 0,
+                nextBatchIndex: 0,
+                nextStrokeIndex: 0,
+                coordinateMode: coordinateConfig.coordinateMode,
+                documentWidthPx: coordinateConfig.documentWidthPx ?? null,
+                documentHeightPx: coordinateConfig.documentHeightPx ?? null,
+                stepScalingFactor: coordinateConfig.stepScalingFactor ?? 2,
+                drawBatches: this.#cloneDrawBatchesForResume(drawBatches)
+            })
+        }
+
+        const drawStrokeSequence = []
+        for (let batchIndex = startBatchIndex; batchIndex < drawBatches.length; batchIndex += 1) {
+            const batch = drawBatches[batchIndex]
+            if (!Array.isArray(batch?.strokes) || batch.strokes.length <= 0) continue
+            const batchStartOffset = batchIndex === startBatchIndex ? startStrokeIndex : 0
+            drawStrokeSequence.push(...batch.strokes.slice(batchStartOffset))
         }
 
         let connectingBeforeDraw = false
@@ -2413,6 +2718,7 @@ class AppController {
         let drawAbortedByStop = false
         this.isDrawing = true
         this.#syncConnectionUi()
+        this.#startDrawTracePreview(drawStrokeSequence)
 
         try {
             if (!this.serial.isConnected) {
@@ -2430,12 +2736,26 @@ class AppController {
 
             let lastProgressDone = -1
             let lastProgressTotal = -1
-            let completedStrokes = 0
             let drawProgressStarted = false
 
-            for (let batchIndex = 0; batchIndex < drawBatches.length; batchIndex += 1) {
+            const coordinateConfig = resumeMode
+                ? {
+                      coordinateMode:
+                          String(resumeStateSource?.coordinateMode || '').trim() === 'document-px-centered'
+                              ? 'document-px-centered'
+                              : 'normalized-uv',
+                      documentWidthPx: Number(resumeStateSource?.documentWidthPx) || undefined,
+                      documentHeightPx: Number(resumeStateSource?.documentHeightPx) || undefined,
+                      stepScalingFactor: Number(resumeStateSource?.stepScalingFactor) || 2
+                  }
+                : this.#resolveDrawCoordinateConfig()
+
+            for (let batchIndex = startBatchIndex; batchIndex < drawBatches.length; batchIndex += 1) {
                 const batch = drawBatches[batchIndex]
                 if (!Array.isArray(batch?.strokes) || batch.strokes.length <= 0) continue
+                const batchStartOffset = batchIndex === startBatchIndex ? startStrokeIndex : 0
+                const batchStrokes = batch.strokes.slice(batchStartOffset)
+                if (!batchStrokes.length) continue
 
                 if (Number.isInteger(batch.colorIndex)) {
                     const confirmed = await this.#confirmDrawColorBatchReady(batchIndex, batch.colorIndex)
@@ -2454,22 +2774,25 @@ class AppController {
                     drawProgressStarted = true
                 }
 
-                const batchStrokeCount = batch.strokes.length
+                const batchStrokeCount = batchStrokes.length
+                const batchCompletedBase = completedStrokes
                 const batchDrawConfig = {
                     ...this.state.drawConfig,
+                    ...coordinateConfig,
                     returnHome: Boolean(this.state.drawConfig.returnHome) && batchIndex === drawBatches.length - 1
                 }
 
-                await this.serial.drawStrokes(batch.strokes, batchDrawConfig, {
+                await this.serial.drawStrokes(batchStrokes, batchDrawConfig, {
                     onStatus: (text) => this.#setStatus(text, 'info'),
                     onProgress: (done, _total, detail) => {
                         const normalizedDone = Math.max(0, Math.min(batchStrokeCount, Math.round(Number(done) || 0)))
-                        const globalDone = Math.max(0, Math.min(totalStrokes, completedStrokes + normalizedDone))
+                        const globalDone = Math.max(0, Math.min(totalStrokes, batchCompletedBase + normalizedDone))
                         if (globalDone !== lastProgressDone || totalStrokes !== lastProgressTotal) {
                             lastProgressDone = globalDone
                             lastProgressTotal = totalStrokes
                             this.#setStatus(this.#t('messages.drawingProgress', { done: globalDone, total: totalStrokes }), 'info')
                         }
+                        this.#updateDrawTracePreview(globalDone, totalStrokes)
                         const fallbackRemainingRatio = totalStrokes > 0 ? Math.max(0, 1 - globalDone / totalStrokes) : 0
                         const remainingRatio =
                             drawBatches.length === 1 && Number.isFinite(Number(detail?.remainingRatio))
@@ -2480,6 +2803,17 @@ class AppController {
                                 ? Math.max(0, Number(detail.remainingMs))
                                 : null
                         this.#updateDrawProgressUi(remainingRatio, remainingMs)
+                        const currentResumeState = this.state?.resumeState
+                        if (currentResumeState) {
+                            this.#setResumeState({
+                                ...currentResumeState,
+                                status: 'paused',
+                                updatedAt: new Date().toISOString(),
+                                completedStrokes: globalDone,
+                                nextBatchIndex: batchIndex,
+                                nextStrokeIndex: batchStartOffset + normalizedDone
+                            })
+                        }
                     }
                 })
 
@@ -2489,11 +2823,23 @@ class AppController {
                 }
 
                 completedStrokes += batchStrokeCount
+                const currentResumeState = this.state?.resumeState
+                if (currentResumeState) {
+                    this.#setResumeState({
+                        ...currentResumeState,
+                        status: 'paused',
+                        updatedAt: new Date().toISOString(),
+                        completedStrokes,
+                        nextBatchIndex: Math.min(drawBatches.length - 1, batchIndex + 1),
+                        nextStrokeIndex: 0
+                    })
+                }
             }
 
             if (drawCanceledByUser) {
                 this.#setStatus(this.#t('messages.drawCanceledByUser'), 'info')
             } else if (!drawAbortedByStop) {
+                this.#clearResumeState()
                 this.#setStatus(this.#t('messages.drawCompleted'), 'success')
             }
         } catch (error) {
@@ -2507,10 +2853,24 @@ class AppController {
         } finally {
             this.#resolvePendingPenColorDialog(false)
             this.#closePenColorDialog()
+            this.#stopDrawTracePreview()
             this.isDrawing = false
             this.#resetDrawProgressUi()
             this.#syncConnectionUi()
+            this.#syncResumeUi()
         }
+    }
+
+    /**
+     * Resumes drawing from the last checkpoint, if available.
+     * @returns {Promise<void>}
+     */
+    async #resumeFromCheckpoint() {
+        if (!this.#hasResumeCheckpoint()) {
+            this.#setStatus(this.#t('messages.resumeUnavailable'), 'error')
+            return
+        }
+        await this.#drawCurrentPattern({ resume: true })
     }
     /**
      * Syncs machine control button enabled states.
@@ -2525,6 +2885,7 @@ class AppController {
         this.els.serialDisconnect.disabled = !connected || this.isDrawing
         this.els.drawButton.disabled = this.isDrawing || !transportSupported
         this.els.stopButton.disabled = !this.isDrawing || !connected
+        this.#syncResumeUi()
     }
     /**
      * Syncs pattern import loading controls.
@@ -2537,21 +2898,14 @@ class AppController {
 
     /**
      * Resolves parse options for imported SVG handling.
-     * @returns {{ maxColors: number, heightScale: number, heightReference: number, preserveRawHeight?: boolean }}
+     * @returns {{ maxColors: number, heightScale: number, heightReference: number, curveSmoothing: number }}
      */
     #resolveImportedPatternParseOptions() {
-        if (this.#isInkscapeSvgCompatModeEnabled()) {
-            return {
-                maxColors: 6,
-                heightScale: 1,
-                heightReference: 1,
-                preserveRawHeight: true
-            }
-        }
         return {
             maxColors: 6,
             heightScale: this.state.importHeightScale,
-            heightReference: IMPORT_HEIGHT_REFERENCE
+            heightReference: IMPORT_HEIGHT_REFERENCE,
+            curveSmoothing: Math.max(0, Math.min(2, Number(this.state?.drawConfig?.curveSmoothing) || 0.2))
         }
     }
 
@@ -2560,7 +2914,7 @@ class AppController {
      * @returns {number}
      */
     #resolveImportedPatternStoredHeightScale() {
-        return this.#isInkscapeSvgCompatModeEnabled() ? 1 : this.state.importHeightScale
+        return this.state.importHeightScale
     }
 
     /**
@@ -2601,6 +2955,8 @@ class AppController {
             this.importedPattern.strokes = parsed.strokes
             this.importedPattern.heightRatio = parsed.heightRatio
             this.importedPattern.heightScale = this.#resolveImportedPatternStoredHeightScale()
+            this.importedPattern.documentWidthPx = Math.max(1, Number(parsed.documentWidthPx) || 3200)
+            this.importedPattern.documentHeightPx = Math.max(1, Number(parsed.documentHeightPx) || 800)
             this.#setStatus(this.#t('messages.patternImportPreparingPreview', { name: importedPatternName }), 'loading')
             await this.#renderImportedPreviewAndWait()
             this.#setStatus(
@@ -2631,7 +2987,7 @@ class AppController {
     /**
      * Parses imported SVG in worker thread.
      * @param {string} svgText
-     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number }>}
+     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number, documentWidthPx?: number, documentHeightPx?: number }>}
      */
     async #parseImportedPattern(svgText) {
         return this.patternImportWorker.parse(svgText, this.#resolveImportedPatternParseOptions())
@@ -2665,7 +3021,9 @@ class AppController {
                 strokes: parsed.strokes,
                 svgText,
                 heightRatio: parsed.heightRatio,
-                heightScale: this.#resolveImportedPatternStoredHeightScale()
+                heightScale: this.#resolveImportedPatternStoredHeightScale(),
+                documentWidthPx: Math.max(1, Number(parsed.documentWidthPx) || 3200),
+                documentHeightPx: Math.max(1, Number(parsed.documentHeightPx) || 800)
             }
             this.#syncAutoGenerateOrnamentControlsUi()
             if (parsed.palette.length) {
@@ -3549,7 +3907,6 @@ class AppController {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let didMutateState = false
         let requestedTransportSwitch = null
-        let shouldReparseImportedPattern = false
 
         if (Object.hasOwn(patch, 'connectionTransport')) {
             const requestedTransport = String(patch.connectionTransport || '')
@@ -3723,14 +4080,11 @@ class AppController {
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'inkscapeSvgCompatMode')) {
-            const nextCompatMode = AppController.#parseBoolean(
+            // Deprecated compatibility input: accepted for API stability but ignored at runtime.
+            this.state.drawConfig.inkscapeSvgCompatMode = AppController.#parseBoolean(
                 patch.inkscapeSvgCompatMode,
                 this.state.drawConfig.inkscapeSvgCompatMode
             )
-            if (nextCompatMode !== this.state.drawConfig.inkscapeSvgCompatMode) {
-                shouldReparseImportedPattern = Boolean(this.importedPattern?.svgText)
-            }
-            this.state.drawConfig.inkscapeSvgCompatMode = nextCompatMode
             didMutateState = true
         }
         if (Object.hasOwn(patch, 'engraverEnabled')) {
@@ -3797,9 +4151,6 @@ class AppController {
         }
 
         this.#syncControlsFromState()
-        if (shouldReparseImportedPattern) {
-            await this.#reparseImportedPatternFromCurrentSettings()
-        }
         return {
             message: 'Draw configuration updated.',
             state: this.#webMcpStateSnapshot()
@@ -3861,7 +4212,9 @@ class AppController {
                 strokes: parsed.strokes,
                 svgText,
                 heightRatio: parsed.heightRatio,
-                heightScale: this.#resolveImportedPatternStoredHeightScale()
+                heightScale: this.#resolveImportedPatternStoredHeightScale(),
+                documentWidthPx: Math.max(1, Number(parsed.documentWidthPx) || 3200),
+                documentHeightPx: Math.max(1, Number(parsed.documentHeightPx) || 800)
             }
             this.#syncAutoGenerateOrnamentControlsUi()
             if (parsed.palette.length) {

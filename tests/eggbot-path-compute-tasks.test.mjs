@@ -142,3 +142,29 @@ test('EggBotPathComputeTasks should clamp Y values to pen range', () => {
     assert.equal(result.strokes[0][0].y, 200)
     assert.equal(result.strokes[0][1].y, -200)
 })
+
+test('EggBotPathComputeTasks should convert imported UV to centered document coordinates', () => {
+    const result = EggBotPathComputeTasks.prepareDrawStrokes({
+        strokes: [
+            {
+                points: [
+                    { u: 0, v: 0 },
+                    { u: 1, v: 1 },
+                    { u: 0.5, v: 0.5 }
+                ]
+            }
+        ],
+        drawConfig: {
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: 1209.448,
+            documentHeightPx: 377.952,
+            stepScalingFactor: 2,
+            wrapAround: false
+        }
+    })
+
+    assert.equal(result.strokes.length, 1)
+    assert.deepEqual(result.strokes[0][0], { x: -605, y: -189 })
+    assert.deepEqual(result.strokes[0][1], { x: 605, y: 189 })
+    assert.deepEqual(result.strokes[0][2], { x: 0, y: 0 })
+})

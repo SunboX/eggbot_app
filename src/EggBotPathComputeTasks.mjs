@@ -15,8 +15,8 @@ export class EggBotPathComputeTasks {
 
         strokes.forEach((stroke) => {
             if (!Array.isArray(stroke?.points) || stroke.points.length < 2) return
-            const scaled = EggBotPathComputeTasks.#unwrapAndScaleStroke(stroke.points, cfg)
-            const aligned = cfg.wrapAround ? EggBotPathComputeTasks.#alignStrokeXToCurrent(scaled, currentX, cfg.stepsPerTurn) : scaled
+            const scaled = EggBotPathComputeTasks.#scaleStrokePoints(stroke.points, cfg)
+            const aligned = cfg.wrapAround ? EggBotPathComputeTasks.#alignStrokeXToCurrent(scaled, currentX, cfg.wrapPeriod) : scaled
             if (aligned.length < 2) return
             output.push(aligned)
             currentX = aligned[aligned.length - 1].x
@@ -27,15 +27,43 @@ export class EggBotPathComputeTasks {
 
     /**
      * Normalizes required draw configuration values.
-     * @param {{ stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean } | undefined} drawConfig
-     * @returns {{ stepsPerTurn: number, penRangeSteps: number, wrapAround: boolean }}
+     * @param {{ stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean, coordinateMode?: string, documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number } | undefined} drawConfig
+     * @returns {{ stepsPerTurn: number, penRangeSteps: number, wrapAround: boolean, coordinateMode: 'normalized-uv' | 'document-px-centered', documentWidthPx: number, documentHeightPx: number, stepScalingFactor: number, wrapPeriod: number }}
      */
     static #normalizeConfig(drawConfig) {
+        const stepsPerTurn = Math.max(100, Math.round(Number(drawConfig?.stepsPerTurn) || 3200))
+        const penRangeSteps = Math.max(100, Math.round(Number(drawConfig?.penRangeSteps) || 1500))
+        const coordinateMode =
+            String(drawConfig?.coordinateMode || '').trim() === 'document-px-centered'
+                ? 'document-px-centered'
+                : 'normalized-uv'
+        const documentWidthPx = Math.max(1, Number(drawConfig?.documentWidthPx) || stepsPerTurn)
+        const documentHeightPx = Math.max(1, Number(drawConfig?.documentHeightPx) || penRangeSteps)
+        const stepScalingFactor = Math.max(1, Math.round(Number(drawConfig?.stepScalingFactor) || 2))
+        const wrapPeriod = stepsPerTurn
         return {
-            stepsPerTurn: Math.max(100, Math.round(Number(drawConfig?.stepsPerTurn) || 3200)),
-            penRangeSteps: Math.max(100, Math.round(Number(drawConfig?.penRangeSteps) || 1500)),
-            wrapAround: drawConfig?.wrapAround !== false
+            stepsPerTurn,
+            penRangeSteps,
+            wrapAround: drawConfig?.wrapAround !== false,
+            coordinateMode,
+            documentWidthPx,
+            documentHeightPx,
+            stepScalingFactor,
+            wrapPeriod
         }
+    }
+
+    /**
+     * Converts normalized stroke points into step coordinates according to active coordinate mode.
+     * @param {Array<{u:number,v:number}>} points
+     * @param {{ stepsPerTurn: number, penRangeSteps: number, coordinateMode: 'normalized-uv' | 'document-px-centered', documentWidthPx: number, documentHeightPx: number, stepScalingFactor: number }} cfg
+     * @returns {Array<{x:number,y:number}>}
+     */
+    static #scaleStrokePoints(points, cfg) {
+        if (cfg.coordinateMode === 'document-px-centered') {
+            return EggBotPathComputeTasks.#unwrapAndScaleDocumentStroke(points, cfg)
+        }
+        return EggBotPathComputeTasks.#unwrapAndScaleStroke(points, cfg)
     }
 
     /**
@@ -82,16 +110,33 @@ export class EggBotPathComputeTasks {
     }
 
     /**
+     * Converts wrapped UV points into v281-style centered document coordinates.
+     * @param {Array<{u:number,v:number}>} points
+     * @param {{ documentWidthPx: number, documentHeightPx: number, stepScalingFactor: number }} cfg
+     * @returns {Array<{x:number,y:number}>}
+     */
+    static #unwrapAndScaleDocumentStroke(points, cfg) {
+        if (!points.length) return []
+        const widthFactor = (2 * cfg.documentWidthPx) / cfg.stepScalingFactor
+        const heightFactor = (2 * cfg.documentHeightPx) / cfg.stepScalingFactor
+        return points.map((point) => ({
+            x: Math.round((point.u - 0.5) * widthFactor),
+            y: Math.round((point.v - 0.5) * heightFactor)
+        }))
+    }
+
+    /**
      * Aligns a stroke along X to minimize travel from current position.
      * @param {Array<{x:number,y:number}>} points
      * @param {number} currentX
-     * @param {number} stepsPerTurn
+     * @param {number} period
      * @returns {Array<{x:number,y:number}>}
      */
-    static #alignStrokeXToCurrent(points, currentX, stepsPerTurn) {
+    static #alignStrokeXToCurrent(points, currentX, period) {
         if (!points.length) return []
-        const shiftTurns = Math.round((currentX - points[0].x) / stepsPerTurn)
-        const shift = shiftTurns * stepsPerTurn
+        const safePeriod = Math.max(1, Math.round(Number(period) || 1))
+        const shiftTurns = Math.round((currentX - points[0].x) / safePeriod)
+        const shift = shiftTurns * safePeriod
         return points.map((point) => ({
             x: point.x + shift,
             y: point.y

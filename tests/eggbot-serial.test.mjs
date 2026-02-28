@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EggBotSerial } from '../src/EggBotSerial.mjs'
+import { EggBotPathComputeTasks } from '../src/EggBotPathComputeTasks.mjs'
+import { SvgPatternImportWorkerParser } from '../src/workers/SvgPatternImportWorkerParser.mjs'
 
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
 const RECONNECT_ON_LOAD_STORAGE_KEY = 'eggbot.serial.reconnectOnLoad.v1'
@@ -459,7 +461,10 @@ test('EggBotSerial.drawStrokes should preserve command ordering and progress wit
         assert.equal(commands[0], 'SC,4,12000')
         assert.equal(commands[1], 'SC,5,17000')
         assert.equal(commands[2], 'EM,1,1')
+        assert.equal(commands.includes('SP,1,200'), true)
         assert.equal(commands.some((command) => command.startsWith('SM,')), true)
+        assert.equal(commands.includes('QB'), true)
+        assert.equal(commands.includes('SM,10,0,0'), true)
         assert.equal(commands[commands.length - 1], 'EM,0,0')
         assert.equal(progress.length > 0, true)
         assert.equal(progress[0]?.done, 0)
@@ -565,7 +570,7 @@ test('EggBotSerial.drawStrokes should use diagonal distance timing like the Inks
             }
         )
 
-        assert.equal(commands.some((command) => /^SM,250,40,30$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,250,40,-30$/.test(command)), true)
     } finally {
         restoreTimers()
     }
@@ -717,14 +722,14 @@ test('EggBotSerial.drawStrokes should respect reverse motor flags, wrap mode, an
         )
 
         assert.equal(wrapAroundPayload?.drawConfig?.wrapAround, false)
-        assert.equal(commands.some((command) => /^SM,\d+,-10,-20$/.test(command)), true)
-        assert.equal(commands.some((command) => /^SM,\d+,10,20$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,10,-20$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,-10,20$/.test(command)), true)
     } finally {
         restoreTimers()
     }
 })
 
-test('EggBotSerial.drawStrokes should apply per-motor speed limits to movement duration', async () => {
+test('EggBotSerial.drawStrokes should keep movement timing based on diagonal distance', async () => {
     const restoreTimers = installFastWindowTimers()
     const { serial, commands } = createConnectedDrawSerial()
 
@@ -766,7 +771,90 @@ test('EggBotSerial.drawStrokes should apply per-motor speed limits to movement d
             }
         )
 
-        assert.equal(commands.some((command) => /^SM,400,10,20$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,56,10,-20$/.test(command)), true)
+    } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial should emit v281-like SP/SM/QB sequence for mm-based rectangle SVG', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <g transform="translate(0,-197)">
+                <rect x="20.606821" y="217.98375" width="227.91998" height="63.53756" fill="none" stroke="#000000" />
+            </g>
+        </svg>
+    `
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 1,
+        curveSmoothing: 0.2
+    })
+    const prepared = EggBotPathComputeTasks.prepareDrawStrokes({
+        strokes: parsed.strokes,
+        drawConfig: {
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: parsed.documentWidthPx,
+            documentHeightPx: parsed.documentHeightPx,
+            stepScalingFactor: 2,
+            wrapAround: true
+        },
+        startX: 0
+    })
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return prepared
+        }
+    }
+
+    try {
+        await serial.drawStrokes(parsed.strokes, {
+            stepsPerTurn: 3200,
+            penRangeSteps: 1500,
+            servoUp: 12000,
+            servoDown: 17000,
+            invertPen: false,
+            penDownSpeed: 300,
+            penUpSpeed: 400,
+            penRaiseDelayMs: 200,
+            penLowerDelayMs: 400,
+            reversePenMotor: true,
+            reverseEggMotor: true,
+            returnHome: true,
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: parsed.documentWidthPx,
+            documentHeightPx: parsed.documentHeightPx,
+            stepScalingFactor: 2
+        })
+
+        const stream = commands.filter((command) => {
+            return command.startsWith('EM,') || command.startsWith('SP,') || command.startsWith('SM,') || command === 'QB'
+        })
+        assert.deepEqual(stream, [
+            'EM,1,1',
+            'SP,1,200',
+            'SM,1346,-110,527',
+            'QB',
+            'SP,0,400',
+            'SM,2874,0,-862',
+            'QB',
+            'SM,800,240,0',
+            'QB',
+            'SM,2874,0,862',
+            'QB',
+            'SM,800,-240,0',
+            'QB',
+            'SP,1,200',
+            'SM,1346,110,-527',
+            'QB',
+            'SM,10,0,0',
+            'EM,0,0'
+        ])
     } finally {
         restoreTimers()
     }

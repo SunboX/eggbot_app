@@ -179,7 +179,11 @@
         },
         "resume": {
             "title": "Resume",
-            "description": "Das Fortsetzen pausierter Zeichenjobs ist in dieser Web-Version noch nicht verfügbar."
+            "description": "Den zuletzt pausierten Zeichen-Checkpoint fortsetzen.",
+            "noneAvailable": "Kein pausierter Zeichen-Checkpoint verfügbar.",
+            "available": "Checkpoint verfügbar: Linienzug {{done}} / {{total}}.",
+            "start": "Zeichnung fortsetzen",
+            "clear": "Checkpoint löschen"
         },
         "layers": {
             "title": "Ebenen",
@@ -228,6 +232,9 @@
         "drawCompleted": "EggBot-Zeichenbefehl wurde vollständig übertragen.",
         "drawFailed": "Zeichnen fehlgeschlagen: {{message}}",
         "drawCanceledByUser": "Zeichnung abgebrochen.",
+        "resumeStarted": "Zeichnung ab Checkpoint fortgesetzt: Linienzug {{done}}/{{total}}.",
+        "resumeCleared": "Pausierter Zeichen-Checkpoint gelöscht.",
+        "resumeUnavailable": "Kein pausierter Zeichen-Checkpoint verfügbar.",
         "waitingForPenColorStart": "Setze den Stift für {{color}} ein und fahre dann fort.",
         "waitingForPenColorChange": "Wechsle den Stift auf {{color}} und fahre dann fort.",
         "penColorDialogTitleStart": "Stift vor dem Zeichnen einsetzen",
