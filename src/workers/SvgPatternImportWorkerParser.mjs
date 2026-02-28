@@ -8,8 +8,8 @@ export class SvgPatternImportWorkerParser {
     /**
      * Parses SVG text into renderer strokes.
      * @param {string} svgText
-     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number, preserveRawHeight?: boolean }} [options]
-     * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio: number }}
+     * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number, preserveRawHeight?: boolean, curveSmoothing?: number }} [options]
+     * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio: number, documentWidthPx: number, documentHeightPx: number }}
      */
     static parse(svgText, options = {}) {
         const ParserCtor = typeof DOMParser === 'function' ? DOMParser : LinkedomDOMParser
@@ -32,6 +32,7 @@ export class SvgPatternImportWorkerParser {
         SvgPatternImportWorkerParser.#normalizeInkscapePaths(svg)
 
         const viewBox = SvgPatternImportWorkerParser.#resolveViewBox(svg)
+        const documentPixelSize = SvgPatternImportWorkerParser.#resolveDocumentPixelSize(svg, viewBox)
         const cssRules = SvgPatternImportWorkerParser.#parseCssRules(svg)
         const normalizeColor = SvgPatternImportWorkerParser.#createColorNormalizer()
         const baseColor = SvgPatternImportWorkerParser.#resolveBaseColor(svg, cssRules, normalizeColor)
@@ -39,6 +40,7 @@ export class SvgPatternImportWorkerParser {
 
         const maxColors = SvgPatternImportWorkerGeometry.clampInt(options.maxColors, 6, 1, 12)
         const sampleSpacing = Math.max(0.6, Number(options.sampleSpacing) || 3)
+        const curveSmoothing = SvgPatternImportWorkerGeometry.clamp(Number(options.curveSmoothing) || 0.2, 0, 2)
         const preserveRawHeight = options.preserveRawHeight === true
         const heightScale = preserveRawHeight
             ? 1
@@ -94,7 +96,8 @@ export class SvgPatternImportWorkerParser {
                     matrix,
                     viewBox,
                     sampleSpacing,
-                    heightRatio
+                    heightRatio,
+                    curveSmoothing
                 )
                 if (!segments.length) {
                     return
@@ -123,6 +126,8 @@ export class SvgPatternImportWorkerParser {
             strokes,
             heightRatio,
             palette: palette.filter(Boolean),
+            documentWidthPx: documentPixelSize.width,
+            documentHeightPx: documentPixelSize.height,
             ...(baseColor ? { baseColor } : {})
         }
     }
@@ -470,6 +475,27 @@ export class SvgPatternImportWorkerParser {
         return {
             minX: 0,
             minY: 0,
+            width: Math.max(1, width),
+            height: Math.max(1, height)
+        }
+    }
+
+    /**
+     * Resolves document size in px@96dpi for plotting parity.
+     * @param {Element} svg
+     * @param {{ width: number, height: number }} viewBox
+     * @returns {{ width: number, height: number }}
+     */
+    static #resolveDocumentPixelSize(svg, viewBox) {
+        const width =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('width'), { reference: viewBox.width || 3200 }) ||
+            viewBox.width ||
+            3200
+        const height =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('height'), { reference: viewBox.height || 800 }) ||
+            viewBox.height ||
+            800
+        return {
             width: Math.max(1, width),
             height: Math.max(1, height)
         }

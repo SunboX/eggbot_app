@@ -179,7 +179,11 @@
         },
         "resume": {
             "title": "Resume",
-            "description": "Resume drawing from paused jobs is not available yet in this web edition."
+            "description": "Resume the latest paused drawing checkpoint.",
+            "noneAvailable": "No paused draw checkpoint available.",
+            "available": "Checkpoint available: stroke {{done}} / {{total}}.",
+            "start": "Resume drawing",
+            "clear": "Clear checkpoint"
         },
         "layers": {
             "title": "Layers",
@@ -228,6 +232,9 @@
         "drawCompleted": "EggBot draw command stream completed.",
         "drawFailed": "Draw failed: {{message}}",
         "drawCanceledByUser": "Draw canceled.",
+        "resumeStarted": "Resuming draw from checkpoint: stroke {{done}}/{{total}}.",
+        "resumeCleared": "Cleared paused draw checkpoint.",
+        "resumeUnavailable": "No paused draw checkpoint is available.",
         "waitingForPenColorStart": "Insert the pen for {{color}}, then continue.",
         "waitingForPenColorChange": "Change pen to {{color}}, then continue.",
         "penColorDialogTitleStart": "Insert pen before drawing",

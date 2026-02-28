@@ -47,6 +47,7 @@
     - `content`
     - `structuredContent` with `{ ok, action, message, data?, state? }`
     - `isError` for failures and confirmation refusals
+- `inkscapeSvgCompatMode` remains in tool schemas as a deprecated compatibility input and does not switch runtime draw mode.
 
 ## Data flow
 
@@ -56,3 +57,8 @@
 4. 3D renderer applies texture to egg mesh.
 5. Optional draw run preprocesses path geometry (worker-backed with fallback) and streams commands to EggBot via Web Serial.
 6. Optional WebMCP clients call imperative/declarative tools through `navigator.modelContext`.
+
+Persistence detail:
+
+- Project payloads use `schemaVersion: 2` and can include `resumeState` draw checkpoints.
+- Imported SVG metadata tracks document dimensions in pixels (`documentWidthPx`, `documentHeightPx`) for v281-aligned step mapping.

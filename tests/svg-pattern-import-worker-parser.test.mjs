@@ -57,3 +57,39 @@ test('SvgPatternImportWorkerParser should preserve full SVG height in compat mod
     assert.equal(vertical.min, 0)
     assert.equal(vertical.max, 1)
 })
+
+test('SvgPatternImportWorkerParser should convert document units to px@96dpi and expose pixel metadata', () => {
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <rect x="20.606821" y="20.98375" width="227.91998" height="63.53756" fill="none" stroke="#000" />
+        </svg>
+    `
+
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 800,
+        curveSmoothing: 0.2
+    })
+
+    assert.ok(Math.abs(parsed.documentWidthPx - 1209.448) < 0.01)
+    assert.ok(Math.abs(parsed.documentHeightPx - 377.952) < 0.01)
+    assert.equal(parsed.strokes.length >= 1, true)
+})
+
+test('SvgPatternImportWorkerParser should keep rectangle segmentation compact like v281', () => {
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <rect x="20.606821" y="20.98375" width="227.91998" height="63.53756" fill="none" stroke="#000" />
+        </svg>
+    `
+
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 800,
+        curveSmoothing: 0.2
+    })
+    const firstStroke = parsed.strokes[0]
+
+    assert.ok(firstStroke)
+    assert.equal(firstStroke.points.length <= 6, true)
+})

@@ -28,15 +28,20 @@ The app supports three browser-side transports:
 
 - `SC,4,<value>`: servo up calibration slot
 - `SC,5,<value>`: servo down calibration slot
-- `SP,<0|1>`: pen up/down switching
+- `SP,<0|1>,<delay>`: pen up/down switching with explicit delay
 - `EM,<m1>,<m2>`: enable/disable steppers
 - `SM,<duration>,<axis1>,<axis2>`: timed move command
+- `QB`: query command buffer completion after move commands
+- `SM,10,0,0`: short tail wait at draw end (v281-compatible)
+
+The stream format is aligned to EggBot extension v281 timing: move duration is based on diagonal travel distance (not per-axis max).
 
 ## Draw mapping
 
 - `u` (horizontal wrap) maps to EggBot rotation motor steps.
 - `v` (vertical) maps to pen carriage motor steps.
 - `stepsPerTurn` and `penRangeSteps` control scaling.
+- Imported SVG drawing uses a centered document-pixel coordinate base (`documentWidthPx`/`documentHeightPx`), converted from SVG units at `96dpi`.
 
 ## Safety and calibration
 

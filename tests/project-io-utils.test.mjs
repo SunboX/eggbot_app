@@ -22,7 +22,7 @@ test('ProjectIoUtils should normalize partial raw project payload', () => {
     assert.equal(normalized.seed, 42)
     assert.equal(Array.isArray(normalized.palette), true)
     assert.ok(normalized.palette.length >= 1)
-    assert.equal(normalized.importHeightScale, 0.85)
+    assert.equal(normalized.importHeightScale, 1)
     assert.equal(normalized.ornamentSize, 1)
     assert.equal(normalized.ornamentCount, 1)
     assert.equal(normalized.ornamentDistribution, 1)
@@ -50,6 +50,11 @@ test('Default drawing palette should not include white by default', () => {
     assert.equal(defaults.drawConfig.connectionTransport, 'serial')
     assert.equal(defaults.drawConfig.baudRate, 115200)
     assert.equal(defaults.drawConfig.wifiPort, 1337)
+    assert.equal(defaults.drawConfig.reversePenMotor, true)
+    assert.equal(defaults.drawConfig.reverseEggMotor, true)
+    assert.equal(defaults.drawConfig.penDownSpeed, 300)
+    assert.equal(defaults.drawConfig.penUpSpeed, 400)
+    assert.equal(defaults.drawConfig.returnHome, true)
     assert.equal(defaults.drawConfig.inkscapeSvgCompatMode, false)
     assert.equal(normalizedHex.includes('#ffffff'), false)
     assert.equal(normalizedHex.includes('#fff'), false)
@@ -60,7 +65,7 @@ test('ProjectIoUtils should stamp project payload with app version', () => {
     const payload = ProjectIoUtils.buildProjectPayload(AppRuntimeConfig.createDefaultState())
 
     assert.equal(payload.version, AppVersion.get())
-    assert.equal(payload.schemaVersion, 1)
+    assert.equal(payload.schemaVersion, 2)
 })
 
 test('ProjectIoUtils should clamp extended EggBot control payload fields', () => {
@@ -141,4 +146,52 @@ test('ProjectIoUtils should reject Wi-Fi transport while preserving Wi-Fi fields
     assert.equal(normalized.drawConfig.wifiHost, '192.168.1.42')
     assert.equal(normalized.drawConfig.wifiPort, 1337)
     assert.equal(normalized.drawConfig.wifiSecure, true)
+})
+
+test('ProjectIoUtils should persist and normalize resume checkpoints in schema v2', () => {
+    const payload = ProjectIoUtils.buildProjectPayload({
+        ...AppRuntimeConfig.createDefaultState(),
+        resumeState: {
+            status: 'paused',
+            updatedAt: '2026-02-28T12:00:00.000Z',
+            totalStrokes: 3,
+            completedStrokes: 1,
+            nextBatchIndex: 0,
+            nextStrokeIndex: 1,
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: 1209.448,
+            documentHeightPx: 377.952,
+            stepScalingFactor: 2,
+            drawBatches: [
+                {
+                    colorIndex: 0,
+                    strokes: [
+                        {
+                            points: [
+                                { u: 0.1, v: 0.2 },
+                                { u: 0.3, v: 0.4 }
+                            ]
+                        },
+                        {
+                            points: [
+                                { u: 0.5, v: 0.6 },
+                                { u: 0.7, v: 0.8 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    })
+
+    assert.equal(payload.schemaVersion, 2)
+    assert.equal(payload.resumeState?.status, 'paused')
+    assert.equal(payload.resumeState?.totalStrokes, 2)
+    assert.equal(payload.resumeState?.completedStrokes, 1)
+    assert.equal(payload.resumeState?.coordinateMode, 'document-px-centered')
+
+    const normalized = ProjectIoUtils.normalizeProjectState(payload)
+    assert.equal(normalized.resumeState?.status, 'paused')
+    assert.equal(Array.isArray(normalized.resumeState?.drawBatches), true)
+    assert.equal(normalized.resumeState?.drawBatches?.length, 1)
 })

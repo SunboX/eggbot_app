@@ -101,9 +101,10 @@ export class SvgPatternImportWorkerGeometry {
      * @param {{ minX: number, minY: number, width: number, height: number }} viewBox
      * @param {number} sampleSpacing
      * @param {number} heightRatio
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{ points: Array<{u:number,v:number}>, closed: boolean }>}
      */
-    static sampleGeometrySegments(element, matrix, viewBox, sampleSpacing, heightRatio) {
+    static sampleGeometrySegments(element, matrix, viewBox, sampleSpacing, heightRatio, curveSmoothing = 0.2) {
         const tag = String(element.tagName || '')
             .trim()
             .toLowerCase()
@@ -114,13 +115,14 @@ export class SvgPatternImportWorkerGeometry {
         if (tag === 'path') {
             sampled = SvgPatternImportWorkerGeometry.samplePathSegments(
                 String(element.getAttribute('d') || ''),
-                sampleSpacing
+                sampleSpacing,
+                curveSmoothing
             )
         } else if (tag === 'line') {
-            const x1 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x1'))
-            const y1 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y1'))
-            const x2 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x2'))
-            const y2 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y2'))
+            const x1 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x1'), { reference: viewBox.width })
+            const y1 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y1'), { reference: viewBox.height })
+            const x2 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x2'), { reference: viewBox.width })
+            const y2 = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y2'), { reference: viewBox.height })
             sampled = [
                 {
                     points: SvgPatternImportWorkerGeometry.sampleLine(
@@ -147,10 +149,10 @@ export class SvgPatternImportWorkerGeometry {
                 ]
             }
         } else if (tag === 'rect') {
-            const x = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x'))
-            const y = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y'))
-            const width = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('width'))
-            const height = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('height'))
+            const x = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('x'), { reference: viewBox.width })
+            const y = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('y'), { reference: viewBox.height })
+            const width = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('width'), { reference: viewBox.width })
+            const height = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('height'), { reference: viewBox.height })
             if (width > 0 && height > 0) {
                 const corners = [
                     { x, y },
@@ -166,26 +168,28 @@ export class SvgPatternImportWorkerGeometry {
                 ]
             }
         } else if (tag === 'circle') {
-            const cx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cx'))
-            const cy = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cy'))
-            const r = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('r'))
+            const cx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cx'), { reference: viewBox.width })
+            const cy = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cy'), { reference: viewBox.height })
+            const r = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('r'), {
+                reference: Math.min(viewBox.width, viewBox.height)
+            })
             if (r > 0) {
                 sampled = [
                     {
-                        points: SvgPatternImportWorkerGeometry.sampleEllipse(cx, cy, r, r, sampleSpacing),
+                        points: SvgPatternImportWorkerGeometry.sampleEllipse(cx, cy, r, r, sampleSpacing, curveSmoothing),
                         closed: true
                     }
                 ]
             }
         } else if (tag === 'ellipse') {
-            const cx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cx'))
-            const cy = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cy'))
-            const rx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('rx'))
-            const ry = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('ry'))
+            const cx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cx'), { reference: viewBox.width })
+            const cy = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('cy'), { reference: viewBox.height })
+            const rx = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('rx'), { reference: viewBox.width })
+            const ry = SvgPatternImportWorkerGeometry.parseSvgLength(element.getAttribute('ry'), { reference: viewBox.height })
             if (rx > 0 && ry > 0) {
                 sampled = [
                     {
-                        points: SvgPatternImportWorkerGeometry.sampleEllipse(cx, cy, rx, ry, sampleSpacing),
+                        points: SvgPatternImportWorkerGeometry.sampleEllipse(cx, cy, rx, ry, sampleSpacing, curveSmoothing),
                         closed: true
                     }
                 ]
@@ -223,9 +227,10 @@ export class SvgPatternImportWorkerGeometry {
      * Samples all path subsegments.
      * @param {string} pathData
      * @param {number} sampleSpacing
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{ points: Array<{x:number,y:number}>, closed: boolean }>}
      */
-    static samplePathSegments(pathData, sampleSpacing) {
+    static samplePathSegments(pathData, sampleSpacing, curveSmoothing = 0.2) {
         const tokens = SvgPatternImportWorkerGeometry.tokenizePathCommands(pathData)
         if (!tokens.length) return []
 
@@ -351,7 +356,8 @@ export class SvgPatternImportWorkerGeometry {
                         { x: x1, y: y1 },
                         { x: x2, y: y2 },
                         { x, y },
-                        sampleSpacing
+                        sampleSpacing,
+                        curveSmoothing
                     )
                     curve.slice(1).forEach((point) => currentSegment.push(point))
 
@@ -384,7 +390,8 @@ export class SvgPatternImportWorkerGeometry {
                         reflected,
                         { x: x2, y: y2 },
                         { x, y },
-                        sampleSpacing
+                        sampleSpacing,
+                        curveSmoothing
                     )
                     curve.slice(1).forEach((point) => currentSegment.push(point))
 
@@ -409,7 +416,8 @@ export class SvgPatternImportWorkerGeometry {
                         { x: currentX, y: currentY },
                         { x: x1, y: y1 },
                         { x, y },
-                        sampleSpacing
+                        sampleSpacing,
+                        curveSmoothing
                     )
                     curve.slice(1).forEach((point) => currentSegment.push(point))
 
@@ -439,7 +447,8 @@ export class SvgPatternImportWorkerGeometry {
                         { x: currentX, y: currentY },
                         reflected,
                         { x, y },
-                        sampleSpacing
+                        sampleSpacing,
+                        curveSmoothing
                     )
                     curve.slice(1).forEach((point) => currentSegment.push(point))
 
@@ -474,7 +483,8 @@ export class SvgPatternImportWorkerGeometry {
                             x,
                             y
                         },
-                        sampleSpacing
+                        sampleSpacing,
+                        curveSmoothing
                     )
                     arc.slice(1).forEach((point) => currentSegment.push(point))
 
@@ -504,17 +514,13 @@ export class SvgPatternImportWorkerGeometry {
      * @returns {Array<{x:number,y:number}>}
      */
     static sampleLine(start, end, sampleSpacing) {
-        const length = Math.hypot(end.x - start.x, end.y - start.y)
-        const count = Math.max(1, Math.ceil(length / Math.max(0.1, sampleSpacing)))
-        const points = []
-        for (let index = 0; index <= count; index += 1) {
-            const t = index / count
-            points.push({
-                x: start.x + (end.x - start.x) * t,
-                y: start.y + (end.y - start.y) * t
-            })
+        if (Math.abs(end.x - start.x) < 1e-9 && Math.abs(end.y - start.y) < 1e-9) {
+            return [{ x: start.x, y: start.y }]
         }
-        return points
+        return [
+            { x: start.x, y: start.y },
+            { x: end.x, y: end.y }
+        ]
     }
 
     /**
@@ -524,34 +530,29 @@ export class SvgPatternImportWorkerGeometry {
      * @param {{x:number,y:number}} p2
      * @param {{x:number,y:number}} p3
      * @param {number} sampleSpacing
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{x:number,y:number}>}
      */
-    static sampleCubicBezier(p0, p1, p2, p3, sampleSpacing) {
-        const estimate =
-            Math.hypot(p1.x - p0.x, p1.y - p0.y) +
-            Math.hypot(p2.x - p1.x, p2.y - p1.y) +
-            Math.hypot(p3.x - p2.x, p3.y - p2.y)
-        const count = Math.max(2, Math.min(3000, Math.ceil(estimate / Math.max(0.1, sampleSpacing))))
-        const out = []
+    static sampleCubicBezier(p0, p1, p2, p3, sampleSpacing, curveSmoothing = 0.2) {
+        const tolerance = SvgPatternImportWorkerGeometry.resolveCurveTolerance(sampleSpacing, curveSmoothing)
+        const out = [{ x: p0.x, y: p0.y }]
 
-        for (let index = 0; index <= count; index += 1) {
-            const t = index / count
-            const mt = 1 - t
-            out.push({
-                x:
-                    mt * mt * mt * p0.x +
-                    3 * mt * mt * t * p1.x +
-                    3 * mt * t * t * p2.x +
-                    t * t * t * p3.x,
-                y:
-                    mt * mt * mt * p0.y +
-                    3 * mt * mt * t * p1.y +
-                    3 * mt * t * t * p2.y +
-                    t * t * t * p3.y
-            })
+        const recurse = (a, b, c, d, depth) => {
+            if (
+                depth >= 12 ||
+                SvgPatternImportWorkerGeometry.cubicFlatness(a, b, c, d) <= tolerance
+            ) {
+                out.push({ x: d.x, y: d.y })
+                return
+            }
+
+            const split = SvgPatternImportWorkerGeometry.splitCubicBezier(a, b, c, d)
+            recurse(split.left[0], split.left[1], split.left[2], split.left[3], depth + 1)
+            recurse(split.right[0], split.right[1], split.right[2], split.right[3], depth + 1)
         }
 
-        return out
+        recurse(p0, p1, p2, p3, 0)
+        return SvgPatternImportWorkerGeometry.dedupeSequentialPoints(out)
     }
 
     /**
@@ -560,23 +561,19 @@ export class SvgPatternImportWorkerGeometry {
      * @param {{x:number,y:number}} p1
      * @param {{x:number,y:number}} p2
      * @param {number} sampleSpacing
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{x:number,y:number}>}
      */
-    static sampleQuadraticBezier(p0, p1, p2, sampleSpacing) {
-        const estimate = Math.hypot(p1.x - p0.x, p1.y - p0.y) + Math.hypot(p2.x - p1.x, p2.y - p1.y)
-        const count = Math.max(2, Math.min(3000, Math.ceil(estimate / Math.max(0.1, sampleSpacing))))
-        const out = []
-
-        for (let index = 0; index <= count; index += 1) {
-            const t = index / count
-            const mt = 1 - t
-            out.push({
-                x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
-                y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y
-            })
+    static sampleQuadraticBezier(p0, p1, p2, sampleSpacing, curveSmoothing = 0.2) {
+        const c1 = {
+            x: p0.x + (2 / 3) * (p1.x - p0.x),
+            y: p0.y + (2 / 3) * (p1.y - p0.y)
         }
-
-        return out
+        const c2 = {
+            x: p2.x + (2 / 3) * (p1.x - p2.x),
+            y: p2.y + (2 / 3) * (p1.y - p2.y)
+        }
+        return SvgPatternImportWorkerGeometry.sampleCubicBezier(p0, c1, c2, p2, sampleSpacing, curveSmoothing)
     }
 
     /**
@@ -584,9 +581,10 @@ export class SvgPatternImportWorkerGeometry {
      * @param {{x:number,y:number}} start
      * @param {{ rx: number, ry: number, xAxisRotation: number, largeArcFlag: number, sweepFlag: number, x: number, y: number }} command
      * @param {number} sampleSpacing
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{x:number,y:number}>}
      */
-    static sampleArc(start, command, sampleSpacing) {
+    static sampleArc(start, command, sampleSpacing, curveSmoothing = 0.2) {
         const end = { x: command.x, y: command.y }
         if (command.rx <= 0 || command.ry <= 0) {
             return SvgPatternImportWorkerGeometry.sampleLine(start, end, sampleSpacing)
@@ -649,7 +647,8 @@ export class SvgPatternImportWorkerGeometry {
 
         const averageRadius = (Math.abs(rx) + Math.abs(ry)) / 2
         const estimate = Math.abs(deltaTheta) * averageRadius
-        const count = Math.max(4, Math.min(6000, Math.ceil(estimate / Math.max(0.1, sampleSpacing))))
+        const stepLength = SvgPatternImportWorkerGeometry.resolveCurveStepLength(sampleSpacing, curveSmoothing)
+        const count = Math.max(4, Math.min(6000, Math.ceil(estimate / Math.max(0.05, stepLength))))
 
         const out = []
         for (let index = 0; index <= count; index += 1) {
@@ -663,7 +662,7 @@ export class SvgPatternImportWorkerGeometry {
             })
         }
 
-        return out
+        return SvgPatternImportWorkerGeometry.dedupeSequentialPoints(out)
     }
 
     /**
@@ -675,16 +674,16 @@ export class SvgPatternImportWorkerGeometry {
      */
     static samplePointSequence(points, sampleSpacing, closed) {
         if (points.length < 2) return []
-        const out = [points[0]]
+        const out = [{ x: points[0].x, y: points[0].y }]
         for (let index = 1; index < points.length; index += 1) {
             const piece = SvgPatternImportWorkerGeometry.sampleLine(points[index - 1], points[index], sampleSpacing)
-            piece.slice(1).forEach((point) => out.push(point))
+            piece.slice(1).forEach((point) => out.push({ x: point.x, y: point.y }))
         }
         if (closed) {
             const piece = SvgPatternImportWorkerGeometry.sampleLine(points[points.length - 1], points[0], sampleSpacing)
-            piece.slice(1).forEach((point) => out.push(point))
+            piece.slice(1).forEach((point) => out.push({ x: point.x, y: point.y }))
         }
-        return out
+        return SvgPatternImportWorkerGeometry.dedupeSequentialPoints(out)
     }
 
     /**
@@ -694,11 +693,13 @@ export class SvgPatternImportWorkerGeometry {
      * @param {number} rx
      * @param {number} ry
      * @param {number} sampleSpacing
+     * @param {number} [curveSmoothing=0.2]
      * @returns {Array<{x:number,y:number}>}
      */
-    static sampleEllipse(cx, cy, rx, ry, sampleSpacing) {
+    static sampleEllipse(cx, cy, rx, ry, sampleSpacing, curveSmoothing = 0.2) {
         const circumference = 2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2)
-        const count = Math.max(24, Math.min(4000, Math.ceil(circumference / Math.max(0.1, sampleSpacing))))
+        const stepLength = SvgPatternImportWorkerGeometry.resolveCurveStepLength(sampleSpacing, curveSmoothing)
+        const count = Math.max(16, Math.min(4000, Math.ceil(circumference / Math.max(0.05, stepLength))))
         const out = []
         for (let index = 0; index <= count; index += 1) {
             const angle = (index / count) * Math.PI * 2
@@ -706,6 +707,105 @@ export class SvgPatternImportWorkerGeometry {
                 x: cx + Math.cos(angle) * rx,
                 y: cy + Math.sin(angle) * ry
             })
+        }
+        return SvgPatternImportWorkerGeometry.dedupeSequentialPoints(out)
+    }
+
+    /**
+     * Resolves adaptive flattening tolerance for bezier approximation.
+     * Lower curve smoothing creates more segments.
+     * @param {number} sampleSpacing
+     * @param {number} curveSmoothing
+     * @returns {number}
+     */
+    static resolveCurveTolerance(sampleSpacing, curveSmoothing) {
+        const normalizedSmoothing = SvgPatternImportWorkerGeometry.clamp(Number(curveSmoothing) || 0.2, 0, 2)
+        const base = Math.max(0.1, Number(sampleSpacing) || 3) * 0.12
+        return SvgPatternImportWorkerGeometry.clamp(base + normalizedSmoothing * 0.45, 0.05, 3)
+    }
+
+    /**
+     * Resolves approximate perimeter sample length for arcs and ellipses.
+     * @param {number} sampleSpacing
+     * @param {number} curveSmoothing
+     * @returns {number}
+     */
+    static resolveCurveStepLength(sampleSpacing, curveSmoothing) {
+        const normalizedSmoothing = SvgPatternImportWorkerGeometry.clamp(Number(curveSmoothing) || 0.2, 0, 2)
+        const base = Math.max(0.1, Number(sampleSpacing) || 3)
+        return SvgPatternImportWorkerGeometry.clamp(base + normalizedSmoothing * base * 1.2, 0.05, 80)
+    }
+
+    /**
+     * Computes cubic segment flatness against baseline p0->p3.
+     * @param {{x:number,y:number}} p0
+     * @param {{x:number,y:number}} p1
+     * @param {{x:number,y:number}} p2
+     * @param {{x:number,y:number}} p3
+     * @returns {number}
+     */
+    static cubicFlatness(p0, p1, p2, p3) {
+        return Math.max(
+            SvgPatternImportWorkerGeometry.distancePointToLine(p1, p0, p3),
+            SvgPatternImportWorkerGeometry.distancePointToLine(p2, p0, p3)
+        )
+    }
+
+    /**
+     * Splits one cubic bezier into left/right halves.
+     * @param {{x:number,y:number}} p0
+     * @param {{x:number,y:number}} p1
+     * @param {{x:number,y:number}} p2
+     * @param {{x:number,y:number}} p3
+     * @returns {{ left: Array<{x:number,y:number}>, right: Array<{x:number,y:number}> }}
+     */
+    static splitCubicBezier(p0, p1, p2, p3) {
+        const p01 = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 }
+        const p12 = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+        const p23 = { x: (p2.x + p3.x) / 2, y: (p2.y + p3.y) / 2 }
+        const p012 = { x: (p01.x + p12.x) / 2, y: (p01.y + p12.y) / 2 }
+        const p123 = { x: (p12.x + p23.x) / 2, y: (p12.y + p23.y) / 2 }
+        const p0123 = { x: (p012.x + p123.x) / 2, y: (p012.y + p123.y) / 2 }
+
+        return {
+            left: [p0, p01, p012, p0123],
+            right: [p0123, p123, p23, p3]
+        }
+    }
+
+    /**
+     * Returns perpendicular distance from one point to a line segment.
+     * @param {{x:number,y:number}} point
+     * @param {{x:number,y:number}} lineStart
+     * @param {{x:number,y:number}} lineEnd
+     * @returns {number}
+     */
+    static distancePointToLine(point, lineStart, lineEnd) {
+        const dx = lineEnd.x - lineStart.x
+        const dy = lineEnd.y - lineStart.y
+        const denominator = Math.hypot(dx, dy)
+        if (denominator < 1e-9) {
+            return Math.hypot(point.x - lineStart.x, point.y - lineStart.y)
+        }
+        return Math.abs(dy * point.x - dx * point.y + lineEnd.x * lineStart.y - lineEnd.y * lineStart.x) / denominator
+    }
+
+    /**
+     * Drops sequential duplicates from sampled points.
+     * @param {Array<{x:number,y:number}>} points
+     * @returns {Array<{x:number,y:number}>}
+     */
+    static dedupeSequentialPoints(points) {
+        if (!Array.isArray(points) || !points.length) return []
+        const out = []
+        for (let index = 0; index < points.length; index += 1) {
+            const point = points[index]
+            if (!point) continue
+            const last = out[out.length - 1]
+            if (last && Math.abs(last.x - point.x) < 1e-8 && Math.abs(last.y - point.y) < 1e-8) {
+                continue
+            }
+            out.push({ x: point.x, y: point.y })
         }
         return out
     }
@@ -819,10 +919,38 @@ export class SvgPatternImportWorkerGeometry {
     /**
      * Parses numeric SVG length.
      * @param {string | null | undefined} value
+     * @param {{ reference?: number }} [options]
      * @returns {number}
      */
-    static parseSvgLength(value) {
-        return SvgPatternImportWorkerGeometry.toNumber(value, 0)
+    static parseSvgLength(value, options = {}) {
+        const raw = String(value ?? '').trim()
+        if (!raw) return 0
+
+        const match = raw.match(/^([+-]?(?:\d*\.\d+|\d+\.?)(?:[eE][+-]?\d+)?)\s*([a-zA-Z%]*)$/)
+        if (!match) {
+            return SvgPatternImportWorkerGeometry.toNumber(raw, 0)
+        }
+
+        const magnitude = Number.parseFloat(match[1])
+        if (!Number.isFinite(magnitude)) return 0
+        const unit = String(match[2] || '')
+            .trim()
+            .toLowerCase()
+
+        if (unit === '' || unit === 'px') return magnitude
+        if (unit === 'in') return magnitude * 96
+        if (unit === 'mm') return (magnitude * 96) / 25.4
+        if (unit === 'cm') return (magnitude * 96) / 2.54
+        if (unit === 'q') return (magnitude * 96) / 101.6
+        if (unit === 'pc') return (magnitude * 96) / 6
+        if (unit === 'pt') return (magnitude * 96) / 72
+        if (unit === '%') {
+            const reference = Number(options.reference)
+            if (!Number.isFinite(reference)) return magnitude / 100
+            return (magnitude / 100) * reference
+        }
+
+        return magnitude
     }
 
     /**
@@ -862,8 +990,10 @@ export class SvgPatternImportWorkerGeometry {
             }
         }
 
-        const width = SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('width')) || 3200
-        const height = SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('height')) || 800
+        const width =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('width'), { reference: 3200 }) || 3200
+        const height =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('height'), { reference: 800 }) || 800
         return {
             minX: 0,
             minY: 0,
