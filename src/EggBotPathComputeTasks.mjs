@@ -117,6 +117,40 @@ export class EggBotPathComputeTasks {
     static #unwrapAndScaleStroke(points, cfg) {
         if (!points.length) return []
 
+        const unwrapped = EggBotPathComputeTasks.#unwrapStrokeU(points)
+
+        const maxY = cfg.penRangeSteps / 2
+        return unwrapped.map((point) => ({
+            x: Math.round(point.u * cfg.stepsPerTurn),
+            y: Math.max(-maxY, Math.min(maxY, Math.round((0.5 - point.v) * cfg.penRangeSteps)))
+        }))
+    }
+
+    /**
+     * Converts wrapped UV points into v281-style centered document coordinates.
+     * @param {Array<{u:number,v:number}>} points
+     * @param {{ documentWidthPx: number, documentHeightPx: number, stepScalingFactor: number }} cfg
+     * @returns {Array<{x:number,y:number}>}
+     */
+    static #unwrapAndScaleDocumentStroke(points, cfg) {
+        if (!points.length) return []
+        const widthFactor = (2 * cfg.documentWidthPx) / cfg.stepScalingFactor
+        const heightFactor = (2 * cfg.documentHeightPx) / cfg.stepScalingFactor
+        const unwrapped = EggBotPathComputeTasks.#unwrapStrokeUSeamAware(points)
+        return unwrapped.map((point) => ({
+            x: Math.round((point.u - 0.5) * widthFactor),
+            y: Math.round((point.v - 0.5) * heightFactor)
+        }))
+    }
+
+    /**
+     * Unwraps normalized U values into one continuous stroke.
+     * @param {Array<{u:number,v:number}>} points
+     * @returns {Array<{u:number,v:number}>}
+     */
+    static #unwrapStrokeU(points) {
+        if (!points.length) return []
+
         const unwrapped = [
             {
                 u: points[0].u,
@@ -144,27 +178,82 @@ export class EggBotPathComputeTasks {
             })
         }
 
-        const maxY = cfg.penRangeSteps / 2
-        return unwrapped.map((point) => ({
-            x: Math.round(point.u * cfg.stepsPerTurn),
-            y: Math.max(-maxY, Math.min(maxY, Math.round((0.5 - point.v) * cfg.penRangeSteps)))
-        }))
+        return unwrapped
     }
 
     /**
-     * Converts wrapped UV points into v281-style centered document coordinates.
+     * Unwraps U values only when one jump likely crosses the document seam.
+     * This preserves wide in-document segments (v281 parity) while fixing wrap artifacts.
      * @param {Array<{u:number,v:number}>} points
-     * @param {{ documentWidthPx: number, documentHeightPx: number, stepScalingFactor: number }} cfg
-     * @returns {Array<{x:number,y:number}>}
+     * @returns {Array<{u:number,v:number}>}
      */
-    static #unwrapAndScaleDocumentStroke(points, cfg) {
+    static #unwrapStrokeUSeamAware(points) {
         if (!points.length) return []
-        const widthFactor = (2 * cfg.documentWidthPx) / cfg.stepScalingFactor
-        const heightFactor = (2 * cfg.documentHeightPx) / cfg.stepScalingFactor
-        return points.map((point) => ({
-            x: Math.round((point.u - 0.5) * widthFactor),
-            y: Math.round((point.v - 0.5) * heightFactor)
-        }))
+
+        const firstU = Number(points[0].u)
+        const output = [
+            {
+                u: firstU,
+                v: Number(points[0].v)
+            }
+        ]
+
+        for (let index = 1; index < points.length; index += 1) {
+            const previous = output[index - 1]
+            const currentU = Number(points[index].u)
+            const previousWrapped = EggBotPathComputeTasks.#wrap01(previous.u)
+            const currentWrapped = EggBotPathComputeTasks.#wrap01(currentU)
+            const rawDelta = Math.abs(currentWrapped - previousWrapped)
+            const seamCrossLikely = EggBotPathComputeTasks.#isLikelySeamCross(previousWrapped, currentWrapped)
+            const revolutionOffset = Math.round(previous.u - previousWrapped)
+            let nextU = currentWrapped + revolutionOffset
+
+            if (rawDelta > 0.5 && seamCrossLikely) {
+                const options = [nextU - 1, nextU, nextU + 1]
+                nextU = options[0]
+                let bestDistance = Math.abs(options[0] - previous.u)
+                for (let optionIndex = 1; optionIndex < options.length; optionIndex += 1) {
+                    const candidate = options[optionIndex]
+                    const distance = Math.abs(candidate - previous.u)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        nextU = candidate
+                    }
+                }
+            }
+
+            output.push({
+                u: nextU,
+                v: Number(points[index].v)
+            })
+        }
+
+        return output
+    }
+
+    /**
+     * Determines whether one wrapped U jump likely crosses the seam.
+     * @param {number} previousU
+     * @param {number} currentU
+     * @returns {boolean}
+     */
+    static #isLikelySeamCross(previousU, currentU) {
+        const lowThreshold = 0.1
+        const highThreshold = 0.9
+        return (
+            (previousU >= highThreshold && currentU <= lowThreshold) ||
+            (previousU <= lowThreshold && currentU >= highThreshold)
+        )
+    }
+
+    /**
+     * Wraps one U coordinate into [0,1).
+     * @param {number} value
+     * @returns {number}
+     */
+    static #wrap01(value) {
+        const wrapped = Number(value) % 1
+        return wrapped < 0 ? wrapped + 1 : wrapped
     }
 
     /**

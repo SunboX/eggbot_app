@@ -1979,7 +1979,12 @@ class AppController {
                 return this.importedPattern.strokes
             }
             const sourceHeightRatio = PatternStrokeScaleUtils.clampRatio(this.importedPattern.heightRatio)
-            return PatternStrokeScaleUtils.rescaleStrokes(this.importedPattern.strokes, sourceHeightRatio, activeHeightRatio)
+            // Imported SVG draw parity with v281: scale only vertically and keep U unchanged.
+            return PatternStrokeScaleUtils.rescaleStrokesVertical(
+                this.importedPattern.strokes,
+                sourceHeightRatio,
+                activeHeightRatio
+            )
         }
         const generated = PatternGenerator.generate(this.state)
         return PatternStrokeScaleUtils.rescaleStrokes(generated, 1, activeHeightRatio)
