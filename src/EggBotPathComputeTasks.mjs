@@ -4,7 +4,7 @@
 export class EggBotPathComputeTasks {
     /**
      * Converts UV strokes into EggBot step coordinates and aligns seam-wrapped X travel.
-     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}> }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean }, startX?: number }} input
+     * @param {{ strokes?: Array<{ points: Array<{u:number,v:number}>, closed?: boolean }>, drawConfig?: { stepsPerTurn?: number, penRangeSteps?: number, wrapAround?: boolean }, startX?: number }} input
      * @returns {{ strokes: Array<Array<{x:number,y:number}>> }}
      */
     static prepareDrawStrokes(input) {
@@ -15,7 +15,11 @@ export class EggBotPathComputeTasks {
 
         strokes.forEach((stroke) => {
             if (!Array.isArray(stroke?.points) || stroke.points.length < 2) return
-            const scaled = EggBotPathComputeTasks.#scaleStrokePoints(stroke.points, cfg)
+            const normalizedStrokePoints = EggBotPathComputeTasks.#normalizeStrokePoints(
+                stroke.points,
+                Boolean(stroke?.closed)
+            )
+            const scaled = EggBotPathComputeTasks.#scaleStrokePoints(normalizedStrokePoints, cfg)
             const aligned = cfg.wrapAround ? EggBotPathComputeTasks.#alignStrokeXToCurrent(scaled, currentX, cfg.wrapPeriod) : scaled
             if (aligned.length < 2) return
             output.push(aligned)
@@ -51,6 +55,44 @@ export class EggBotPathComputeTasks {
             stepScalingFactor,
             wrapPeriod
         }
+    }
+
+    /**
+     * Normalizes one stroke and appends the start point for closed paths when needed.
+     * @param {Array<{u:number,v:number}>} points
+     * @param {boolean} closed
+     * @returns {Array<{u:number,v:number}>}
+     */
+    static #normalizeStrokePoints(points, closed) {
+        if (!Array.isArray(points) || !points.length) return []
+
+        const normalized = points
+            .map((point) => ({
+                u: Number(point?.u),
+                v: Number(point?.v)
+            }))
+            .filter((point) => Number.isFinite(point.u) && Number.isFinite(point.v))
+
+        if (normalized.length < 2 || !closed) return normalized
+
+        const first = normalized[0]
+        const last = normalized[normalized.length - 1]
+        const wrappedDeltaU = (((last.u - first.u) % 1) + 1) % 1
+        const seamDistanceU = Math.min(wrappedDeltaU, 1 - wrappedDeltaU)
+        const distanceV = Math.abs(last.v - first.v)
+        const endpointDistance = Math.hypot(seamDistanceU, distanceV)
+
+        if (endpointDistance <= 1e-6) {
+            return normalized
+        }
+
+        return [
+            ...normalized,
+            {
+                u: first.u,
+                v: first.v
+            }
+        ]
     }
 
     /**

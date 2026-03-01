@@ -80,7 +80,7 @@ function installWorkerEnvironment(input = {}) {
                               result: {
                                   strokes: [],
                                   palette: ['#111111'],
-                                  schemaVersion: 2
+                                  schemaVersion: 3
                               }
                           }
                       })
@@ -146,7 +146,7 @@ test('PatternImportWorkerClient should resolve successful parse responses', asyn
                             heightRatio: 0.9,
                             documentWidthPx: 1209.448,
                             documentHeightPx: 377.952,
-                            schemaVersion: 2
+                            schemaVersion: 3
                         }
                     }
                 })
