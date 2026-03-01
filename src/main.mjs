@@ -1548,6 +1548,10 @@ class AppController {
                 100,
                 AppController.#parseInteger(this.els.penRangeSteps.value, this.state.drawConfig.penRangeSteps)
             )
+            if (this.importedPattern) {
+                this.#scheduleRender()
+                return
+            }
             this.#markProjectArtifactsDirty()
         })
         this.els.msPerStep.addEventListener('change', () => {
@@ -1910,6 +1914,32 @@ class AppController {
     }
 
     /**
+     * Resolves one draw-area ratio for imported preview mapping.
+     * @returns {number}
+     */
+    #resolveImportedPreviewDrawAreaRatio() {
+        if (!this.importedPattern) return 1
+        const drawConfig = this.#resolveDrawCoordinateConfig()
+        return ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentHeightPx: Number(this.importedPattern.documentHeightPx),
+            penRangeSteps: Number(this.state?.drawConfig?.penRangeSteps),
+            stepScalingFactor: Number(drawConfig?.stepScalingFactor) || 2
+        })
+    }
+
+    /**
+     * Resolves one preview-only render ratio.
+     * @param {number} sharedRenderHeightRatio
+     * @returns {number}
+     */
+    #resolvePreviewRenderHeightRatio(sharedRenderHeightRatio) {
+        const sharedRatio = PatternStrokeScaleUtils.clampRatio(sharedRenderHeightRatio)
+        if (!this.importedPattern) return sharedRatio
+        const drawAreaRatio = this.#resolveImportedPreviewDrawAreaRatio()
+        return PatternStrokeScaleUtils.clampRatio(sharedRatio * drawAreaRatio)
+    }
+
+    /**
      * Builds one worker-safe snapshot of generation settings.
      * @returns {Record<string, any>}
      */
@@ -1960,11 +1990,16 @@ class AppController {
      * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>}
      */
     #buildRenderInputStrokes(strokes) {
-        const source = Array.isArray(strokes) ? strokes : []
-        if (this.state.fillPatterns !== false) {
-            return source
+        let output = Array.isArray(strokes) ? strokes : []
+        if (this.importedPattern) {
+            const sourceHeightRatio = this.#resolveActiveRenderHeightRatio()
+            const previewHeightRatio = this.#resolvePreviewRenderHeightRatio(sourceHeightRatio)
+            output = PatternStrokeScaleUtils.rescaleStrokesVertical(output, sourceHeightRatio, previewHeightRatio)
         }
-        return source.map((stroke) => {
+        if (this.state.fillPatterns !== false) {
+            return output
+        }
+        return output.map((stroke) => {
             if (!stroke || typeof stroke !== 'object' || Array.isArray(stroke)) {
                 return stroke
             }
@@ -1983,7 +2018,10 @@ class AppController {
     #renderPattern(options = {}) {
         const skipImportedStatus = Boolean(options.skipImportedStatus)
         const importedSvgText = this.importedPattern ? String(this.importedPattern.svgText || '') : ''
-        const importedSvgHeightRatio = this.#resolveActiveRenderHeightRatio()
+        const sharedRenderHeightRatio = this.#resolveActiveRenderHeightRatio()
+        const importedSvgHeightRatio = this.importedPattern
+            ? this.#resolvePreviewRenderHeightRatio(sharedRenderHeightRatio)
+            : sharedRenderHeightRatio
         this.renderToken += 1
         const token = this.renderToken
 
@@ -4070,6 +4108,7 @@ class AppController {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let didMutateState = false
         let requestedTransportSwitch = null
+        let shouldRerenderImportedPreview = false
 
         if (Object.hasOwn(patch, 'connectionTransport')) {
             const requestedTransport = String(patch.connectionTransport || '')
@@ -4117,6 +4156,9 @@ class AppController {
                 AppController.#parseInteger(patch.penRangeSteps, this.state.drawConfig.penRangeSteps)
             )
             didMutateState = true
+            if (this.importedPattern) {
+                shouldRerenderImportedPreview = true
+            }
         }
         if (Object.hasOwn(patch, 'msPerStep')) {
             const nextValue = AppController.#parseFloat(patch.msPerStep, this.state.drawConfig.msPerStep)
@@ -4314,6 +4356,9 @@ class AppController {
         }
 
         this.#syncControlsFromState()
+        if (shouldRerenderImportedPreview) {
+            this.#renderPattern({ skipImportedStatus: true })
+        }
         return {
             message: 'Draw configuration updated.',
             state: this.#webMcpStateSnapshot()

@@ -209,3 +209,48 @@ test('PatternStrokeScaleUtils should keep full-wrap ring strokes spanning the fu
     const scaled = PatternStrokeScaleUtils.rescaleStrokes([ring], 1, 0.7)
     assert.ok(unwrappedUSpan(scaled[0]) > 0.98)
 })
+
+test('PatternStrokeScaleUtils should rescale only V for preview remap while keeping U unchanged', () => {
+    const strokes = [
+        {
+            colorIndex: 0,
+            points: [
+                { u: 0.12, v: 0.2 },
+                { u: 0.87, v: 0.8 }
+            ]
+        }
+    ]
+
+    const scaled = PatternStrokeScaleUtils.rescaleStrokesVertical(strokes, 1, 0.25)
+
+    assert.equal(scaled[0].points[0].u, 0.12)
+    assert.equal(scaled[0].points[1].u, 0.87)
+    assertNear(scaled[0].points[0].v, 0.425)
+    assertNear(scaled[0].points[1].v, 0.575)
+})
+
+test('PatternStrokeScaleUtils should preserve stroke metadata in vertical-only remap', () => {
+    const strokes = [
+        {
+            colorIndex: 1,
+            closed: true,
+            fillGroupId: 7,
+            fillAlpha: 0.42,
+            fillRule: 'evenodd',
+            transformGroupId: 13,
+            points: [
+                { u: 0.31, v: 0.1 },
+                { u: 0.56, v: 0.9 }
+            ]
+        }
+    ]
+
+    const scaled = PatternStrokeScaleUtils.rescaleStrokesVertical(strokes, 1, 0.5)
+
+    assert.equal(scaled[0].colorIndex, 1)
+    assert.equal(scaled[0].closed, true)
+    assert.equal(scaled[0].fillGroupId, 7)
+    assert.equal(scaled[0].fillAlpha, 0.42)
+    assert.equal(scaled[0].fillRule, 'evenodd')
+    assert.equal(scaled[0].transformGroupId, 13)
+})

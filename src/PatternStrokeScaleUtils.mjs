@@ -91,6 +91,41 @@ export class PatternStrokeScaleUtils {
     }
 
     /**
+     * Rescales only vertical UV values from one ratio into another.
+     * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', transformGroupId?: number }>} strokes
+     * @param {number} fromRatio
+     * @param {number} toRatio
+     * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', transformGroupId?: number }>}
+     */
+    static rescaleStrokesVertical(strokes, fromRatio, toRatio) {
+        const sourceRatio = PatternStrokeScaleUtils.clampRatio(fromRatio)
+        const targetRatio = PatternStrokeScaleUtils.clampRatio(toRatio)
+        if (Math.abs(sourceRatio - targetRatio) < 1e-6) return Array.isArray(strokes) ? strokes : []
+        if (!Array.isArray(strokes)) return []
+
+        const sourceOffsetV = (1 - sourceRatio) / 2
+        const targetOffsetV = (1 - targetRatio) / 2
+
+        return strokes.map((stroke) => {
+            if (!Array.isArray(stroke?.points)) return stroke
+            return {
+                ...stroke,
+                points: stroke.points.map((point) => {
+                    const localV = PatternStrokeScaleUtils.#clamp(
+                        (Number(point.v) - sourceOffsetV) / sourceRatio,
+                        0,
+                        1
+                    )
+                    return {
+                        u: Number(point.u),
+                        v: PatternStrokeScaleUtils.#clamp(targetOffsetV + localV * targetRatio, 0, 1)
+                    }
+                })
+            }
+        })
+    }
+
+    /**
      * Resolves one stable scale-group key for shared U-anchor transforms.
      * @param {Record<string, any>} stroke
      * @param {number} index
