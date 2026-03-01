@@ -1,6 +1,6 @@
 import { EggBotPathComputeTasks } from '../EggBotPathComputeTasks.mjs'
 
-const PATH_WORKER_SCHEMA_VERSION = 3
+const PATH_WORKER_SCHEMA_VERSION = 4
 
 /**
  * Posts one tagged worker error.

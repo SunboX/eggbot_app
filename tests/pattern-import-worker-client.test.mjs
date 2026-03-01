@@ -80,7 +80,7 @@ function installWorkerEnvironment(input = {}) {
                               result: {
                                   strokes: [],
                                   palette: ['#111111'],
-                                  schemaVersion: 3
+                                  schemaVersion: 4
                               }
                           }
                       })
@@ -146,7 +146,7 @@ test('PatternImportWorkerClient should resolve successful parse responses', asyn
                             heightRatio: 0.9,
                             documentWidthPx: 1209.448,
                             documentHeightPx: 377.952,
-                            schemaVersion: 3
+                            schemaVersion: 4
                         }
                     }
                 })
@@ -247,7 +247,7 @@ test('PatternImportWorkerClient should fallback when worker schema version is st
                             heightRatio: 1,
                             documentWidthPx: 1209.448,
                             documentHeightPx: 377.952,
-                            schemaVersion: 1
+                            schemaVersion: 3
                         }
                     }
                 })

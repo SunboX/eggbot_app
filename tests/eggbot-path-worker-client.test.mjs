@@ -87,7 +87,7 @@ function installWorkerEnvironment(input = {}) {
                                           { x: 32, y: 4 }
                                       ]
                                   ],
-                                  schemaVersion: 3
+                                  schemaVersion: 4
                               }
                           }
                       })
@@ -167,7 +167,7 @@ test('EggBotPathWorkerClient should reject stale worker schema responses', async
                                     { x: 32, y: 4 }
                                 ]
                             ],
-                            schemaVersion: 1
+                            schemaVersion: 3
                         }
                     }
                 })
