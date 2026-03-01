@@ -30,4 +30,23 @@ export class ImportedPatternScaleUtils {
 
         return Math.max(0.02, Math.min(3, baseHeightRatio * activeHeightScale))
     }
+
+    /**
+     * Resolves one preview multiplier from document pixel size and draw range settings.
+     * @param {{ documentHeightPx?: number, penRangeSteps?: number, stepScalingFactor?: number }} [input]
+     * @returns {number}
+     */
+    static resolveDrawAreaPreviewRatio(input = {}) {
+        const documentHeightPx = Number(input.documentHeightPx)
+        const penRangeSteps = Number(input.penRangeSteps)
+        const stepScalingFactor = Number(input.stepScalingFactor)
+
+        if (!Number.isFinite(documentHeightPx) || documentHeightPx <= 0) return 1
+        if (!Number.isFinite(penRangeSteps) || penRangeSteps <= 0) return 1
+        if (!Number.isFinite(stepScalingFactor) || stepScalingFactor <= 0) return 1
+
+        const ratio = (2 * documentHeightPx) / (stepScalingFactor * penRangeSteps)
+        if (!Number.isFinite(ratio) || ratio <= 0) return 1
+        return Math.max(0.02, Math.min(3, ratio))
+    }
 }

@@ -38,3 +38,40 @@ test('ImportedPatternScaleUtils should clamp resolved preview ratio bounds', () 
 
     assert.equal(ratio, 3)
 })
+
+test('ImportedPatternScaleUtils should resolve draw-area preview ratio from document height and draw settings', () => {
+    const ratio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+        documentHeightPx: 377.9527559,
+        penRangeSteps: 1500,
+        stepScalingFactor: 2
+    })
+
+    assert.ok(Math.abs(ratio - 0.25196850393333335) < 1e-9)
+})
+
+test('ImportedPatternScaleUtils should fallback to neutral draw-area preview ratio for invalid input', () => {
+    assert.equal(
+        ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentHeightPx: Number.NaN,
+            penRangeSteps: 1500,
+            stepScalingFactor: 2
+        }),
+        1
+    )
+    assert.equal(
+        ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentHeightPx: 377.9527559,
+            penRangeSteps: 0,
+            stepScalingFactor: 2
+        }),
+        1
+    )
+    assert.equal(
+        ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentHeightPx: 377.9527559,
+            penRangeSteps: 1500,
+            stepScalingFactor: Number.NaN
+        }),
+        1
+    )
+})
