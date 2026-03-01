@@ -32,6 +32,17 @@ export class ImportedPatternScaleUtils {
     }
 
     /**
+     * Resolves one imported draw ratio while preventing out-of-bounds clipping distortion.
+     * Imported SVG plotting should never scale above the source document height (v281 parity).
+     * @param {{ parsedHeightRatio?: number, parsedHeightScale?: number, activeHeightScale?: number }} [input]
+     * @returns {number}
+     */
+    static resolveDrawHeightRatio(input = {}) {
+        const previewRatio = ImportedPatternScaleUtils.resolvePreviewHeightRatio(input)
+        return Math.max(0.02, Math.min(1, previewRatio))
+    }
+
+    /**
      * Resolves one preview multiplier from document pixel size and draw range settings.
      * @param {{ documentHeightPx?: number, penRangeSteps?: number, stepScalingFactor?: number }} [input]
      * @returns {number}

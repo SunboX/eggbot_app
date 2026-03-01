@@ -39,6 +39,26 @@ test('ImportedPatternScaleUtils should clamp resolved preview ratio bounds', () 
     assert.equal(ratio, 3)
 })
 
+test('ImportedPatternScaleUtils should cap imported draw ratio at one to avoid edge clipping', () => {
+    const ratio = ImportedPatternScaleUtils.resolveDrawHeightRatio({
+        parsedHeightRatio: 1,
+        parsedHeightScale: 1,
+        activeHeightScale: 2
+    })
+
+    assert.equal(ratio, 1)
+})
+
+test('ImportedPatternScaleUtils should preserve sub-unit imported draw ratios', () => {
+    const ratio = ImportedPatternScaleUtils.resolveDrawHeightRatio({
+        parsedHeightRatio: 0.8,
+        parsedHeightScale: 1,
+        activeHeightScale: 0.5
+    })
+
+    assert.equal(ratio, 0.4)
+})
+
 test('ImportedPatternScaleUtils should resolve draw-area preview ratio from document height and draw settings', () => {
     const ratio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
         documentHeightPx: 377.9527559,

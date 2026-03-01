@@ -1907,7 +1907,7 @@ class AppController {
         if (this.#isInkscapeSvgCompatModeEnabled()) {
             return 1
         }
-        return ImportedPatternScaleUtils.resolvePreviewHeightRatio({
+        return ImportedPatternScaleUtils.resolveDrawHeightRatio({
             parsedHeightRatio: this.importedPattern.heightRatio,
             parsedHeightScale: this.importedPattern.heightScale,
             activeHeightScale: this.state.importHeightScale
