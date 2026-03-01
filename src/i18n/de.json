@@ -193,8 +193,8 @@
             "title": "Maschinen-Mapping und Rohwerte",
             "settingsTitle": "Einstellungen sichern und wiederherstellen",
             "settingsDescription": "Alle Einstellungen als JSON exportieren, wieder importieren oder auf Standardwerte zurücksetzen.",
-            "exportSettings": "Einstellungen exportieren (JSON)",
-            "importSettings": "Einstellungen importieren (JSON)",
+            "exportSettings": "Einstellungen exportieren",
+            "importSettings": "Einstellungen importieren",
             "resetSettings": "Alles auf Standard zurücksetzen"
         },
         "close": "Schließen",

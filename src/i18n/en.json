@@ -193,8 +193,8 @@
             "title": "Machine mapping and raw values",
             "settingsTitle": "Settings backup and restore",
             "settingsDescription": "Export all settings to JSON, import them again, or reset everything to defaults.",
-            "exportSettings": "Export settings (JSON)",
-            "importSettings": "Import settings (JSON)",
+            "exportSettings": "Export settings",
+            "importSettings": "Import settings",
             "resetSettings": "Reset all to defaults"
         },
         "close": "Close",
