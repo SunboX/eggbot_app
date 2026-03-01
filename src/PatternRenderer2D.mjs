@@ -1,3 +1,5 @@
+import { UvStrokeUnwrapUtils } from './UvStrokeUnwrapUtils.mjs'
+
 /**
  * Renders generated strokes into a 2D texture map for the 3D egg.
  */
@@ -109,7 +111,7 @@ export class PatternRenderer2D {
             const color = String(parts[3] || '#8b1f1a')
             this.ctx.beginPath()
             groupStrokes.forEach((stroke) => {
-                const unwrapped = PatternRenderer2D.#unwrapStroke(stroke.points)
+                const unwrapped = UvStrokeUnwrapUtils.unwrapStroke(stroke.points)
                 for (let shift = -1; shift <= 1; shift += 1) {
                     unwrapped.forEach((point, index) => {
                         const x = (point.u + shift) * width
@@ -134,7 +136,7 @@ export class PatternRenderer2D {
             if (!Array.isArray(stroke.points) || stroke.points.length < 2) return
             const color = String(palette[stroke.colorIndex % Math.max(1, palette.length)] || '#8b1f1a')
             this.ctx.strokeStyle = color
-            const unwrapped = PatternRenderer2D.#unwrapStroke(stroke.points)
+            const unwrapped = UvStrokeUnwrapUtils.unwrapStroke(stroke.points)
 
             for (let shift = -1; shift <= 1; shift += 1) {
                 this.ctx.beginPath()
@@ -166,40 +168,4 @@ export class PatternRenderer2D {
         })
     }
 
-    /**
-     * Converts wrapped U values into a continuous path.
-     * @param {Array<{u:number,v:number}>} points
-     * @returns {Array<{u:number,v:number}>}
-     */
-    static #unwrapStroke(points) {
-        if (!points.length) return []
-        const result = [
-            {
-                u: points[0].u,
-                v: points[0].v
-            }
-        ]
-
-        for (let index = 1; index < points.length; index += 1) {
-            const previous = result[index - 1]
-            const current = points[index]
-            const options = [current.u - 1, current.u, current.u + 1]
-            let nextU = options[0]
-            let bestDistance = Math.abs(options[0] - previous.u)
-            for (let optionIndex = 1; optionIndex < options.length; optionIndex += 1) {
-                const candidate = options[optionIndex]
-                const distance = Math.abs(candidate - previous.u)
-                if (distance < bestDistance) {
-                    bestDistance = distance
-                    nextU = candidate
-                }
-            }
-            result.push({
-                u: nextU,
-                v: current.v
-            })
-        }
-
-        return result
-    }
 }

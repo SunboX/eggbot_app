@@ -1,3 +1,5 @@
+import { UvStrokeUnwrapUtils } from '../UvStrokeUnwrapUtils.mjs'
+
 let textureCanvas = null
 let textureContext = null
 let latestRenderToken = 0
@@ -158,7 +160,7 @@ function drawStrokes(strokes, palette, lineWidth, fillPatterns) {
         const color = String(parts[3] || '#8b1f1a')
         textureContext.beginPath()
         groupStrokes.forEach((stroke) => {
-            const unwrapped = unwrapStroke(stroke.points)
+            const unwrapped = UvStrokeUnwrapUtils.unwrapStroke(stroke.points)
             for (let shift = -1; shift <= 1; shift += 1) {
                 unwrapped.forEach((point, index) => {
                     const x = (point.u + shift) * width
@@ -183,7 +185,7 @@ function drawStrokes(strokes, palette, lineWidth, fillPatterns) {
         if (!Array.isArray(stroke?.points) || stroke.points.length < 2) return
         const color = String(palette[stroke.colorIndex % Math.max(1, palette.length)] || '#8b1f1a')
         textureContext.strokeStyle = color
-        const unwrapped = unwrapStroke(stroke.points)
+        const unwrapped = UvStrokeUnwrapUtils.unwrapStroke(stroke.points)
 
         for (let shift = -1; shift <= 1; shift += 1) {
             textureContext.beginPath()
@@ -213,41 +215,6 @@ function drawStrokes(strokes, palette, lineWidth, fillPatterns) {
             textureContext.stroke()
         }
     })
-}
-
-/**
- * Unwraps U coordinates to keep stroke continuity across seam.
- * @param {Array<{u:number,v:number}>} points
- * @returns {Array<{u:number,v:number}>}
- */
-function unwrapStroke(points) {
-    if (!points.length) return []
-    const output = [
-        {
-            u: points[0].u,
-            v: points[0].v
-        }
-    ]
-    for (let index = 1; index < points.length; index += 1) {
-        const previous = output[index - 1]
-        const current = points[index]
-        const options = [current.u - 1, current.u, current.u + 1]
-        let nextU = options[0]
-        let bestDistance = Math.abs(options[0] - previous.u)
-        for (let optionIndex = 1; optionIndex < options.length; optionIndex += 1) {
-            const candidate = options[optionIndex]
-            const distance = Math.abs(candidate - previous.u)
-            if (distance < bestDistance) {
-                bestDistance = distance
-                nextU = candidate
-            }
-        }
-        output.push({
-            u: nextU,
-            v: current.v
-        })
-    }
-    return output
 }
 
 /**
