@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { CanvasPointerPressTracker } from './CanvasPointerPressTracker.mjs'
 
 /**
  * Interactive Three.js egg viewport.
@@ -26,6 +27,7 @@ export class EggScene {
         this.controls.minDistance = 1.4
         this.controls.maxDistance = 5
         this.controls.target.set(0, 0, 0)
+        this.pointerPressTracker = new CanvasPointerPressTracker(canvas)
 
         this.texture = null
         this.mesh = this.#buildEggMesh()
@@ -67,6 +69,7 @@ export class EggScene {
     dispose() {
         cancelAnimationFrame(this.animationFrameId)
         this.resizeObserver.disconnect()
+        this.pointerPressTracker.dispose()
         this.controls.dispose()
         this.renderer.dispose()
         this.mesh.geometry.dispose()
@@ -160,7 +163,9 @@ export class EggScene {
      */
     #animate() {
         this.controls.update()
-        this.mesh.rotation.y += 0.0015
+        if (!this.pointerPressTracker.isPressActive()) {
+            this.mesh.rotation.y += 0.0015
+        }
         this.renderer.render(this.scene, this.camera)
         this.animationFrameId = requestAnimationFrame(this.animateFrame)
     }
