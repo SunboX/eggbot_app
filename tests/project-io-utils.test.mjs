@@ -195,3 +195,37 @@ test('ProjectIoUtils should persist and normalize resume checkpoints in schema v
     assert.equal(Array.isArray(normalized.resumeState?.drawBatches), true)
     assert.equal(normalized.resumeState?.drawBatches?.length, 1)
 })
+
+test('ProjectIoUtils should normalize stale running resume state to paused', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        resumeState: {
+            status: 'running',
+            updatedAt: '2026-02-28T12:00:00.000Z',
+            totalStrokes: 2,
+            completedStrokes: 1,
+            nextBatchIndex: 0,
+            nextStrokeIndex: 1,
+            drawBatches: [
+                {
+                    colorIndex: 0,
+                    strokes: [
+                        {
+                            points: [
+                                { u: 0.1, v: 0.2 },
+                                { u: 0.2, v: 0.3 }
+                            ]
+                        },
+                        {
+                            points: [
+                                { u: 0.3, v: 0.4 },
+                                { u: 0.4, v: 0.5 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    })
+
+    assert.equal(normalized.resumeState?.status, 'paused')
+})

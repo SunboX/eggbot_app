@@ -190,7 +190,12 @@
             "description": "Ebenenbasiertes Plotten ist in dieser Web-Version noch nicht verfügbar."
         },
         "advanced": {
-            "title": "Maschinen-Mapping und Rohwerte"
+            "title": "Maschinen-Mapping und Rohwerte",
+            "settingsTitle": "Einstellungen sichern und wiederherstellen",
+            "settingsDescription": "Alle Einstellungen als JSON exportieren, wieder importieren oder auf Standardwerte zurücksetzen.",
+            "exportSettings": "Einstellungen exportieren (JSON)",
+            "importSettings": "Einstellungen importieren (JSON)",
+            "resetSettings": "Alles auf Standard zurücksetzen"
         },
         "close": "Schließen",
         "apply": "Anwenden"
@@ -260,8 +265,13 @@
         "controlDialogManualUnknownCommand": "Unbekannter manueller Befehl.",
         "controlDialogBusyDrawing": "Manuelle Steuerung ist während eines aktiven Zeichenlaufs deaktiviert.",
         "projectJsonDescription": "Projekt-JSON",
+        "settingsJsonDescription": "Einstellungs-JSON",
         "projectSaved": "Projekt gespeichert: {{name}}",
         "projectDownloaded": "Projekt heruntergeladen: {{name}}",
+        "settingsExported": "Einstellungen exportiert: {{name}}",
+        "settingsDownloaded": "Einstellungen heruntergeladen: {{name}}",
+        "settingsExportCanceled": "Export der Einstellungen abgebrochen.",
+        "settingsExportFailed": "Export der Einstellungen fehlgeschlagen: {{message}}",
         "svgFileDescription": "SVG-Muster",
         "svgExported": "SVG exportiert: {{name}}",
         "svgDownloaded": "SVG heruntergeladen: {{name}}",
@@ -272,6 +282,13 @@
         "loadCanceled": "Laden abgebrochen.",
         "loadedProject": "Projekt geladen: {{name}}",
         "loadFailed": "Laden fehlgeschlagen: {{message}}",
+        "settingsImportCanceled": "Import der Einstellungen abgebrochen.",
+        "settingsImported": "Einstellungen importiert: {{name}}",
+        "settingsImportFailed": "Import der Einstellungen fehlgeschlagen: {{message}}",
+        "settingsResetConfirm": "Alle Einstellungen auf Standardwerte zurücksetzen?",
+        "settingsResetDone": "Alle Einstellungen wurden auf Standardwerte zurückgesetzt.",
+        "settingsResetCanceled": "Zurücksetzen abgebrochen.",
+        "settingsResetFailed": "Zurücksetzen fehlgeschlagen: {{message}}",
         "projectUrlShared": "Projekt-URL geteilt.",
         "projectUrlCopied": "Projekt-URL in die Zwischenablage kopiert.",
         "copyProjectUrlPrompt": "Diese Projekt-URL kopieren:",

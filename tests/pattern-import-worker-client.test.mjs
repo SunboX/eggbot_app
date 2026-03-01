@@ -79,7 +79,8 @@ function installWorkerEnvironment(input = {}) {
                               ok: true,
                               result: {
                                   strokes: [],
-                                  palette: ['#111111']
+                                  palette: ['#111111'],
+                                  schemaVersion: 2
                               }
                           }
                       })
@@ -142,7 +143,10 @@ test('PatternImportWorkerClient should resolve successful parse responses', asyn
                             ],
                             palette: ['#111111'],
                             baseColor: '#ffffff',
-                            heightRatio: 0.9
+                            heightRatio: 0.9,
+                            documentWidthPx: 1209.448,
+                            documentHeightPx: 377.952,
+                            schemaVersion: 2
                         }
                     }
                 })
@@ -162,6 +166,118 @@ test('PatternImportWorkerClient should resolve successful parse responses', asyn
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
     assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
+})
+
+test('PatternImportWorkerClient should refresh legacy worker parse payloads via current parser', async (context) => {
+    class LegacyWorkerResult extends MockWorker {
+        /**
+         * @param {Record<string, any>} payload
+         */
+        postMessage(payload) {
+            queueMicrotask(() => {
+                this.emit('message', {
+                    data: {
+                        requestId: payload.requestId,
+                        ok: true,
+                        result: {
+                            strokes: [
+                                {
+                                    colorIndex: 0,
+                                    points: [
+                                        { u: 0.1, v: 0.2 },
+                                        { u: 0.3, v: 0.4 }
+                                    ]
+                                }
+                            ],
+                            palette: ['#111111']
+                        }
+                    }
+                })
+            })
+        }
+    }
+
+    const { restore } = installWorkerEnvironment({ workerCtor: LegacyWorkerResult })
+    context.after(restore)
+
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <g transform="translate(0,-197)">
+                <rect x="20.606821" y="217.98375" width="227.91998" height="63.53756" fill="none" stroke="#000000" />
+            </g>
+        </svg>
+    `
+
+    const client = new PatternImportWorkerClient()
+    const result = await client.parse(svgText, {
+        heightScale: 1,
+        heightReference: 1,
+        curveSmoothing: 0.2
+    })
+
+    assert.equal(Array.isArray(result.strokes), true)
+    assert.equal(result.strokes.length, 1)
+    assert.equal(result.strokes[0].points.length, 5)
+    assert.ok(Math.abs(Number(result.documentWidthPx) - 1209.448) < 0.01)
+    assert.ok(Math.abs(Number(result.documentHeightPx) - 377.952) < 0.01)
+})
+
+test('PatternImportWorkerClient should fallback when worker schema version is stale', async (context) => {
+    class StaleSchemaWorkerResult extends MockWorker {
+        /**
+         * @param {Record<string, any>} payload
+         */
+        postMessage(payload) {
+            queueMicrotask(() => {
+                this.emit('message', {
+                    data: {
+                        requestId: payload.requestId,
+                        ok: true,
+                        result: {
+                            strokes: [
+                                {
+                                    colorIndex: 0,
+                                    points: [
+                                        { u: 0.1, v: 0.2 },
+                                        { u: 0.3, v: 0.4 }
+                                    ]
+                                }
+                            ],
+                            palette: ['#111111'],
+                            heightRatio: 1,
+                            documentWidthPx: 1209.448,
+                            documentHeightPx: 377.952,
+                            schemaVersion: 1
+                        }
+                    }
+                })
+            })
+        }
+    }
+
+    const { restore } = installWorkerEnvironment({ workerCtor: StaleSchemaWorkerResult })
+    context.after(restore)
+
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <g transform="translate(0,-197)">
+                <rect x="20.606821" y="217.98375" width="227.91998" height="63.53756" fill="none" stroke="#000000" />
+            </g>
+        </svg>
+    `
+
+    const client = new PatternImportWorkerClient()
+    const result = await client.parse(svgText, {
+        heightScale: 1,
+        heightReference: 1,
+        curveSmoothing: 0.2
+    })
+
+    assert.equal(Array.isArray(result.strokes), true)
+    assert.equal(result.strokes.length, 1)
+    assert.equal(result.strokes[0].points.length, 5)
+    assert.ok(Math.abs(Number(result.documentWidthPx) - 1209.448) < 0.01)
+    assert.ok(Math.abs(Number(result.documentHeightPx) - 377.952) < 0.01)
 })
 
 test('PatternImportWorkerClient should reject timed-out requests', async (context) => {
@@ -217,7 +333,7 @@ test('PatternImportWorkerClient should reject pending requests when worker crash
     )
 })
 
-test('PatternImportWorkerClient should throw when Worker is unavailable', () => {
+test('PatternImportWorkerClient should reject when Worker is unavailable', async () => {
     const originalWindow = globalThis.window
     const originalWorker = globalThis.Worker
     globalThis.window = {
@@ -228,7 +344,7 @@ test('PatternImportWorkerClient should throw when Worker is unavailable', () => 
 
     try {
         const client = new PatternImportWorkerClient()
-        assert.throws(
+        await assert.rejects(
             () => client.parse('<svg />'),
             (error) => {
                 assert.equal(error.code, 'worker-unavailable')

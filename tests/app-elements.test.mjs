@@ -27,4 +27,7 @@ test('AppElements should expose EggBot manual result element from index markup',
     assert.ok(elements.resumeStatus)
     assert.ok(elements.resumeStart)
     assert.ok(elements.resumeClear)
+    assert.ok(elements.controlSettingsExport)
+    assert.ok(elements.controlSettingsImport)
+    assert.ok(elements.controlSettingsReset)
 })

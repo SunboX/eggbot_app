@@ -1801,6 +1801,9 @@ class AppController {
         this.els.exportSvg.addEventListener('click', () => this.#exportPatternToSvg())
         this.els.loadProject.addEventListener('click', () => this.#loadProjectFromFile())
         this.els.shareProject.addEventListener('click', () => this.#shareProjectUrl())
+        this.els.controlSettingsExport.addEventListener('click', () => this.#exportSettingsToFile())
+        this.els.controlSettingsImport.addEventListener('click', () => this.#importSettingsFromFile())
+        this.els.controlSettingsReset.addEventListener('click', () => this.#resetSettingsToDefaults())
         if (this.els.storeLocal) {
             this.els.storeLocal.addEventListener('click', () => this.#storeProjectLocally())
         }
@@ -3189,6 +3192,122 @@ class AppController {
     }
 
     /**
+     * Exports the current settings snapshot as JSON file.
+     * @returns {Promise<void>}
+     */
+    async #exportSettingsToFile() {
+        const payload = this.#getProjectPayload()
+        const contents = JSON.stringify(payload, null, 2)
+        const suggestedName = ProjectFilenameUtils.buildFileName(
+            this.state.projectName,
+            `${this.#t('project.defaultFileStem')}-settings`,
+            this.state.seed,
+            'json'
+        )
+        try {
+            if (window.showSaveFilePicker) {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName,
+                    types: [
+                        {
+                            description: this.#t('messages.settingsJsonDescription'),
+                            accept: { 'application/json': ['.json'] }
+                        }
+                    ]
+                })
+                const writable = await handle.createWritable()
+                await writable.write(contents)
+                await writable.close()
+                this.#setStatus(this.#t('messages.settingsExported', { name: handle.name || suggestedName }), 'success')
+                return
+            }
+            const blob = new Blob([contents], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = suggestedName
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            this.#setStatus(this.#t('messages.settingsDownloaded', { name: suggestedName }), 'success')
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                this.#setStatus(this.#t('messages.settingsExportCanceled'), 'info')
+                return
+            }
+            this.#setStatus(this.#t('messages.settingsExportFailed', { message: error.message }), 'error')
+        }
+    }
+
+    /**
+     * Imports settings from a JSON file and applies them.
+     * @returns {Promise<void>}
+     */
+    async #importSettingsFromFile() {
+        if (this.isDrawing) {
+            this.#setStatus(this.#t('messages.controlDialogBusyDrawing'), 'error')
+            return
+        }
+        try {
+            const file = await this.#promptForProjectFile({
+                descriptionKey: 'messages.settingsJsonDescription'
+            })
+            if (!file) {
+                this.#setStatus(this.#t('messages.settingsImportCanceled'), 'info')
+                return
+            }
+            const rawText = await file.text()
+            const rawProject = JSON.parse(rawText)
+            await this.#applyProjectPayload(rawProject)
+            this.#setStatus(this.#t('messages.settingsImported', { name: file.name }), 'success')
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                this.#setStatus(this.#t('messages.settingsImportCanceled'), 'info')
+                return
+            }
+            this.#setStatus(this.#t('messages.settingsImportFailed', { message: error.message }), 'error')
+        }
+    }
+
+    /**
+     * Resets all settings to application defaults.
+     * @returns {Promise<void>}
+     */
+    async #resetSettingsToDefaults() {
+        if (this.isDrawing) {
+            this.#setStatus(this.#t('messages.controlDialogBusyDrawing'), 'error')
+            return
+        }
+        const shouldReset = window.confirm(this.#t('messages.settingsResetConfirm'))
+        if (!shouldReset) {
+            this.#setStatus(this.#t('messages.settingsResetCanceled'), 'info')
+            return
+        }
+        try {
+            await this.#applyProjectPayload(AppRuntimeConfig.createDefaultState())
+            this.#setStatus(this.#t('messages.settingsResetDone'), 'success')
+        } catch (error) {
+            this.#setStatus(this.#t('messages.settingsResetFailed', { message: error.message }), 'error')
+        }
+    }
+
+    /**
+     * Applies one raw project payload to runtime state and refreshes controls/preview.
+     * @param {Record<string, any>} rawProject
+     * @returns {Promise<void>}
+     */
+    async #applyProjectPayload(rawProject) {
+        this.#clearImportedPattern()
+        this.state = ProjectIoUtils.normalizeProjectState(rawProject)
+        this.state.strokes = []
+        this.#markProjectArtifactsDirty()
+        this.#syncControlsFromState()
+        this.#renderPattern({ skipImportedStatus: true })
+        await this.#ensureRenderedStrokesReady()
+    }
+
+    /**
      * Ensures a current rendered stroke set exists, including pending async worker runs.
      * @returns {Promise<boolean>}
      */
@@ -3331,20 +3450,16 @@ class AppController {
      */
     async #loadProjectFromFile() {
         try {
-            const file = await this.#promptForProjectFile()
+            const file = await this.#promptForProjectFile({
+                descriptionKey: 'messages.projectJsonDescription'
+            })
             if (!file) {
                 this.#setStatus(this.#t('messages.loadCanceled'), 'info')
                 return
             }
             const rawText = await file.text()
             const rawProject = JSON.parse(rawText)
-            this.#clearImportedPattern()
-            this.state = ProjectIoUtils.normalizeProjectState(rawProject)
-            this.state.strokes = []
-            this.#markProjectArtifactsDirty()
-            this.#syncControlsFromState()
-            this.#renderPattern({ skipImportedStatus: true })
-            await this.#ensureRenderedStrokesReady()
+            await this.#applyProjectPayload(rawProject)
             this.#setStatus(this.#t('messages.loadedProject', { name: file.name }), 'success')
         } catch (error) {
             if (error?.name === 'AbortError') {
@@ -3356,15 +3471,17 @@ class AppController {
     }
     /**
      * Prompts user for a project file.
+     * @param {{ descriptionKey?: string }} [options]
      * @returns {Promise<File | null>}
      */
-    async #promptForProjectFile() {
+    async #promptForProjectFile(options = {}) {
+        const descriptionKey = String(options?.descriptionKey || 'messages.projectJsonDescription')
         if (window.showOpenFilePicker) {
             const [handle] = await window.showOpenFilePicker({
                 multiple: false,
                 types: [
                     {
-                        description: this.#t('messages.projectJsonDescription'),
+                        description: this.#t(descriptionKey),
                         accept: { 'application/json': ['.json'] }
                     }
                 ]

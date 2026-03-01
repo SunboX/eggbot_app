@@ -86,7 +86,8 @@ function installWorkerEnvironment(input = {}) {
                                           { x: 0, y: 0 },
                                           { x: 32, y: 4 }
                                       ]
-                                  ]
+                                  ],
+                                  schemaVersion: 2
                               }
                           }
                       })
@@ -146,6 +147,45 @@ test('EggBotPathWorkerClient should resolve successful preprocessing responses',
     assert.equal(getWorkers().length, 1)
     assert.equal(getWorkers()[0].options.type, 'module')
     assert.equal(getWorkers()[0].url.searchParams.get('v'), AppVersion.get())
+})
+
+test('EggBotPathWorkerClient should reject stale worker schema responses', async (context) => {
+    class StaleSchemaWorker extends MockWorker {
+        /**
+         * @param {Record<string, any>} payload
+         */
+        postMessage(payload) {
+            queueMicrotask(() => {
+                this.emit('message', {
+                    data: {
+                        requestId: payload.requestId,
+                        ok: true,
+                        result: {
+                            strokes: [
+                                [
+                                    { x: 0, y: 0 },
+                                    { x: 32, y: 4 }
+                                ]
+                            ],
+                            schemaVersion: 1
+                        }
+                    }
+                })
+            })
+        }
+    }
+
+    const { restore } = installWorkerEnvironment({ workerCtor: StaleSchemaWorker })
+    context.after(restore)
+
+    const client = new EggBotPathWorkerClient()
+    await assert.rejects(
+        () => client.prepareDrawStrokes({ strokes: [] }),
+        (error) => {
+            assert.equal(error.code, 'worker-incompatible')
+            return true
+        }
+    )
 })
 
 test('EggBotPathWorkerClient warmup should create one reusable worker', async (context) => {

@@ -887,6 +887,21 @@
                             <input type="checkbox" data-invert-pen />
                             <span data-i18n="machine.invertPen">Invert pen up/down (`SP`) logic</span>
                         </label>
+                        <h3 data-i18n="controlDialog.advanced.settingsTitle">Settings backup and restore</h3>
+                        <p data-i18n="controlDialog.advanced.settingsDescription">
+                            Export all settings to JSON, import them again, or reset to defaults.
+                        </p>
+                        <div class="eggbot-settings-actions">
+                            <button class="ghost" type="button" data-control-settings-export data-i18n="controlDialog.advanced.exportSettings">
+                                Export settings (JSON)
+                            </button>
+                            <button class="ghost" type="button" data-control-settings-import data-i18n="controlDialog.advanced.importSettings">
+                                Import settings (JSON)
+                            </button>
+                            <button class="warn" type="button" data-control-settings-reset data-i18n="controlDialog.advanced.resetSettings">
+                                Reset all to defaults
+                            </button>
+                        </div>
                     </section>
                 </div>
 
