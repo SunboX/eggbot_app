@@ -297,6 +297,19 @@
 
 .eggbot-settings-actions button {
     min-width: 176px;
+    border-radius: 8px;
+}
+
+.eggbot-settings-actions .ghost {
+    background: linear-gradient(180deg, #373c46, #2d3139);
+    color: #f1f2f4;
+    border-color: #20242b;
+}
+
+.eggbot-settings-actions .primary {
+    background: linear-gradient(180deg, #353c48, #2a2f39);
+    color: #f1f2f4;
+    border-color: #1d2026;
 }
 
 .eggbot-manual-result {
