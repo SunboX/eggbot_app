@@ -93,7 +93,7 @@ export class ProjectIoUtils {
      * Normalizes persisted draw-resume state.
      * @param {unknown} value
      * @returns {{
-     *   status: 'ready' | 'running' | 'paused',
+     *   status: 'ready' | 'paused',
      *   updatedAt: string,
      *   totalStrokes: number,
      *   completedStrokes: number,
@@ -166,7 +166,8 @@ export class ProjectIoUtils {
         const rawStatus = String(value.status || '')
             .trim()
             .toLowerCase()
-        const status = ['ready', 'running', 'paused'].includes(rawStatus) ? rawStatus : 'paused'
+        // A persisted `running` state is stale after reload because no draw loop survives page refresh.
+        const status = rawStatus === 'ready' ? 'ready' : 'paused'
         const coordinateMode =
             String(value.coordinateMode || '').trim() === 'document-px-centered' ? 'document-px-centered' : 'normalized-uv'
         const documentWidthPxValue = ProjectIoUtils.#toNumber(value.documentWidthPx, Number.NaN)

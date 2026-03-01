@@ -1,5 +1,7 @@
 import { EggBotPathComputeTasks } from '../EggBotPathComputeTasks.mjs'
 
+const PATH_WORKER_SCHEMA_VERSION = 2
+
 /**
  * Posts one tagged worker error.
  * @param {number} requestId
@@ -26,7 +28,10 @@ function postError(requestId, error) {
  */
 function executeOperation(op, payload) {
     if (op === 'prepare-draw-strokes') {
-        return EggBotPathComputeTasks.prepareDrawStrokes(payload)
+        return {
+            ...EggBotPathComputeTasks.prepareDrawStrokes(payload),
+            schemaVersion: PATH_WORKER_SCHEMA_VERSION
+        }
     }
     throw new Error('unsupported-operation')
 }

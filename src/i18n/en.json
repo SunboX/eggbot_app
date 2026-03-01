@@ -190,7 +190,12 @@
             "description": "Layer-based plotting controls are not available yet in this web edition."
         },
         "advanced": {
-            "title": "Machine mapping and raw values"
+            "title": "Machine mapping and raw values",
+            "settingsTitle": "Settings backup and restore",
+            "settingsDescription": "Export all settings to JSON, import them again, or reset everything to defaults.",
+            "exportSettings": "Export settings (JSON)",
+            "importSettings": "Import settings (JSON)",
+            "resetSettings": "Reset all to defaults"
         },
         "close": "Close",
         "apply": "Apply"
@@ -260,8 +265,13 @@
         "controlDialogManualUnknownCommand": "Unknown manual command.",
         "controlDialogBusyDrawing": "Manual control is disabled while a draw run is active.",
         "projectJsonDescription": "Project JSON",
+        "settingsJsonDescription": "Settings JSON",
         "projectSaved": "Project saved: {{name}}",
         "projectDownloaded": "Project downloaded: {{name}}",
+        "settingsExported": "Settings exported: {{name}}",
+        "settingsDownloaded": "Settings downloaded: {{name}}",
+        "settingsExportCanceled": "Settings export canceled.",
+        "settingsExportFailed": "Settings export failed: {{message}}",
         "svgFileDescription": "SVG pattern",
         "svgExported": "SVG exported: {{name}}",
         "svgDownloaded": "SVG downloaded: {{name}}",
@@ -272,6 +282,13 @@
         "loadCanceled": "Load canceled.",
         "loadedProject": "Loaded project: {{name}}",
         "loadFailed": "Load failed: {{message}}",
+        "settingsImportCanceled": "Settings import canceled.",
+        "settingsImported": "Settings imported: {{name}}",
+        "settingsImportFailed": "Settings import failed: {{message}}",
+        "settingsResetConfirm": "Reset all settings to defaults?",
+        "settingsResetDone": "All settings reset to defaults.",
+        "settingsResetCanceled": "Reset canceled.",
+        "settingsResetFailed": "Reset failed: {{message}}",
         "projectUrlShared": "Project URL shared.",
         "projectUrlCopied": "Project URL copied to clipboard.",
         "copyProjectUrlPrompt": "Copy this project URL:",

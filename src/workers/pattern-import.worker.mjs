@@ -1,5 +1,7 @@
 import { SvgPatternImportWorkerParser } from './SvgPatternImportWorkerParser.mjs'
 
+const IMPORT_WORKER_SCHEMA_VERSION = 2
+
 /**
  * Posts one error response to the main thread.
  * @param {number} requestId
@@ -28,7 +30,14 @@ self.addEventListener('message', (event) => {
         const svgText = String(payload?.svgText || '')
         const options = payload?.options && typeof payload.options === 'object' ? payload.options : {}
         const result = SvgPatternImportWorkerParser.parse(svgText, options)
-        self.postMessage({ requestId, ok: true, result })
+        self.postMessage({
+            requestId,
+            ok: true,
+            result: {
+                ...result,
+                schemaVersion: IMPORT_WORKER_SCHEMA_VERSION
+            }
+        })
     } catch (error) {
         postError(requestId, error)
     }

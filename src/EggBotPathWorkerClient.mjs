@@ -4,6 +4,8 @@ import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
  * Worker transport for EggBot draw-path preprocessing.
  */
 export class EggBotPathWorkerClient {
+    static #WORKER_SCHEMA_VERSION = 2
+
     #worker = null
     #nextRequestId = 1
     #pending = new Map()
@@ -106,7 +108,12 @@ export class EggBotPathWorkerClient {
         window.clearTimeout(pending.timeoutId)
 
         if (payload?.ok) {
-            pending.resolve(payload.result)
+            const result = payload.result
+            if (!EggBotPathWorkerClient.#isCompatibleWorkerResult(result)) {
+                pending.reject(EggBotPathWorkerClient.#buildError('worker-incompatible', 'Worker response schema is incompatible'))
+                return
+            }
+            pending.resolve(EggBotPathWorkerClient.#stripWorkerMetadata(result))
             return
         }
 
@@ -151,5 +158,31 @@ export class EggBotPathWorkerClient {
         const error = new Error(message)
         error.code = code
         return error
+    }
+
+    /**
+     * Checks worker response schema compatibility.
+     * @param {Record<string, any> | null | undefined} result
+     * @returns {boolean}
+     */
+    static #isCompatibleWorkerResult(result) {
+        if (!result || typeof result !== 'object') return false
+        if (Math.trunc(Number(result.schemaVersion)) !== EggBotPathWorkerClient.#WORKER_SCHEMA_VERSION) {
+            return false
+        }
+        return Array.isArray(result.strokes)
+    }
+
+    /**
+     * Removes worker-specific metadata before returning path payload to callers.
+     * @param {Record<string, any>} result
+     * @returns {{ strokes: Array<Array<{x:number,y:number}>> }}
+     */
+    static #stripWorkerMetadata(result) {
+        const {
+            schemaVersion: _schemaVersion,
+            ...normalized
+        } = result
+        return normalized
     }
 }

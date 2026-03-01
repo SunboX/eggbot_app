@@ -289,6 +289,16 @@
     font-size: 0.92rem;
 }
 
+.eggbot-settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.eggbot-settings-actions button {
+    min-width: 176px;
+}
+
 .eggbot-manual-result {
     border: 1px solid rgba(42, 141, 255, 0.45);
     border-radius: 7px;
