@@ -4,7 +4,7 @@ import { WorkerUrlUtils } from './WorkerUrlUtils.mjs'
  * Worker transport for EggBot draw-path preprocessing.
  */
 export class EggBotPathWorkerClient {
-    static #WORKER_SCHEMA_VERSION = 2
+    static #WORKER_SCHEMA_VERSION = 3
 
     #worker = null
     #nextRequestId = 1

@@ -168,3 +168,28 @@ test('EggBotPathComputeTasks should convert imported UV to centered document coo
     assert.deepEqual(result.strokes[0][1], { x: 605, y: 189 })
     assert.deepEqual(result.strokes[0][2], { x: 0, y: 0 })
 })
+
+test('EggBotPathComputeTasks should append start point when a closed stroke lacks an explicit final point', () => {
+    const result = EggBotPathComputeTasks.prepareDrawStrokes({
+        strokes: [
+            {
+                closed: true,
+                points: [
+                    { u: 0.2, v: 0.5 },
+                    { u: 0.3, v: 0.3 },
+                    { u: 0.4, v: 0.5 }
+                ]
+            }
+        ],
+        drawConfig: {
+            stepsPerTurn: 1000,
+            penRangeSteps: 400,
+            wrapAround: false
+        }
+    })
+
+    assert.equal(result.strokes.length, 1)
+    assert.equal(result.strokes[0].length, 4)
+    assert.deepEqual(result.strokes[0][0], { x: 200, y: 0 })
+    assert.deepEqual(result.strokes[0][3], { x: 200, y: 0 })
+})

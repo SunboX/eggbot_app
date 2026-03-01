@@ -87,7 +87,7 @@ function installWorkerEnvironment(input = {}) {
                                           { x: 32, y: 4 }
                                       ]
                                   ],
-                                  schemaVersion: 2
+                                  schemaVersion: 3
                               }
                           }
                       })

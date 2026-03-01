@@ -1,6 +1,6 @@
 import { SvgPatternImportWorkerParser } from './SvgPatternImportWorkerParser.mjs'
 
-const IMPORT_WORKER_SCHEMA_VERSION = 2
+const IMPORT_WORKER_SCHEMA_VERSION = 3
 
 /**
  * Posts one error response to the main thread.
