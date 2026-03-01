@@ -462,9 +462,19 @@ export class EggBotSerial {
     async sendCommand(command, options = {}) {
         const expectResponse = Boolean(options.expectResponse)
         const timeoutMs = Number(options.timeoutMs) || 1200
+        const normalizedCommand = String(command || '').trim()
         await this.#writeRaw(`${command}\r`)
         if (!expectResponse) return ''
-        return this.#readLine(timeoutMs)
+        const startedAtMs = Date.now()
+        while (true) {
+            const elapsedMs = Math.max(0, Date.now() - startedAtMs)
+            const remainingTimeoutMs = Math.max(1, timeoutMs - elapsedMs)
+            const line = EggBotSerial.#sanitizeResponseLine(await this.#readLine(remainingTimeoutMs))
+            if (!line) continue
+            if (line.toUpperCase() === 'OK') continue
+            if (normalizedCommand && line.toLowerCase() === normalizedCommand.toLowerCase()) continue
+            return line
+        }
     }
 
     /**

@@ -225,6 +225,32 @@ test('EggBotSerial.connectForDraw should sanitize mojibake artifacts in version 
     }
 })
 
+test('EggBotSerial.sendCommand should ignore OK and echoed lines before returning query data', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const serial = new EggBotSerial()
+    const writes = []
+    serial.port = /** @type {SerialPort} */ ({})
+    serial.writer = /** @type {WritableStreamDefaultWriter<Uint8Array>} */ ({
+        async write(bytes) {
+            writes.push(new TextDecoder().decode(bytes))
+        },
+        releaseLock() {}
+    })
+    serial.lineQueue = ['OK', 'QB', '0']
+
+    try {
+        const response = await serial.sendCommand('QB', {
+            expectResponse: true,
+            timeoutMs: 500
+        })
+
+        assert.equal(response, '0')
+        assert.deepEqual(writes, ['QB\r'])
+    } finally {
+        restoreTimers()
+    }
+})
+
 test('EggBotSerial.connectForDraw should request port when no granted ports exist', async () => {
     const requestedPort = createMockPort({ usbVendorId: 0xabcd, usbProductId: 0x1001 })
     const mockedBrowser = installBrowserMocks({
