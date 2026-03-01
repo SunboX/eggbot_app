@@ -312,6 +312,64 @@
     border-color: #1d2026;
 }
 
+.eggbot-settings-actions .warn {
+    background: linear-gradient(180deg, #8f2f2b, #6b201c);
+    color: #f7f1f1;
+    border-color: #541713;
+}
+
+.eggbot-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.eggbot-dialog-actions button {
+    min-width: 176px;
+    border-radius: 8px;
+}
+
+.eggbot-dialog-actions .ghost {
+    background: linear-gradient(180deg, #373c46, #2d3139);
+    color: #f1f2f4;
+    border-color: #20242b;
+}
+
+.eggbot-dialog-actions .primary {
+    background: linear-gradient(180deg, #353c48, #2a2f39);
+    color: #f1f2f4;
+    border-color: #1d2026;
+}
+
+.eggbot-dialog-actions .warn {
+    background: linear-gradient(180deg, #8f2f2b, #6b201c);
+    color: #f7f1f1;
+    border-color: #541713;
+}
+
+.eggbot-dialog-actions button:disabled {
+    opacity: 1;
+    transform: none;
+}
+
+.eggbot-dialog-actions .ghost:disabled {
+    background: linear-gradient(180deg, #2f343f, #272b33);
+    color: #9fa8b8;
+    border-color: #20242b;
+}
+
+.eggbot-dialog-actions .primary:disabled {
+    background: linear-gradient(180deg, #2f3642, #272d37);
+    color: #a8b2c2;
+    border-color: #1d2026;
+}
+
+.eggbot-dialog-actions .warn:disabled {
+    background: linear-gradient(180deg, #6f2521, #551b18);
+    color: #e5c4c4;
+    border-color: #491512;
+}
+
 .eggbot-manual-result {
     border: 1px solid rgba(42, 141, 255, 0.45);
     border-radius: 7px;
