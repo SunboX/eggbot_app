@@ -148,8 +148,8 @@ test('EggBotPathComputeTasks should convert imported UV to centered document coo
         strokes: [
             {
                 points: [
-                    { u: 0, v: 0 },
-                    { u: 1, v: 1 },
+                    { u: 0.1, v: 0 },
+                    { u: 0.2, v: 1 },
                     { u: 0.5, v: 0.5 }
                 ]
             }
@@ -164,9 +164,39 @@ test('EggBotPathComputeTasks should convert imported UV to centered document coo
     })
 
     assert.equal(result.strokes.length, 1)
-    assert.deepEqual(result.strokes[0][0], { x: -605, y: -189 })
-    assert.deepEqual(result.strokes[0][1], { x: 605, y: 189 })
+    assert.deepEqual(result.strokes[0][0], { x: -484, y: -189 })
+    assert.deepEqual(result.strokes[0][1], { x: -363, y: 189 })
     assert.deepEqual(result.strokes[0][2], { x: 0, y: 0 })
+})
+
+test('EggBotPathComputeTasks should keep document-centered seam crossings continuous', () => {
+    const result = EggBotPathComputeTasks.prepareDrawStrokes({
+        strokes: [
+            {
+                points: [
+                    { u: 0.98, v: 0.5 },
+                    { u: 0.99, v: 0.5 },
+                    { u: 0.01, v: 0.5 },
+                    { u: 0.02, v: 0.5 }
+                ]
+            }
+        ],
+        drawConfig: {
+            coordinateMode: 'document-px-centered',
+            documentWidthPx: 1200,
+            documentHeightPx: 400,
+            stepScalingFactor: 2,
+            wrapAround: false
+        }
+    })
+
+    assert.equal(result.strokes.length, 1)
+    assert.deepEqual(result.strokes[0], [
+        { x: 576, y: 0 },
+        { x: 588, y: 0 },
+        { x: 612, y: 0 },
+        { x: 624, y: 0 }
+    ])
 })
 
 test('EggBotPathComputeTasks should append start point when a closed stroke lacks an explicit final point', () => {
