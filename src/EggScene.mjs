@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { EggUvMapUtils } from './EggUvMapUtils.mjs'
 import { CanvasPointerPressTracker } from './CanvasPointerPressTracker.mjs'
 
 /**
@@ -99,6 +100,8 @@ export class EggScene {
             position.setXYZ(index, x * taper * lowerBulge, y, z * taper * lowerBulge)
         }
         position.needsUpdate = true
+        // Match preview texture mapping to linear EggBot Y coordinates.
+        EggUvMapUtils.remapVerticalUvToLinearHeight(geometry)
         geometry.computeVertexNormals()
 
         const material = new THREE.MeshStandardMaterial({
