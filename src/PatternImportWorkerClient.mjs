@@ -5,7 +5,7 @@ import { SvgPatternImportWorkerParser } from './workers/SvgPatternImportWorkerPa
  * Worker transport for loading and parsing imported SVG patterns.
  */
 export class PatternImportWorkerClient {
-    static #WORKER_SCHEMA_VERSION = 3
+    static #WORKER_SCHEMA_VERSION = 4
 
     #worker = null
     #nextRequestId = 1
