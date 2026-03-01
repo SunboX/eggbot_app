@@ -2,6 +2,7 @@ import { AppElements } from './AppElements.mjs'
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
 import { AppVersion } from './AppVersion.mjs'
 import { ImportedPatternScaleUtils } from './ImportedPatternScaleUtils.mjs'
+import { ImportedPreviewStrokeUtils } from './ImportedPreviewStrokeUtils.mjs'
 import { PatternGenerator } from './PatternGenerator.mjs'
 import { PatternRenderer2D } from './PatternRenderer2D.mjs'
 import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
@@ -1992,9 +1993,16 @@ class AppController {
     #buildRenderInputStrokes(strokes) {
         let output = Array.isArray(strokes) ? strokes : []
         if (this.importedPattern) {
-            const sourceHeightRatio = this.#resolveActiveRenderHeightRatio()
-            const previewHeightRatio = this.#resolvePreviewRenderHeightRatio(sourceHeightRatio)
-            output = PatternStrokeScaleUtils.rescaleStrokesVertical(output, sourceHeightRatio, previewHeightRatio)
+            const preview = ImportedPreviewStrokeUtils.buildPreviewStrokes({
+                strokes: this.importedPattern.strokes,
+                parsedHeightRatio: this.importedPattern.heightRatio,
+                parsedHeightScale: this.importedPattern.heightScale,
+                activeHeightScale: this.state.importHeightScale,
+                documentHeightPx: this.importedPattern.documentHeightPx,
+                penRangeSteps: this.state?.drawConfig?.penRangeSteps,
+                stepScalingFactor: this.#resolveDrawCoordinateConfig().stepScalingFactor
+            })
+            output = preview.strokes
         }
         if (this.state.fillPatterns !== false) {
             return output
@@ -2969,7 +2977,8 @@ class AppController {
     #resolveImportedPatternParseOptions() {
         return {
             maxColors: 6,
-            heightScale: this.state.importHeightScale,
+            // Keep imported source strokes unscaled; runtime paths apply scale from controls.
+            heightScale: 1,
             heightReference: IMPORT_HEIGHT_REFERENCE,
             curveSmoothing: Math.max(0, Math.min(2, Number(this.state?.drawConfig?.curveSmoothing) || 0.2))
         }
@@ -2980,7 +2989,7 @@ class AppController {
      * @returns {number}
      */
     #resolveImportedPatternStoredHeightScale() {
-        return this.state.importHeightScale
+        return 1
     }
 
     /**
