@@ -6,6 +6,7 @@ import { readFile } from 'fs/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
+const packageJsonPath = join(projectRoot, 'package.json')
 loadDotEnv({ path: resolve(projectRoot, '.env') })
 
 const app = express()
@@ -16,6 +17,11 @@ app.use(express.json({ limit: '8mb' }))
 app.use('/node_modules', express.static(join(projectRoot, 'node_modules')))
 app.use('/docs', express.static(join(projectRoot, 'docs')))
 app.use(express.static(__dirname))
+
+app.get('/package.json', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.sendFile(packageJsonPath)
+})
 
 /**
  * Parses boolean environment values.

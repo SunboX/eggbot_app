@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Keep direct file requests untouched.
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Match node-style endpoint path on shared hosting.
+RewriteRule ^chat/?$ chat.php [L,QSA]
