@@ -36,9 +36,17 @@ jobs:
             docs:
               - 'docs/**'
            
-      # 1) Deploy src -> /
-      # Deploy src always (or only if src changed)
-      - name: Deploy src to /
+      # 1) Deploy web root payload -> /
+      # Include src contents + package.json in one FTP session.
+      - name: Prepare web root deploy payload
+        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
+        run: |
+          rm -rf .deploy-web-root
+          mkdir -p .deploy-web-root
+          cp -R src/. .deploy-web-root/
+          cp package.json .deploy-web-root/package.json
+
+      - name: Deploy web root to /
         if: steps.changes.outputs.src == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -46,7 +54,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
-          local-dir: ./src/
+          local-dir: ./.deploy-web-root/
           server-dir: /
           exclude: |
             **/node_modules/**
@@ -55,26 +63,6 @@ jobs:
             **/*.env
             **/*.env.*
           state-name: .ftp-deploy-src-state.json
-
-      # 1b) Deploy root package.json for runtime app version lookup.
-      - name: Prepare root meta deploy payload
-        if: steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
-        run: |
-          rm -rf .deploy-root-meta
-          mkdir -p .deploy-root-meta
-          cp package.json .deploy-root-meta/package.json
-
-      - name: Deploy root package.json to /
-        if: steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          local-dir: ./.deploy-root-meta/
-          server-dir: /
-          state-name: .ftp-deploy-root-meta-state.json
 
       # 2) Deploy PHP backend -> /api/
       - name: Deploy api to /api/
