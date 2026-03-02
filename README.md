@@ -24,6 +24,7 @@ Live app: [https://eggbot.app/](https://eggbot.app/)
 - `docs/`: usage and architecture docs
 - `tests/`: unit tests for core generators and URL utilities
 - `sorbische_muster/`: source material provided in this thread
+- `package.json`: single source of truth for app version (served to frontend as `/package.json`)
 
 ## Run Locally
 
@@ -86,12 +87,16 @@ Open [http://localhost:3000/](http://localhost:3000/).
 ## PHP Backend (All-Inkl)
 
 Use `api/chat.php` when deploying on shared hosting with PHP.
+The included `api/.htaccess` also maps `/api/chat` to `chat.php` so the endpoint path stays consistent with local Node usage.
 
 Environment expected:
 
 - `OPENAI_API_KEY`
 - optional `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`
 - optional docs-context settings from `.env.example`
+
+Deploy note:
+- Keep `package.json` deployed in web root. The frontend reads `/package.json` to display the current app version.
 
 ## Test
 

@@ -4799,6 +4799,7 @@ const i18n = new I18n({
  * @returns {Promise<void>}
  */
 async function startApp() {
+    await AppVersion.loadFromPackageJson()
     await i18n.init()
     i18n.applyTranslations(document)
     const app = new AppController(i18n)
