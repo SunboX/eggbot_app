@@ -28,6 +28,7 @@
 - Prettier settings are in `.prettierrc.json`: 4-space indent, single quotes, no semicolons, no trailing commas.
 - Keep files under 1000 lines; split modules when they approach this limit.
 - Add JSDoc for every function/method, including private helpers.
+- Always keep one blank line between a closing brace and the next JSDoc block (`}\n\n/**`).
 - Add concise inline comments where behavior is non-obvious.
 - Utility modules should prefer class-based organization with static helpers.
 - For single-class modules, name the `.mjs` file in CamelCase to match the class name.
