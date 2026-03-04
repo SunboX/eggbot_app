@@ -16,6 +16,7 @@ const rateBuckets = new Map()
 app.use(express.json({ limit: '8mb' }))
 app.use('/node_modules', express.static(join(projectRoot, 'node_modules')))
 app.use('/docs', express.static(join(projectRoot, 'docs')))
+app.use('/firmware', express.static(join(projectRoot, 'firmware')))
 app.use(express.static(__dirname))
 
 app.get('/package.json', (_req, res) => {

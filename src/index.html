@@ -268,6 +268,16 @@
                     </section>
 
                     <section class="section">
+                        <h2 data-i18n="machine.flashTitle">ESP32 firmware</h2>
+                        <p class="hint" data-i18n="machine.flashHint">
+                            Open the flashing dialog to install EggDuino firmware over USB with ESP Web Tools.
+                        </p>
+                        <button class="ghost" type="button" data-esp-flash-open data-i18n="machine.openFlashDialog">
+                            Open ESP32 flashing dialog
+                        </button>
+                    </section>
+
+                    <section class="section">
                         <h2 data-i18n="status.title">Status</h2>
                         <div class="status" data-status data-i18n="status.ready">
                             Ready. Generate a pattern and connect EggBot when you are ready to draw.
@@ -912,6 +922,56 @@
             </section>
         </div>
 
+        <div class="eggbot-dialog-backdrop" data-esp-flash-dialog-backdrop hidden>
+            <section
+                class="eggbot-dialog eggbot-flash-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="esp-flash-dialog-title"
+                data-esp-flash-dialog
+            >
+                <header class="eggbot-dialog-header">
+                    <h2 id="esp-flash-dialog-title" data-i18n="machine.flashDialog.title">ESP32 EggDuino Flasher</h2>
+                    <button
+                        class="eggbot-dialog-close-icon"
+                        type="button"
+                        aria-label="Close ESP32 flashing dialog"
+                        data-i18n-aria-label="machine.flashDialog.closeAria"
+                        data-esp-flash-dialog-close-icon
+                    >
+                        ×
+                    </button>
+                </header>
+
+                <div class="eggbot-dialog-body eggbot-flash-dialog-body">
+                    <section class="eggbot-dialog-panel eggbot-flash-dialog-panel">
+                        <h3 data-i18n="machine.flashDialog.heading">Flash EggDuino firmware to an ESP32</h3>
+                        <p data-i18n="machine.flashDialog.description">
+                            Connect the ESP32 with USB, select the serial port, and start flashing.
+                        </p>
+                        <p class="eggbot-note eggbot-flash-version">
+                            <span data-i18n="machine.flashDialog.versionLabel">Firmware package:</span>
+                            <strong data-esp-flash-version-value data-i18n="machine.flashDialog.versionLoading">
+                                Loading firmware version...
+                            </strong>
+                        </p>
+                        <esp-web-install-button manifest="/firmware/manifest.json" data-esp-flash-install>
+                            <button class="primary" type="button" slot="activate" data-i18n="machine.flashDialog.flashButton">
+                                Flash ESP32 firmware
+                            </button>
+                            <span slot="unsupported" class="eggbot-note" data-i18n="machine.flashDialog.unsupported">
+                                This browser does not support ESP Web Tools flashing.
+                            </span>
+                        </esp-web-install-button>
+                    </section>
+                </div>
+
+                <footer class="eggbot-dialog-footer">
+                    <button class="ghost" type="button" data-esp-flash-dialog-close data-i18n="controlDialog.close">Close</button>
+                </footer>
+            </section>
+        </div>
+
         <div class="eggbot-dialog-backdrop" data-pen-color-dialog-backdrop hidden>
             <section
                 class="eggbot-dialog eggbot-pen-dialog"
@@ -1350,5 +1410,6 @@
             }
         </script>
         <script type="module" src="./main.mjs"></script>
+        <script type="module" src="https://unpkg.com/esp-web-tools@10.0.0/dist/web/install-button.js?module"></script>
     </body>
 </html>
