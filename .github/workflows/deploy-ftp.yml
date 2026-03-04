@@ -68,25 +68,24 @@ jobs:
           state-name: ftp-deploy-src-state.json
 
       # 2) Deploy PHP backend -> /api/
+      # Use curl with EPSV disabled because some shared FTP hosts reset data sockets on EPSV uploads.
       - name: Deploy api to /api/
         if: steps.changes.outputs.api == 'true' || steps.changes.outputs.deploy == 'true'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          local-dir: ./api/
-          server-dir: /api/
-          exclude: |
-            **/.DS_Store
-            # Some shared FTP setups reset data sockets on hidden file upload.
-            **/.htaccess
-            **/.env
-            **/.env.*
-            **/*.env
-            **/*.env.*
-          state-name: ftp-deploy-api-state.json
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          FTP_URL="${FTP_SERVER%/}"
+          if [[ "$FTP_URL" != ftp://* && "$FTP_URL" != ftps://* ]]; then
+            FTP_URL="ftp://${FTP_URL}"
+          fi
+
+          curl --fail --show-error --disable-epsv --ftp-create-dirs \
+            --retry 5 --retry-delay 3 --retry-connrefused \
+            --user "${FTP_USERNAME}:${FTP_PASSWORD}" \
+            --upload-file ./api/chat.php \
+            "${FTP_URL}/api/chat.php"
 
       # 3) Deploy docs -> /docs/ (used for AI grounding when AI_DOCS_DIR=docs)
       - name: Deploy docs to /docs/
