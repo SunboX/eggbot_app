@@ -415,6 +415,54 @@
     border-color: #1d2026;
 }
 
+.eggbot-flash-dialog {
+    width: min(560px, calc(100vw - 2rem));
+    max-height: calc(100vh - 3rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.eggbot-flash-dialog-body {
+    padding: 0.86rem;
+}
+
+.eggbot-flash-dialog-panel {
+    min-height: 0;
+}
+
+.eggbot-flash-version {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.1rem;
+}
+
+.eggbot-flash-version > strong {
+    color: #f5f8fc;
+    font-weight: 600;
+}
+
+.eggbot-flash-dialog-panel esp-web-install-button {
+    display: block;
+}
+
+.eggbot-flash-dialog-panel esp-web-install-button > button[slot='activate'] {
+    min-width: 220px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #353c48, #2a2f39);
+    color: #f1f2f4;
+    border-color: #1d2026;
+}
+
+.eggbot-flash-dialog-panel esp-web-install-button > button[slot='activate']:hover {
+    transform: translateY(-1px);
+    border-color: #273040;
+}
+
+.eggbot-flash-dialog-panel esp-web-install-button > [slot='unsupported'] {
+    display: block;
+    margin-top: 0.62rem;
+}
+
 .eggbot-pen-dialog {
     width: min(520px, calc(100vw - 2rem));
     max-height: calc(100vh - 3rem);

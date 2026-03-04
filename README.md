@@ -87,7 +87,8 @@ Open [http://localhost:3000/](http://localhost:3000/).
 ## PHP Backend (All-Inkl)
 
 Use `api/chat.php` when deploying on shared hosting with PHP.
-The included `api/.htaccess` also maps `/api/chat` to `chat.php` so the endpoint path stays consistent with local Node usage.
+Endpoint on shared hosting is `POST /api/chat.php`.
+Optional: if your host allows `.htaccess` uploads, you can map `/api/chat` to `chat.php`.
 
 Environment expected:
 

@@ -1,6 +1,7 @@
 import { AppElements } from './AppElements.mjs'
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
 import { AppVersion } from './AppVersion.mjs'
+import { EspFirmwareManifestMeta } from './EspFirmwareManifestMeta.mjs'
 import { ImportedPatternScaleUtils } from './ImportedPatternScaleUtils.mjs'
 import { ImportedPreviewStrokeUtils } from './ImportedPreviewStrokeUtils.mjs'
 import { PatternGenerator } from './PatternGenerator.mjs'
@@ -94,6 +95,9 @@ class AppController {
         this.drawTraceLastCompletedStrokeCount = -1
         this.drawTraceLastActiveStrokeIndex = -1
         this.pendingPenColorDialogResolve = null
+        this.espFlashManifestMeta = null
+        this.espFlashManifestLoadPromise = null
+        this.espFlashManifestLoadFailed = false
         this.autoGenerateOrnamentControls = [
             this.els.preset,
             this.els.seed,
@@ -120,6 +124,8 @@ class AppController {
     async init() {
         this.#applyLocaleToUi()
         this.#renderAppVersion()
+        this.#syncEspFlashManifestVersionUi()
+        this.#ensureEspFlashManifestMetaLoaded()
         this.#loadSettingsFromLocalStorage()
         this.#syncControlsFromState()
         this.#applyProjectFromUrl()
@@ -169,6 +175,92 @@ class AppController {
      */
     #renderAppVersion() {
         this.els.appVersion.textContent = AppVersion.get()
+    }
+
+    /**
+     * Syncs ESP flash dialog manifest version text for the current load state.
+     */
+    #syncEspFlashManifestVersionUi() {
+        if (this.espFlashManifestMeta) {
+            this.els.espFlashVersionValue.textContent = EspFirmwareManifestMeta.formatDisplayLabel(this.espFlashManifestMeta)
+            return
+        }
+        if (this.espFlashManifestLoadPromise) {
+            this.els.espFlashVersionValue.textContent = this.#t('machine.flashDialog.versionLoading')
+            return
+        }
+        if (this.espFlashManifestLoadFailed) {
+            this.els.espFlashVersionValue.textContent = this.#t('machine.flashDialog.versionUnavailable')
+            return
+        }
+        this.els.espFlashVersionValue.textContent = this.#t('machine.flashDialog.versionLoading')
+    }
+
+    /**
+     * Resolves the manifest URL from the install button configuration.
+     * @returns {string}
+     */
+    #resolveEspFlashManifestUrl() {
+        const manifestPath = String(this.els.espFlashInstall.getAttribute('manifest') || '').trim()
+        if (!manifestPath) {
+            return ''
+        }
+        try {
+            return new URL(manifestPath, window.location.href).toString()
+        } catch (_error) {
+            return manifestPath
+        }
+    }
+
+    /**
+     * Ensures ESP flash manifest metadata is loaded once and cached.
+     * @returns {Promise<void>}
+     */
+    async #ensureEspFlashManifestMetaLoaded() {
+        if (this.espFlashManifestMeta || this.espFlashManifestLoadPromise) {
+            return
+        }
+        if (typeof fetch !== 'function') {
+            this.espFlashManifestLoadFailed = true
+            this.#syncEspFlashManifestVersionUi()
+            return
+        }
+        const manifestUrl = this.#resolveEspFlashManifestUrl()
+        if (!manifestUrl) {
+            this.espFlashManifestLoadFailed = true
+            this.#syncEspFlashManifestVersionUi()
+            return
+        }
+
+        this.espFlashManifestLoadFailed = false
+        this.espFlashManifestLoadPromise = this.#loadEspFlashManifestMeta(manifestUrl)
+            .catch(() => {
+                this.espFlashManifestLoadFailed = true
+            })
+            .finally(() => {
+                this.espFlashManifestLoadPromise = null
+                this.#syncEspFlashManifestVersionUi()
+            })
+        this.#syncEspFlashManifestVersionUi()
+        await this.espFlashManifestLoadPromise
+    }
+
+    /**
+     * Loads one ESP flash manifest payload and stores one normalized summary.
+     * @param {string} manifestUrl
+     * @returns {Promise<void>}
+     */
+    async #loadEspFlashManifestMeta(manifestUrl) {
+        const response = await fetch(manifestUrl, { cache: 'no-store' })
+        if (!response?.ok || typeof response.json !== 'function') {
+            throw new Error('ESP flash manifest request failed.')
+        }
+        const manifest = await response.json()
+        const meta = EspFirmwareManifestMeta.resolve(manifest)
+        if (!meta) {
+            throw new Error('ESP flash manifest is missing required metadata.')
+        }
+        this.espFlashManifestMeta = meta
     }
     /**
      * Clears imported pattern mode and returns true if one was active.
@@ -446,6 +538,9 @@ class AppController {
      * Opens the EggBot control modal dialog.
      */
     #openEggBotControlDialog() {
+        if (this.#isEspFlashDialogOpen()) {
+            this.#closeEspFlashDialog()
+        }
         this.#syncEggBotDialogControlsFromState()
         this.#syncEggBotControlTabUi()
         this.#clearManualControlResult()
@@ -470,6 +565,40 @@ class AppController {
     }
 
     /**
+     * Opens the ESP32 flashing modal dialog.
+     */
+    #openEspFlashDialog() {
+        if (this.#isEggBotControlDialogOpen()) {
+            this.#closeEggBotControlDialog()
+        }
+        this.#ensureEspFlashManifestMetaLoaded()
+        this.els.espFlashDialogBackdrop.hidden = false
+        this.#syncDialogBodyScrollLock()
+        const activateButton = this.els.espFlashInstall.querySelector('[slot="activate"]')
+        if (activateButton instanceof HTMLElement) {
+            activateButton.focus()
+            return
+        }
+        this.els.espFlashDialogClose.focus()
+    }
+
+    /**
+     * Closes the ESP32 flashing modal dialog.
+     */
+    #closeEspFlashDialog() {
+        this.els.espFlashDialogBackdrop.hidden = true
+        this.#syncDialogBodyScrollLock()
+    }
+
+    /**
+     * Returns true when the ESP32 flashing dialog is visible.
+     * @returns {boolean}
+     */
+    #isEspFlashDialogOpen() {
+        return !this.els.espFlashDialogBackdrop.hidden
+    }
+
+    /**
      * Returns true when the pen-color dialog is visible.
      * @returns {boolean}
      */
@@ -481,7 +610,7 @@ class AppController {
      * Applies body scroll lock when any EggBot modal dialog is open.
      */
     #syncDialogBodyScrollLock() {
-        const shouldLockBody = this.#isEggBotControlDialogOpen() || this.#isPenColorDialogOpen()
+        const shouldLockBody = this.#isEggBotControlDialogOpen() || this.#isEspFlashDialogOpen() || this.#isPenColorDialogOpen()
         document.body.classList.toggle('eggbot-dialog-open', shouldLockBody)
     }
 
@@ -1753,11 +1882,18 @@ class AppController {
             this.#markProjectArtifactsDirty()
         })
         this.els.eggbotControlOpen.addEventListener('click', () => this.#openEggBotControlDialog())
+        this.els.espFlashOpen.addEventListener('click', () => this.#openEspFlashDialog())
         this.els.eggbotDialogClose.addEventListener('click', () => this.#closeEggBotControlDialog())
         this.els.eggbotDialogCloseIcon.addEventListener('click', () => this.#closeEggBotControlDialog())
+        this.els.espFlashDialogClose.addEventListener('click', () => this.#closeEspFlashDialog())
+        this.els.espFlashDialogCloseIcon.addEventListener('click', () => this.#closeEspFlashDialog())
         this.els.eggbotDialogBackdrop.addEventListener('click', (event) => {
             if (event.target !== this.els.eggbotDialogBackdrop) return
             this.#closeEggBotControlDialog()
+        })
+        this.els.espFlashDialogBackdrop.addEventListener('click', (event) => {
+            if (event.target !== this.els.espFlashDialogBackdrop) return
+            this.#closeEspFlashDialog()
         })
         this.els.penColorDialogBackdrop.addEventListener('click', (event) => {
             if (event.target !== this.els.penColorDialogBackdrop) return
@@ -1779,6 +1915,10 @@ class AppController {
             if (event.key !== 'Escape') return
             if (this.#isPenColorDialogOpen()) {
                 this.#resolvePendingPenColorDialog(false)
+                return
+            }
+            if (this.#isEspFlashDialogOpen()) {
+                this.#closeEspFlashDialog()
                 return
             }
             if (this.#isEggBotControlDialogOpen()) {
@@ -1878,6 +2018,7 @@ class AppController {
     #handleLocaleChange(locale) {
         this.i18n.setLocale(locale)
         this.#applyLocaleToUi()
+        this.#syncEspFlashManifestVersionUi()
         this.#syncConnectionTransportUi()
         this.#renderPaletteControls()
         if (!this.isDrawing) {
@@ -2957,6 +3098,7 @@ class AppController {
         this.#syncConnectionTransportUi()
         this.els.serialConnect.disabled = connected || this.isDrawing || !transportSupported
         this.els.serialDisconnect.disabled = !connected || this.isDrawing
+        this.els.espFlashOpen.disabled = connected || this.isDrawing
         this.els.drawButton.disabled = this.isDrawing || !transportSupported || drawStartBlocked
         this.els.stopButton.disabled = !this.isDrawing || !connected
         this.#syncPatternImportUi()

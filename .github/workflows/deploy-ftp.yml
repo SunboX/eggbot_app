@@ -31,6 +31,8 @@ jobs:
               - '.github/workflows/deploy-ftp.yml'
             src:
               - 'src/**'
+            firmware:
+              - 'firmware/**'
             api:
               - 'api/**'
             docs:
@@ -39,15 +41,16 @@ jobs:
       # 1) Deploy web root payload -> /
       # Include src contents + package.json in one FTP session.
       - name: Prepare web root deploy payload
-        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
+        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.firmware == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
         run: |
           rm -rf .deploy-web-root
           mkdir -p .deploy-web-root
           cp -R src/. .deploy-web-root/
+          cp -R firmware .deploy-web-root/firmware
           cp package.json .deploy-web-root/package.json
 
       - name: Deploy web root to /
-        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
+        if: steps.changes.outputs.src == 'true' || steps.changes.outputs.firmware == 'true' || steps.changes.outputs.deps == 'true' || steps.changes.outputs.deploy == 'true'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -62,7 +65,7 @@ jobs:
             **/.env.*
             **/*.env
             **/*.env.*
-          state-name: .ftp-deploy-src-state.json
+          state-name: ftp-deploy-src-state.json
 
       # 2) Deploy PHP backend -> /api/
       - name: Deploy api to /api/
@@ -77,11 +80,13 @@ jobs:
           server-dir: /api/
           exclude: |
             **/.DS_Store
+            # Some shared FTP setups reset data sockets on hidden file upload.
+            **/.htaccess
             **/.env
             **/.env.*
             **/*.env
             **/*.env.*
-          state-name: .ftp-deploy-api-state.json
+          state-name: ftp-deploy-api-state.json
 
       # 3) Deploy docs -> /docs/ (used for AI grounding when AI_DOCS_DIR=docs)
       - name: Deploy docs to /docs/
@@ -100,7 +105,7 @@ jobs:
             **/.env.*
             **/*.env
             **/*.env.*
-          state-name: .ftp-deploy-docs-state.json
+          state-name: ftp-deploy-docs-state.json
 
       # 4) Deploy node_modules -> /node_modules/
       # Only install+deploy node_modules when deps changed
@@ -136,5 +141,5 @@ jobs:
             **/.env.*
             **/*.env
             **/*.env.*
-          state-name: .ftp-deploy-nm-state.json
+          state-name: ftp-deploy-nm-state.json
        
