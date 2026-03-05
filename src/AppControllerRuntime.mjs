@@ -362,7 +362,10 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         this.drawTracePreviewActive = this.drawTraceStrokes.length > 0
         this.drawTraceLastCompletedStrokeCount = -1
         this.drawTraceLastActiveStrokeIndex = -1
-        if (!this.drawTracePreviewActive) return
+        if (!this.drawTracePreviewActive) {
+            this.eggScene.clearFollowTargetU()
+            return
+        }
 
         this._updateDrawTracePreview(0, this.drawTraceStrokes.length)
     }
@@ -402,7 +405,46 @@ export class AppControllerRuntime extends AppControllerCoreControls {
             activeStrokeIndex,
             lineWidth: this.state.lineWidth
         })
+        this._syncDrawTraceFollowRotation(activeStrokeIndex, normalizedCompleted)
         this._refreshDrawTraceCompositeTexture()
+    }
+
+    /**
+     * Updates EggScene yaw target so draw preview follows current active path.
+     * @param {number} activeStrokeIndex
+     * @param {number} completedStrokeCount
+     */
+    _syncDrawTraceFollowRotation(activeStrokeIndex, completedStrokeCount) {
+        const followU = this._resolveDrawTraceFollowU(activeStrokeIndex, completedStrokeCount)
+        if (!Number.isFinite(followU)) {
+            this.eggScene.clearFollowTargetU()
+            return
+        }
+        this.eggScene.setFollowTargetU(followU)
+    }
+
+    /**
+     * Resolves one representative U position for the active or most recently completed stroke.
+     * @param {number} activeStrokeIndex
+     * @param {number} completedStrokeCount
+     * @returns {number | null}
+     */
+    _resolveDrawTraceFollowU(activeStrokeIndex, completedStrokeCount) {
+        const strokes = Array.isArray(this.drawTraceStrokes) ? this.drawTraceStrokes : []
+        if (!strokes.length) return null
+
+        let targetStroke = null
+        if (activeStrokeIndex >= 0 && activeStrokeIndex < strokes.length) {
+            targetStroke = strokes[activeStrokeIndex]
+        } else {
+            const lastCompletedIndex = Math.max(0, Math.min(strokes.length - 1, Math.round(Number(completedStrokeCount) || 0) - 1))
+            targetStroke = strokes[lastCompletedIndex]
+        }
+        if (!Array.isArray(targetStroke?.points) || !targetStroke.points.length) return null
+
+        const midpointIndex = Math.max(0, Math.floor((targetStroke.points.length - 1) / 2))
+        const midpointU = Number(targetStroke.points[midpointIndex]?.u)
+        return Number.isFinite(midpointU) ? midpointU : null
     }
 
     /**
@@ -414,6 +456,7 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         this.drawTraceStrokes = []
         this.drawTraceLastCompletedStrokeCount = -1
         this.drawTraceLastActiveStrokeIndex = -1
+        this.eggScene.clearFollowTargetU()
         this.eggScene.updateTexture(this._resolveActiveTextureCanvas())
     }
 

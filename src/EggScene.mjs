@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { EggUvMapUtils } from './EggUvMapUtils.mjs'
 import { CanvasPointerPressTracker } from './CanvasPointerPressTracker.mjs'
+import { EggSceneRotationUtils } from './EggSceneRotationUtils.mjs'
 
 /**
  * Interactive Three.js egg viewport.
@@ -29,6 +30,9 @@ export class EggScene {
         this.controls.maxDistance = 5
         this.controls.target.set(0, 0, 0)
         this.pointerPressTracker = new CanvasPointerPressTracker(canvas)
+        this.autoRotationEnabled = true
+        this.followTargetU = null
+        this.followLerpFactor = 0.22
 
         this.texture = null
         this.mesh = this.#buildEggMesh()
@@ -79,6 +83,33 @@ export class EggScene {
             this.texture.dispose()
             this.texture = null
         }
+    }
+
+    /**
+     * Enables/disables idle auto-rotation.
+     * @param {boolean} enabled
+     */
+    setAutoRotationEnabled(enabled) {
+        this.autoRotationEnabled = Boolean(enabled)
+    }
+
+    /**
+     * Sets one normalized U longitude that the camera should follow.
+     * @param {number | null | undefined} u
+     */
+    setFollowTargetU(u) {
+        if (!Number.isFinite(Number(u))) {
+            this.followTargetU = null
+            return
+        }
+        this.followTargetU = EggSceneRotationUtils.wrapNormalizedU(Number(u))
+    }
+
+    /**
+     * Clears active draw-follow target.
+     */
+    clearFollowTargetU() {
+        this.followTargetU = null
     }
 
     /**
@@ -166,7 +197,20 @@ export class EggScene {
      */
     #animate() {
         this.controls.update()
-        if (!this.pointerPressTracker.isPressActive()) {
+        if (Number.isFinite(this.followTargetU)) {
+            const targetRotationY = EggSceneRotationUtils.resolveFollowRotationY({
+                u: Number(this.followTargetU),
+                cameraX: this.camera.position.x,
+                cameraZ: this.camera.position.z,
+                targetX: this.controls.target.x,
+                targetZ: this.controls.target.z
+            })
+            this.mesh.rotation.y = EggSceneRotationUtils.approachAngle(
+                this.mesh.rotation.y,
+                targetRotationY,
+                this.followLerpFactor
+            )
+        } else if (this.autoRotationEnabled && !this.pointerPressTracker.isPressActive()) {
             this.mesh.rotation.y += 0.0015
         }
         this.renderer.render(this.scene, this.camera)

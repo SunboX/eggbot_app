@@ -181,6 +181,27 @@ function createConnectedDrawSerial() {
     return { serial, commands }
 }
 
+/**
+ * Creates a connected serial instance using the real sendCommand/read queue flow.
+ * @param {string[]} [lineQueue]
+ * @returns {{ serial: EggBotSerial, commands: string[] }}
+ */
+function createConnectedQueuedDrawSerial(lineQueue = []) {
+    const serial = new EggBotSerial()
+    const commands = []
+    const decoder = new TextDecoder()
+    serial.port = /** @type {SerialPort} */ ({})
+    serial.writer = /** @type {WritableStreamDefaultWriter<Uint8Array>} */ ({
+        async write(bytes) {
+            const command = decoder.decode(bytes).replace(/\r/g, '')
+            commands.push(command)
+        },
+        releaseLock() {}
+    })
+    serial.lineQueue = Array.isArray(lineQueue) ? [...lineQueue] : []
+    return { serial, commands }
+}
+
 test('EggBotSerial.connectForDraw should use remembered granted port without chooser', async () => {
     const rememberedPort = createMockPort({ usbVendorId: 0x1234, usbProductId: 0x5678 })
     const mockedBrowser = installBrowserMocks({
@@ -697,6 +718,67 @@ test('EggBotSerial.drawStrokes should fallback to synchronous preprocessing when
         assert.equal(commands[commands.length - 1], 'EM,0,0')
     } finally {
         console.warn = originalWarn
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should ignore noisy QB lines that are not plain numeric button states', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedQueuedDrawSerial([
+        'OK',
+        'QB',
+        '120,-31,-18',
+        '0',
+        'OK',
+        'QB',
+        '0'
+    ])
+    const statuses = []
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 10, y: 0 },
+                        { x: 20, y: 0 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0.1, v: 0.5 },
+                        { u: 0.2, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 300,
+                penUpSpeed: 400
+            },
+            {
+                onStatus: (text) => statuses.push(text)
+            }
+        )
+
+        assert.equal(commands.filter((command) => command === 'QB').length, 2)
+        assert.equal(commands.includes('SP,0,400'), true)
+        assert.equal(statuses.includes('Draw finished.'), true)
+        assert.equal(statuses.includes('Draw aborted by user.'), false)
+    } finally {
         restoreTimers()
     }
 })

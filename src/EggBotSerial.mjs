@@ -256,6 +256,26 @@ export class EggBotSerial {
     }
 
     /**
+     * Returns true when one response line is a plain unsigned integer.
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    static #isPlainUnsignedIntegerLine(value) {
+        return /^\d+$/.test(String(value || '').trim())
+    }
+
+    /**
+     * Parses one plain unsigned integer response line.
+     * @param {unknown} value
+     * @returns {number}
+     */
+    static #parsePlainUnsignedIntegerLine(value) {
+        if (!EggBotSerial.#isPlainUnsignedIntegerLine(value)) return 0
+        const parsed = Number.parseInt(String(value).trim(), 10)
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+    }
+
+    /**
      * Normalizes one raw version response line into display-safe text.
      * @param {unknown} line
      * @returns {string}
@@ -456,12 +476,13 @@ export class EggBotSerial {
     /**
      * Sends one EBB command.
      * @param {string} command
-     * @param {{ expectResponse?: boolean, timeoutMs?: number }} [options]
+     * @param {{ expectResponse?: boolean, timeoutMs?: number, responseLineFilter?: (line: string) => boolean }} [options]
      * @returns {Promise<string>}
      */
     async sendCommand(command, options = {}) {
         const expectResponse = Boolean(options.expectResponse)
         const timeoutMs = Number(options.timeoutMs) || 1200
+        const responseLineFilter = typeof options.responseLineFilter === 'function' ? options.responseLineFilter : null
         const normalizedCommand = String(command || '').trim()
         await this.#writeRaw(`${command}\r`)
         if (!expectResponse) return ''
@@ -473,6 +494,7 @@ export class EggBotSerial {
             if (!line) continue
             if (line.toUpperCase() === 'OK') continue
             if (normalizedCommand && line.toLowerCase() === normalizedCommand.toLowerCase()) continue
+            if (responseLineFilter && !responseLineFilter(line)) continue
             return line
         }
     }
@@ -927,8 +949,14 @@ export class EggBotSerial {
         const axis2Egg = cfg.reverseEggMotor ? -dx : dx
 
         await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
-        const buttonState = String(await this.sendCommand('QB', { expectResponse: true, timeoutMs: 5000 }) || '').trim()
-        if (buttonState.startsWith('1')) {
+        const buttonStateLine = await this.sendCommand('QB', {
+            expectResponse: true,
+            timeoutMs: 5000,
+            responseLineFilter: EggBotSerial.#isPlainUnsignedIntegerLine
+        })
+        const buttonState = EggBotSerial.#parsePlainUnsignedIntegerLine(buttonStateLine)
+        // EBB/EggDuino reports input states as bit flags. Bit 0 represents the PRG/pause button.
+        if ((buttonState & 1) === 1) {
             this.abortDrawing = true
         }
 
