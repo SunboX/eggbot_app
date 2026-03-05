@@ -40,14 +40,16 @@ test('ImportedPreviewStrokeUtils should map default import scale into centered d
         parsedHeightRatio: parsed.heightRatio,
         parsedHeightScale: 1,
         activeHeightScale: 1,
+        documentWidthPx: parsed.documentWidthPx,
         documentHeightPx: parsed.documentHeightPx,
+        stepsPerTurn: 3200,
         penRangeSteps: 1500,
         stepScalingFactor: 2
     })
     const extrema = resolveVExtrema(preview.strokes)
 
-    assert.ok(Math.abs(extrema.minV - 0.4268881889763779) < 1e-6)
-    assert.ok(Math.abs(extrema.maxV - 0.5869828283464567) < 1e-6)
+    assert.ok(Math.abs(extrema.minV - 0.30655833333333327) < 1e-6)
+    assert.ok(Math.abs(extrema.maxV - 0.7301420666666665) < 1e-6)
 })
 
 test('ImportedPreviewStrokeUtils should expand preview with higher height scale without top/bottom clipping', () => {
@@ -69,12 +71,14 @@ test('ImportedPreviewStrokeUtils should expand preview with higher height scale 
         parsedHeightRatio: parsed.heightRatio,
         parsedHeightScale: 1,
         activeHeightScale: 3,
+        documentWidthPx: parsed.documentWidthPx,
         documentHeightPx: parsed.documentHeightPx,
+        stepsPerTurn: 3200,
         penRangeSteps: 1500,
         stepScalingFactor: 2
     })
     const extrema = resolveVExtrema(preview.strokes)
 
-    assert.ok(Math.abs(extrema.minV - 0.2806645669291339) < 1e-6)
-    assert.ok(Math.abs(extrema.maxV - 0.7609484850393701) < 1e-6)
+    assert.equal(extrema.minV, 0)
+    assert.equal(extrema.maxV, 1)
 })

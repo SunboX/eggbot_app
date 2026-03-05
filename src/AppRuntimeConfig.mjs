@@ -60,6 +60,7 @@ export class AppRuntimeConfig {
                 reverseEggMotor: true,
                 wrapAround: true,
                 returnHome: true,
+                drawOutputScale: 1.1,
                 printColorMode: 'per-color',
                 inkscapeSvgCompatMode: false,
                 engraverEnabled: false,

@@ -885,6 +885,54 @@ test('EggBotSerial.drawStrokes should keep movement timing based on diagonal dis
     }
 })
 
+test('EggBotSerial.drawStrokes should apply draw output scaling around prepared path center', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedDrawSerial()
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 20, y: 10 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0.1, v: 0.4 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 400,
+                penUpSpeed: 400,
+                drawOutputScale: 1.1
+            }
+        )
+
+        assert.equal(commands.some((command) => /^SM,\d+,12,-22$/.test(command)), true)
+        assert.equal(commands.some((command) => /^SM,\d+,10,-20$/.test(command)), false)
+    } finally {
+        restoreTimers()
+    }
+})
+
 test('EggBotSerial should emit v281-like SP/SM/QB sequence for mm-based rectangle SVG', async () => {
     const restoreTimers = installFastWindowTimers()
     const { serial, commands } = createConnectedDrawSerial()

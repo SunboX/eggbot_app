@@ -7,7 +7,7 @@ import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
 export class ImportedPreviewStrokeUtils {
     /**
      * Builds one preview-mapped stroke list from imported source geometry.
-     * @param {{ strokes?: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, parsedHeightRatio?: number, parsedHeightScale?: number, activeHeightScale?: number, documentHeightPx?: number, penRangeSteps?: number, stepScalingFactor?: number }} input
+     * @param {{ strokes?: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, parsedHeightRatio?: number, parsedHeightScale?: number, activeHeightScale?: number, documentWidthPx?: number, documentHeightPx?: number, stepsPerTurn?: number, penRangeSteps?: number, stepScalingFactor?: number }} input
      * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, previewHeightRatio: number }}
      */
     static buildPreviewStrokes(input = {}) {
@@ -19,7 +19,9 @@ export class ImportedPreviewStrokeUtils {
             activeHeightScale: input.activeHeightScale
         })
         const drawAreaRatio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentWidthPx: input.documentWidthPx,
             documentHeightPx: input.documentHeightPx,
+            stepsPerTurn: input.stepsPerTurn,
             penRangeSteps: input.penRangeSteps,
             stepScalingFactor: input.stepScalingFactor
         })

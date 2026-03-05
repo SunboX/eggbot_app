@@ -1,6 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DrawTraceStrokeUtils } from '../src/DrawTraceStrokeUtils.mjs'
+import { ImportedPatternScaleUtils } from '../src/ImportedPatternScaleUtils.mjs'
+import { ImportedPreviewStrokeUtils } from '../src/ImportedPreviewStrokeUtils.mjs'
+import { PatternStrokeScaleUtils } from '../src/PatternStrokeScaleUtils.mjs'
+import { SvgPatternImportWorkerParser } from '../src/workers/SvgPatternImportWorkerParser.mjs'
+
+/**
+ * Returns min/max V values across all stroke points.
+ * @param {Array<{ points?: Array<{ v: number }> }>} strokes
+ * @returns {{ minV: number, maxV: number }}
+ */
+function resolveVExtrema(strokes) {
+    let minV = Infinity
+    let maxV = -Infinity
+    strokes.forEach((stroke) => {
+        if (!Array.isArray(stroke?.points)) return
+        stroke.points.forEach((point) => {
+            minV = Math.min(minV, Number(point.v))
+            maxV = Math.max(maxV, Number(point.v))
+        })
+    })
+    return { minV, maxV }
+}
 
 test('DrawTraceStrokeUtils should keep generated trace strokes unchanged', () => {
     const strokes = [
@@ -48,4 +70,62 @@ test('DrawTraceStrokeUtils should remap imported trace strokes to preview ratio'
     assert.equal(result[0].points[1].u, 0.9)
     assert.equal(result[0].points[0].v, 0.25)
     assert.equal(result[0].points[1].v, 0.75)
+})
+
+test('DrawTraceStrokeUtils should align imported trace with preview mapping when draw height is capped', () => {
+    const svgText = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320mm" height="100mm" viewBox="0 0 320 100">
+            <g transform="translate(0,-197)">
+                <rect x="20.606821" y="217.98375" width="227.91998" height="63.53756" fill="none" stroke="#000000" />
+            </g>
+        </svg>
+    `
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 1,
+        curveSmoothing: 0.2
+    })
+    const activeHeightScale = 3
+    const drawHeightRatio = ImportedPatternScaleUtils.resolveDrawHeightRatio({
+        parsedHeightRatio: parsed.heightRatio,
+        parsedHeightScale: 1,
+        activeHeightScale
+    })
+    const drawSource = PatternStrokeScaleUtils.rescaleStrokesVertical(parsed.strokes, parsed.heightRatio, drawHeightRatio)
+    const preview = ImportedPreviewStrokeUtils.buildPreviewStrokes({
+        strokes: parsed.strokes,
+        parsedHeightRatio: parsed.heightRatio,
+        parsedHeightScale: 1,
+        activeHeightScale,
+        documentWidthPx: parsed.documentWidthPx,
+        documentHeightPx: parsed.documentHeightPx,
+        stepsPerTurn: 3200,
+        penRangeSteps: 1500,
+        stepScalingFactor: 2
+    })
+    const tracePreviewSourceRatio = ImportedPatternScaleUtils.resolvePreviewHeightRatio({
+        parsedHeightRatio: parsed.heightRatio,
+        parsedHeightScale: 1,
+        activeHeightScale
+    })
+    const drawAreaRatio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+        documentWidthPx: parsed.documentWidthPx,
+        documentHeightPx: parsed.documentHeightPx,
+        stepsPerTurn: 3200,
+        penRangeSteps: 1500,
+        stepScalingFactor: 2
+    })
+    const tracePreviewHeightRatio = PatternStrokeScaleUtils.clampRatio(tracePreviewSourceRatio * drawAreaRatio)
+    const trace = DrawTraceStrokeUtils.buildPreviewAlignedStrokes({
+        strokes: drawSource,
+        importedPatternActive: true,
+        isInkscapeCompatMode: false,
+        drawHeightRatio,
+        previewHeightRatio: tracePreviewHeightRatio
+    })
+    const traceExtrema = resolveVExtrema(trace)
+    const previewExtrema = resolveVExtrema(preview.strokes)
+
+    assert.ok(Math.abs(traceExtrema.minV - previewExtrema.minV) < 1e-9)
+    assert.ok(Math.abs(traceExtrema.maxV - previewExtrema.maxV) < 1e-9)
 })

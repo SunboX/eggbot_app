@@ -59,20 +59,24 @@ test('ImportedPatternScaleUtils should preserve sub-unit imported draw ratios', 
     assert.equal(ratio, 0.4)
 })
 
-test('ImportedPatternScaleUtils should resolve draw-area preview ratio from document height and draw settings', () => {
+test('ImportedPatternScaleUtils should resolve draw-area preview ratio from document size and machine settings', () => {
     const ratio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+        documentWidthPx: 1209.4488189,
         documentHeightPx: 377.9527559,
+        stepsPerTurn: 3200,
         penRangeSteps: 1500,
         stepScalingFactor: 2
     })
 
-    assert.ok(Math.abs(ratio - 0.25196850393333335) < 1e-9)
+    assert.ok(Math.abs(ratio - 0.6666666666813676) < 1e-9)
 })
 
 test('ImportedPatternScaleUtils should fallback to neutral draw-area preview ratio for invalid input', () => {
     assert.equal(
         ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentWidthPx: 1209.4488189,
             documentHeightPx: Number.NaN,
+            stepsPerTurn: 3200,
             penRangeSteps: 1500,
             stepScalingFactor: 2
         }),
@@ -80,7 +84,9 @@ test('ImportedPatternScaleUtils should fallback to neutral draw-area preview rat
     )
     assert.equal(
         ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentWidthPx: 1209.4488189,
             documentHeightPx: 377.9527559,
+            stepsPerTurn: 3200,
             penRangeSteps: 0,
             stepScalingFactor: 2
         }),
@@ -88,7 +94,9 @@ test('ImportedPatternScaleUtils should fallback to neutral draw-area preview rat
     )
     assert.equal(
         ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentWidthPx: 1209.4488189,
             documentHeightPx: 377.9527559,
+            stepsPerTurn: Number.NaN,
             penRangeSteps: 1500,
             stepScalingFactor: Number.NaN
         }),
