@@ -671,7 +671,17 @@ export class AppControllerDraw extends AppControllerRender {
             drawStrokeSequence.push(...batch.strokes.slice(batchStartOffset))
         }
         const traceDrawHeightRatio = this._resolveActiveRenderHeightRatio()
-        const tracePreviewHeightRatio = this._resolvePreviewRenderHeightRatio(traceDrawHeightRatio)
+        let tracePreviewSourceRatio = traceDrawHeightRatio
+        if (this.importedPattern && !this._isInkscapeSvgCompatModeEnabled()) {
+            // Imported preview remap uses the live import-height ratio (before draw-time capping).
+            // Mirror that source ratio here so trace overlays stay aligned to the rendered preview path.
+            tracePreviewSourceRatio = ImportedPatternScaleUtils.resolvePreviewHeightRatio({
+                parsedHeightRatio: this.importedPattern.heightRatio,
+                parsedHeightScale: this.importedPattern.heightScale,
+                activeHeightScale: this.state.importHeightScale
+            })
+        }
+        const tracePreviewHeightRatio = this._resolvePreviewRenderHeightRatio(tracePreviewSourceRatio)
         const drawTracePreviewStrokes = DrawTraceStrokeUtils.buildPreviewAlignedStrokes({
             strokes: drawStrokeSequence,
             importedPatternActive: Boolean(this.importedPattern),

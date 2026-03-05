@@ -180,6 +180,17 @@ export class EggBotSerial {
     }
 
     /**
+     * Rounds one step-space coordinate using half-away-from-zero semantics.
+     * @param {unknown} value
+     * @returns {number}
+     */
+    static #roundStepCoordinate(value) {
+        const numeric = Number(value)
+        if (!Number.isFinite(numeric)) return 0
+        return numeric < 0 ? -Math.round(Math.abs(numeric)) : Math.round(numeric)
+    }
+
+    /**
      * Opens and initializes one serial port.
      * @param {SerialPort} port
      * @param {{ baudRate?: number }} [options]
@@ -502,7 +513,7 @@ export class EggBotSerial {
     /**
      * Draws generated strokes on the connected EggBot.
      * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
-     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean, coordinateMode?: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number }} drawConfig
+     * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean, coordinateMode?: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number, drawOutputScale?: number }} drawConfig
      * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number, detail?: { completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }) => void }} [callbacks]
      * @returns {Promise<void>}
      */
@@ -538,7 +549,8 @@ export class EggBotSerial {
                     : 'normalized-uv',
             documentWidthPx: Math.max(1, Number(drawConfig.documentWidthPx) || 3200),
             documentHeightPx: Math.max(1, Number(drawConfig.documentHeightPx) || 800),
-            stepScalingFactor: Math.max(1, Math.round(Number(drawConfig.stepScalingFactor) || 2))
+            stepScalingFactor: Math.max(1, Math.round(Number(drawConfig.stepScalingFactor) || 2)),
+            drawOutputScale: Math.max(0.5, Math.min(2, Number(drawConfig.drawOutputScale) || 1))
         }
         cfg.penUpSpeed = Math.max(
             10,
@@ -568,6 +580,7 @@ export class EggBotSerial {
                 onStatus('Draw aborted by user.')
                 return
             }
+            const outputStrokes = this.#buildDrawOutputStrokes(drawableStrokes, cfg.drawOutputScale)
 
             onStatus('Configuring EBB...')
             await this.sendCommand(`SC,4,${cfg.servoUp}`)
@@ -590,8 +603,8 @@ export class EggBotSerial {
             drawCommandsIssued = true
             await setPenState(false)
 
-            const total = drawableStrokes.length
-            const estimatedTotalMs = this.#estimateDrawDurationMs(drawableStrokes, cfg, current)
+            const total = outputStrokes.length
+            const estimatedTotalMs = this.#estimateDrawDurationMs(outputStrokes, cfg, current)
             const progressStartedAtMs = Date.now()
             let completedMs = cfg.penRaiseDelayMs
             onProgress(0, total, this.#buildProgressDetail(0, total, completedMs, estimatedTotalMs, progressStartedAtMs))
@@ -599,7 +612,7 @@ export class EggBotSerial {
             for (let strokeIndex = 0; strokeIndex < total; strokeIndex += 1) {
                 if (this.abortDrawing) break
 
-                const preparedStroke = drawableStrokes[strokeIndex]
+                const preparedStroke = outputStrokes[strokeIndex]
                 if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: moving to start`)
@@ -822,6 +835,77 @@ export class EggBotSerial {
         if (this.abortDrawing) return []
         const fallback = EggBotPathComputeTasks.prepareDrawStrokes(payload)
         return Array.isArray(fallback?.strokes) ? fallback.strokes : []
+    }
+
+    /**
+     * Builds one draw-output stroke list with optional center-based scaling.
+     * @param {Array<Array<{x:number,y:number}>>} drawableStrokes
+     * @param {number} drawOutputScale
+     * @returns {Array<Array<{x:number,y:number}>>}
+     */
+    #buildDrawOutputStrokes(drawableStrokes, drawOutputScale) {
+        const preparedStrokeList = Array.isArray(drawableStrokes) ? drawableStrokes : []
+        if (!preparedStrokeList.length) return []
+
+        const scale = Number(drawOutputScale)
+        if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.000001) {
+            return preparedStrokeList
+        }
+
+        const center = this.#resolveDrawOutputBoundsCenter(preparedStrokeList)
+        if (!center) {
+            return preparedStrokeList
+        }
+
+        return preparedStrokeList.map((stroke) => {
+            if (!Array.isArray(stroke)) return []
+            return stroke.map((point) => {
+                const x = Number(point?.x)
+                const y = Number(point?.y)
+                if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                    return point
+                }
+                return {
+                    x: EggBotSerial.#roundStepCoordinate(center.x + (x - center.x) * scale),
+                    y: EggBotSerial.#roundStepCoordinate(center.y + (y - center.y) * scale)
+                }
+            })
+        })
+    }
+
+    /**
+     * Resolves one bounding-box center from prepared draw points.
+     * @param {Array<Array<{x:number,y:number}>>} drawableStrokes
+     * @returns {{x:number,y:number} | null}
+     */
+    #resolveDrawOutputBoundsCenter(drawableStrokes) {
+        let minX = Number.POSITIVE_INFINITY
+        let maxX = Number.NEGATIVE_INFINITY
+        let minY = Number.POSITIVE_INFINITY
+        let maxY = Number.NEGATIVE_INFINITY
+
+        const preparedStrokeList = Array.isArray(drawableStrokes) ? drawableStrokes : []
+        preparedStrokeList.forEach((stroke) => {
+            if (!Array.isArray(stroke)) return
+            stroke.forEach((point) => {
+                const x = Number(point?.x)
+                const y = Number(point?.y)
+                if (!Number.isFinite(x) || !Number.isFinite(y)) return
+                minX = Math.min(minX, x)
+                maxX = Math.max(maxX, x)
+                minY = Math.min(minY, y)
+                maxY = Math.max(maxY, y)
+            })
+        })
+
+        if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+            return null
+        }
+
+        return {
+            x: (minX + maxX) / 2,
+            y: (minY + maxY) / 2
+        }
     }
 
     /**

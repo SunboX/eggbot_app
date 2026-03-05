@@ -297,6 +297,7 @@ export class ProjectIoUtils {
                 reverseEggMotor: ProjectIoUtils.#toBoolean(state?.drawConfig?.reverseEggMotor, true),
                 wrapAround: ProjectIoUtils.#toBoolean(state?.drawConfig?.wrapAround, true),
                 returnHome: ProjectIoUtils.#toBoolean(state?.drawConfig?.returnHome, true),
+                drawOutputScale: Math.max(0.5, Math.min(2, ProjectIoUtils.#toNumber(state?.drawConfig?.drawOutputScale, 1.1))),
                 printColorMode: String(state?.drawConfig?.printColorMode || '')
                     .trim()
                     .toLowerCase() === 'single'

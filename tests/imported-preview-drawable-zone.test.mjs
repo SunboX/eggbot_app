@@ -49,7 +49,9 @@ test('Imported SVG preview remap should center V into drawable zone while preser
         activeHeightScale: 1
     })
     const drawAreaRatio = ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+        documentWidthPx: parsed.documentWidthPx,
         documentHeightPx: parsed.documentHeightPx,
+        stepsPerTurn: 3200,
         penRangeSteps: 1500,
         stepScalingFactor: 2
     })
@@ -59,8 +61,8 @@ test('Imported SVG preview remap should center V into drawable zone while preser
     const sourceExtrema = resolveExtrema(parsed.strokes)
     const remappedExtrema = resolveExtrema(remapped)
 
-    assert.ok(Math.abs(remappedExtrema.minV - 0.4268881889763779) < 1e-6)
-    assert.ok(Math.abs(remappedExtrema.maxV - 0.5869828283464567) < 1e-6)
+    assert.ok(Math.abs(remappedExtrema.minV - 0.30655833333333327) < 1e-6)
+    assert.ok(Math.abs(remappedExtrema.maxV - 0.7301420666666665) < 1e-6)
     assert.ok(Math.abs(sourceExtrema.minU - remappedExtrema.minU) < 1e-12)
     assert.ok(Math.abs(sourceExtrema.maxU - remappedExtrema.maxU) < 1e-12)
 })

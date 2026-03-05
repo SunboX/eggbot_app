@@ -618,7 +618,9 @@ export class AppControllerRender extends AppControllerRuntime {
         if (!this.importedPattern) return 1
         const drawConfig = this._resolveDrawCoordinateConfig()
         return ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
+            documentWidthPx: Number(this.importedPattern.documentWidthPx),
             documentHeightPx: Number(this.importedPattern.documentHeightPx),
+            stepsPerTurn: Number(this.state?.drawConfig?.stepsPerTurn),
             penRangeSteps: Number(this.state?.drawConfig?.penRangeSteps),
             stepScalingFactor: Number(drawConfig?.stepScalingFactor) || 2
         })
@@ -699,7 +701,9 @@ export class AppControllerRender extends AppControllerRuntime {
                 parsedHeightRatio: this.importedPattern.heightRatio,
                 parsedHeightScale: this.importedPattern.heightScale,
                 activeHeightScale: this.state.importHeightScale,
+                documentWidthPx: this.importedPattern.documentWidthPx,
                 documentHeightPx: this.importedPattern.documentHeightPx,
+                stepsPerTurn: this.state?.drawConfig?.stepsPerTurn,
                 penRangeSteps: this.state?.drawConfig?.penRangeSteps,
                 stepScalingFactor: this._resolveDrawCoordinateConfig().stepScalingFactor
             })
