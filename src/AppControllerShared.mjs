@@ -17,6 +17,7 @@ import { ProjectUrlUtils } from './ProjectUrlUtils.mjs'
 import { DrawProgressSmoother } from './DrawProgressSmoother.mjs'
 import { DrawProgressTimeUtils } from './DrawProgressTimeUtils.mjs'
 import { DrawTraceOverlayRenderer } from './DrawTraceOverlayRenderer.mjs'
+import { DrawTraceStrokeUtils } from './DrawTraceStrokeUtils.mjs'
 import { ImportedRenderSyncUtils } from './ImportedRenderSyncUtils.mjs'
 import { PatternComputeWorkerClient } from './PatternComputeWorkerClient.mjs'
 import { PatternImportWorkerClient } from './PatternImportWorkerClient.mjs'
@@ -66,6 +67,7 @@ export {
     DrawProgressSmoother,
     DrawProgressTimeUtils,
     DrawTraceOverlayRenderer,
+    DrawTraceStrokeUtils,
     ImportedRenderSyncUtils,
     PatternComputeWorkerClient,
     PatternImportWorkerClient,

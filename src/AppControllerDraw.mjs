@@ -18,6 +18,7 @@ import {
     DrawProgressSmoother,
     DrawProgressTimeUtils,
     DrawTraceOverlayRenderer,
+    DrawTraceStrokeUtils,
     ImportedRenderSyncUtils,
     PatternComputeWorkerClient,
     PatternImportWorkerClient,
@@ -669,13 +670,23 @@ export class AppControllerDraw extends AppControllerRender {
             const batchStartOffset = batchIndex === startBatchIndex ? startStrokeIndex : 0
             drawStrokeSequence.push(...batch.strokes.slice(batchStartOffset))
         }
+        const traceDrawHeightRatio = this._resolveActiveRenderHeightRatio()
+        const tracePreviewHeightRatio = this._resolvePreviewRenderHeightRatio(traceDrawHeightRatio)
+        const drawTracePreviewStrokes = DrawTraceStrokeUtils.buildPreviewAlignedStrokes({
+            strokes: drawStrokeSequence,
+            importedPatternActive: Boolean(this.importedPattern),
+            isInkscapeCompatMode: this._isInkscapeSvgCompatModeEnabled(),
+            drawHeightRatio: traceDrawHeightRatio,
+            previewHeightRatio: tracePreviewHeightRatio
+        })
 
         let connectingBeforeDraw = false
         let drawCanceledByUser = false
         let drawAbortedByStop = false
         this.isDrawing = true
+        this.eggScene.setAutoRotationEnabled(false)
         this._syncConnectionUi()
-        this._startDrawTracePreview(drawStrokeSequence)
+        this._startDrawTracePreview(drawTracePreviewStrokes)
 
         try {
             if (!this.serial.isConnected) {
@@ -811,6 +822,7 @@ export class AppControllerDraw extends AppControllerRender {
             this._resolvePendingPenColorDialog(false)
             this._closePenColorDialog()
             this._stopDrawTracePreview()
+            this.eggScene.setAutoRotationEnabled(true)
             this.isDrawing = false
             this._resetDrawProgressUi()
             this._syncConnectionUi()
