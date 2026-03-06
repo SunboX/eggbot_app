@@ -126,6 +126,37 @@ export class PatternStrokeScaleUtils {
     }
 
     /**
+     * Scales strokes around the global document center used by imported draw conversion.
+     * Seam-crossing paths stay continuous by scaling unwrapped U coordinates.
+     * @param {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', transformGroupId?: number }>} strokes
+     * @param {number} uScale
+     * @param {number} vScale
+     * @returns {Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd', transformGroupId?: number }>}
+     */
+    static scaleStrokesAroundDocumentCenter(strokes, uScale, vScale) {
+        const normalizedUScale = PatternStrokeScaleUtils.clampRatio(uScale)
+        const normalizedVScale = PatternStrokeScaleUtils.clampRatio(vScale)
+        if (Math.abs(normalizedUScale - 1) < 1e-6 && Math.abs(normalizedVScale - 1) < 1e-6) {
+            return Array.isArray(strokes) ? strokes : []
+        }
+        if (!Array.isArray(strokes)) return []
+
+        return strokes.map((stroke) => {
+            if (!Array.isArray(stroke?.points)) return stroke
+            const unwrapped = PatternStrokeScaleUtils.#unwrapStroke(stroke.points)
+            return {
+                ...stroke,
+                points: stroke.points.map((point, index) => ({
+                    u: PatternStrokeScaleUtils.#normalizeU(
+                        0.5 + (Number(unwrapped[index]?.u) - 0.5) * normalizedUScale
+                    ),
+                    v: PatternStrokeScaleUtils.#clamp(0.5 + (Number(point.v) - 0.5) * normalizedVScale, 0, 1)
+                }))
+            }
+        })
+    }
+
+    /**
      * Resolves one stable scale-group key for shared U-anchor transforms.
      * @param {Record<string, any>} stroke
      * @param {number} index
