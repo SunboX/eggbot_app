@@ -670,24 +670,22 @@ export class AppControllerDraw extends AppControllerRender {
             const batchStartOffset = batchIndex === startBatchIndex ? startStrokeIndex : 0
             drawStrokeSequence.push(...batch.strokes.slice(batchStartOffset))
         }
-        const traceDrawHeightRatio = this._resolveActiveRenderHeightRatio()
-        let tracePreviewSourceRatio = traceDrawHeightRatio
-        if (this.importedPattern && !this._isInkscapeSvgCompatModeEnabled()) {
-            // Imported preview remap uses the live import-height ratio (before draw-time capping).
-            // Mirror that source ratio here so trace overlays stay aligned to the rendered preview path.
-            tracePreviewSourceRatio = ImportedPatternScaleUtils.resolvePreviewHeightRatio({
-                parsedHeightRatio: this.importedPattern.heightRatio,
-                parsedHeightScale: this.importedPattern.heightScale,
-                activeHeightScale: this.state.importHeightScale
-            })
-        }
-        const tracePreviewHeightRatio = this._resolvePreviewRenderHeightRatio(tracePreviewSourceRatio)
+        const tracePreviewScales =
+            this.importedPattern && !this._isInkscapeSvgCompatModeEnabled()
+                ? ImportedPatternScaleUtils.resolveDrawAreaPreviewScales({
+                      documentWidthPx: this.importedPattern.documentWidthPx,
+                      documentHeightPx: this.importedPattern.documentHeightPx,
+                      stepsPerTurn: this.state?.drawConfig?.stepsPerTurn,
+                      penRangeSteps: this.state?.drawConfig?.penRangeSteps,
+                      stepScalingFactor: this._resolveDrawCoordinateConfig().stepScalingFactor
+                  })
+                : null
         const drawTracePreviewStrokes = DrawTraceStrokeUtils.buildPreviewAlignedStrokes({
             strokes: drawStrokeSequence,
             importedPatternActive: Boolean(this.importedPattern),
             isInkscapeCompatMode: this._isInkscapeSvgCompatModeEnabled(),
-            drawHeightRatio: traceDrawHeightRatio,
-            previewHeightRatio: tracePreviewHeightRatio
+            previewScaleU: tracePreviewScales?.uScale,
+            previewScaleV: tracePreviewScales?.vScale
         })
 
         let connectingBeforeDraw = false

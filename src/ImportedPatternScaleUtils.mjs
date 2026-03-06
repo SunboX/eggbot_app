@@ -43,23 +43,55 @@ export class ImportedPatternScaleUtils {
     }
 
     /**
-     * Resolves one preview multiplier from document pixel size and draw range settings.
-     * Keep U unchanged and remap V so imported preview aspect better matches machine draw-space aspect.
+     * Resolves imported preview scale factors relative to the full egg UV space.
+     * Mirrors document-centered draw conversion on both axes.
      * @param {{ documentWidthPx?: number, documentHeightPx?: number, stepsPerTurn?: number, penRangeSteps?: number, stepScalingFactor?: number }} [input]
-     * @returns {number}
+     * @returns {{ uScale: number, vScale: number }}
      */
-    static resolveDrawAreaPreviewRatio(input = {}) {
+    static resolveDrawAreaPreviewScales(input = {}) {
         const documentWidthPx = Number(input.documentWidthPx)
         const documentHeightPx = Number(input.documentHeightPx)
         const stepsPerTurn = Number(input.stepsPerTurn)
         const penRangeSteps = Number(input.penRangeSteps)
+        const stepScalingFactor = Number(input.stepScalingFactor)
 
-        if (!Number.isFinite(documentWidthPx) || documentWidthPx <= 0) return 1
-        if (!Number.isFinite(documentHeightPx) || documentHeightPx <= 0) return 1
-        if (!Number.isFinite(stepsPerTurn) || stepsPerTurn <= 0) return 1
-        if (!Number.isFinite(penRangeSteps) || penRangeSteps <= 0) return 1
+        if (!Number.isFinite(documentWidthPx) || documentWidthPx <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
+        if (!Number.isFinite(documentHeightPx) || documentHeightPx <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
+        if (!Number.isFinite(stepsPerTurn) || stepsPerTurn <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
+        if (!Number.isFinite(penRangeSteps) || penRangeSteps <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
+        if (!Number.isFinite(stepScalingFactor) || stepScalingFactor <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
 
-        const ratio = (documentHeightPx * stepsPerTurn) / (documentWidthPx * penRangeSteps)
+        const uScale = (2 * documentWidthPx) / (stepScalingFactor * stepsPerTurn)
+        const vScale = (2 * documentHeightPx) / (stepScalingFactor * penRangeSteps)
+        if (!Number.isFinite(uScale) || uScale <= 0 || !Number.isFinite(vScale) || vScale <= 0) {
+            return { uScale: 1, vScale: 1 }
+        }
+
+        return {
+            uScale: Math.max(0.02, Math.min(3, uScale)),
+            vScale: Math.max(0.02, Math.min(3, vScale))
+        }
+    }
+
+    /**
+     * Resolves one preview multiplier from document pixel size and draw range settings.
+     * Returns preview aspect ratio as V/U scale for legacy callers.
+     * @param {{ documentWidthPx?: number, documentHeightPx?: number, stepsPerTurn?: number, penRangeSteps?: number, stepScalingFactor?: number }} [input]
+     * @returns {number}
+     */
+    static resolveDrawAreaPreviewRatio(input = {}) {
+        const scales = ImportedPatternScaleUtils.resolveDrawAreaPreviewScales(input)
+        const ratio = scales.vScale / scales.uScale
         if (!Number.isFinite(ratio) || ratio <= 0) return 1
         return Math.max(0.02, Math.min(3, ratio))
     }
