@@ -93,6 +93,7 @@ export class AppControllerCoreControls {
         this.drawTracePreviewActive = false
         this.drawTraceLastCompletedStrokeCount = -1
         this.drawTraceLastActiveStrokeIndex = -1
+        this.pendingEggTextureSyncAnimationFrame = 0
         this.pendingPenColorDialogResolve = null
         this.espFlashManifestMeta = null
         this.espFlashManifestLoadPromise = null

@@ -308,6 +308,35 @@ export class AppControllerRuntime extends AppControllerCoreControls {
     }
 
     /**
+     * Schedules a short follow-up sync after worker-backed renders.
+     * OffscreenCanvas commits can land after the worker promise resolves, so
+     * re-upload the canvas texture across the next frames as a safeguard.
+     * @param {number} token
+     * @param {number} [remainingFrames]
+     */
+    _scheduleEggSceneTextureFollowUpSync(token, remainingFrames = 2) {
+        if (this.pendingEggTextureSyncAnimationFrame) {
+            window.cancelAnimationFrame(this.pendingEggTextureSyncAnimationFrame)
+            this.pendingEggTextureSyncAnimationFrame = 0
+        }
+
+        const normalizedToken = Number.isFinite(Number(token)) ? Number(token) : 0
+        const framesLeft = Math.max(1, Math.round(Number(remainingFrames) || 1))
+        const scheduleFrame = (nextFramesLeft) => {
+            this.pendingEggTextureSyncAnimationFrame = window.requestAnimationFrame(() => {
+                this.pendingEggTextureSyncAnimationFrame = 0
+                if (normalizedToken !== this.renderToken) return
+                if (this.renderBackendMode !== 'worker' || this.disableRenderWorker) return
+                this._syncEggSceneTexture()
+                if (nextFramesLeft <= 1) return
+                scheduleFrame(nextFramesLeft - 1)
+            })
+        }
+
+        scheduleFrame(framesLeft)
+    }
+
+    /**
      * Ensures draw-trace overlay/composite canvases exist and match the base texture size.
      * @param {HTMLCanvasElement} baseCanvas
      */
