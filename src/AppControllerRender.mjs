@@ -537,6 +537,10 @@ export class AppControllerRender extends AppControllerRuntime {
     _disposeBackgroundWorkers() {
         this._cancelAllIdleTasks()
         this.pendingSavedProjectsSelectRender = null
+        if (this.pendingEggTextureSyncAnimationFrame) {
+            window.cancelAnimationFrame(this.pendingEggTextureSyncAnimationFrame)
+            this.pendingEggTextureSyncAnimationFrame = 0
+        }
         this.patternComputeWorker.dispose()
         this.patternImportWorker.dispose()
         this.patternRenderWorker.dispose()
@@ -815,6 +819,9 @@ export class AppControllerRender extends AppControllerRuntime {
             if (postRenderAction.shouldDispatchImportedRenderedEvent) {
                 this.els.textureCanvas.dispatchEvent(new Event('pattern-rendered'))
             }
+            if (renderResult?.scheduleFollowUpTextureSync) {
+                this._scheduleEggSceneTextureFollowUpSync(config.token)
+            }
         } catch (error) {
             console.error('Pattern render failed.', error)
             if (config.importedSvgText && config.token === this.renderToken) {
@@ -854,7 +861,8 @@ export class AppControllerRender extends AppControllerRuntime {
                 }
                 this.activeTextureCanvas = this.els.textureCanvas
                 return {
-                    dispatchImportedRenderedEvent: Boolean(input.importedSvgText)
+                    dispatchImportedRenderedEvent: Boolean(input.importedSvgText),
+                    scheduleFollowUpTextureSync: true
                 }
             } catch (error) {
                 if (error?.code === 'imported-svg-raster-unsupported' && input.importedSvgText) {
