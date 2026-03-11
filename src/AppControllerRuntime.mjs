@@ -275,6 +275,33 @@ export class AppControllerRuntime extends AppControllerCoreControls {
     }
 
     /**
+     * Replaces a worker-owned DOM texture canvas with a fresh visible canvas.
+     * @returns {HTMLCanvasElement | null}
+     */
+    _restoreTransferredTextureCanvasElement() {
+        if (!this.textureCanvasTransferredToWorker) return null
+        const currentTextureCanvas = this.els.textureCanvas
+        if (!currentTextureCanvas) return null
+        if (typeof currentTextureCanvas.cloneNode !== 'function' || typeof currentTextureCanvas.parentNode?.replaceChild !== 'function') {
+            return null
+        }
+
+        const replacementCanvas = currentTextureCanvas.cloneNode(true)
+        replacementCanvas.width = Math.max(1, Math.round(Number(currentTextureCanvas.width) || 1))
+        replacementCanvas.height = Math.max(1, Math.round(Number(currentTextureCanvas.height) || 1))
+        currentTextureCanvas.parentNode.replaceChild(replacementCanvas, currentTextureCanvas)
+        this.els.textureCanvas = replacementCanvas
+        if (!this.activeTextureCanvas || this.activeTextureCanvas === currentTextureCanvas) {
+            this.activeTextureCanvas = replacementCanvas
+        }
+        this.textureCanvasTransferredToWorker = false
+        if (typeof this._bindTextureCanvasRenderSync === 'function') {
+            this._bindTextureCanvasRenderSync()
+        }
+        return replacementCanvas
+    }
+
+    /**
      * Switches to permanent main-thread render mode after worker failure.
      */
     _switchToMainThreadRenderBackend() {
@@ -285,7 +312,9 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         } catch (_error) {
             // Ignore disposal races.
         }
-        this._ensureMainThreadRenderer(this.textureCanvasTransferredToWorker)
+        this._restoreTransferredTextureCanvasElement()
+        this.fallbackRenderCanvas = null
+        this._ensureMainThreadRenderer(false)
     }
 
     /**
@@ -293,24 +322,16 @@ export class AppControllerRuntime extends AppControllerCoreControls {
      * @returns {boolean}
      */
     _restoreVisibleTextureCanvasAfterWorkerFallback() {
-        if (!this.textureCanvasTransferredToWorker) return false
-        const currentTextureCanvas = this.els.textureCanvas
         const renderedTextureCanvas = this.activeTextureCanvas
-        if (!currentTextureCanvas || !renderedTextureCanvas || renderedTextureCanvas === currentTextureCanvas) {
-            return false
-        }
-        if (typeof currentTextureCanvas.cloneNode !== 'function' || typeof currentTextureCanvas.parentNode?.replaceChild !== 'function') {
-            return false
-        }
-
-        const replacementCanvas = currentTextureCanvas.cloneNode(true)
+        const replacementCanvas = this._restoreTransferredTextureCanvasElement()
+        if (!replacementCanvas || !renderedTextureCanvas || renderedTextureCanvas === replacementCanvas) return false
         const width = Math.max(
             1,
-            Math.round(Number(renderedTextureCanvas.width) || Number(currentTextureCanvas.width) || 1)
+            Math.round(Number(renderedTextureCanvas.width) || Number(replacementCanvas.width) || 1)
         )
         const height = Math.max(
             1,
-            Math.round(Number(renderedTextureCanvas.height) || Number(currentTextureCanvas.height) || 1)
+            Math.round(Number(renderedTextureCanvas.height) || Number(replacementCanvas.height) || 1)
         )
         replacementCanvas.width = width
         replacementCanvas.height = height
@@ -319,14 +340,8 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         if (!replacementContext) return false
         replacementContext.drawImage(renderedTextureCanvas, 0, 0, width, height)
 
-        currentTextureCanvas.parentNode.replaceChild(replacementCanvas, currentTextureCanvas)
-        this.els.textureCanvas = replacementCanvas
         this.activeTextureCanvas = replacementCanvas
-        this.textureCanvasTransferredToWorker = false
         this.fallbackRenderCanvas = null
-        if (typeof this._bindTextureCanvasRenderSync === 'function') {
-            this._bindTextureCanvasRenderSync()
-        }
         return true
     }
 
