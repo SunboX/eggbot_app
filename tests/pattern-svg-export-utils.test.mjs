@@ -18,6 +18,7 @@ test('PatternSvgExportUtils should build a valid SVG document shell with Inkscap
     assert.ok(svg.includes('xmlns:dc="http://purl.org/dc/elements/1.1/"'))
     assert.ok(svg.includes('xmlns:cc="http://creativecommons.org/ns#"'))
     assert.ok(svg.includes('xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"'))
+    assert.ok(svg.includes('data-eggbot-coordinate-mode="normalized-uv"'))
     assert.ok(svg.includes('viewBox="0 0 320 160" width="320" height="160" fill="none"'))
     assert.ok(svg.includes('<metadata id="metadata1">'))
     assert.ok(svg.includes('<rdf:RDF>'))

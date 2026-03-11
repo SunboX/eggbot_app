@@ -127,3 +127,32 @@ test('ImportedPreviewStrokeUtils should match document-centered preview footprin
     assert.ok(Math.abs(extrema.minV - 0.39973004094488185) < 1e-6)
     assert.ok(Math.abs(extrema.maxV - 0.5930633826771654) < 1e-6)
 })
+
+test('ImportedPreviewStrokeUtils should keep normalized UV imports unscaled in preview', () => {
+    const sourceStrokes = [
+        {
+            colorIndex: 0,
+            points: [
+                { u: 0.1, v: 0.2 },
+                { u: 0.9, v: 0.8 }
+            ]
+        }
+    ]
+
+    const preview = ImportedPreviewStrokeUtils.buildPreviewStrokes({
+        strokes: sourceStrokes,
+        coordinateMode: 'normalized-uv',
+        parsedHeightRatio: 1,
+        parsedHeightScale: 1,
+        activeHeightScale: 1,
+        documentWidthPx: 2048,
+        documentHeightPx: 1024,
+        stepsPerTurn: 3200,
+        penRangeSteps: 1500,
+        stepScalingFactor: 2
+    })
+
+    assert.deepEqual(preview.strokes, sourceStrokes)
+    assert.equal(preview.previewScaleU, 1)
+    assert.equal(preview.previewScaleV, 1)
+})

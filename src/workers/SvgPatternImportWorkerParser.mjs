@@ -9,7 +9,7 @@ export class SvgPatternImportWorkerParser {
      * Parses SVG text into renderer strokes.
      * @param {string} svgText
      * @param {{ maxColors?: number, sampleSpacing?: number, heightScale?: number, heightReference?: number, preserveRawHeight?: boolean, curveSmoothing?: number }} [options]
-     * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio: number, documentWidthPx: number, documentHeightPx: number }}
+     * @returns {{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio: number, documentWidthPx: number, documentHeightPx: number, coordinateMode: 'normalized-uv' | 'document-px-centered' }}
      */
     static parse(svgText, options = {}) {
         const ParserCtor = typeof DOMParser === 'function' ? DOMParser : LinkedomDOMParser
@@ -33,6 +33,7 @@ export class SvgPatternImportWorkerParser {
 
         const viewBox = SvgPatternImportWorkerParser.#resolveViewBox(svg)
         const documentPixelSize = SvgPatternImportWorkerParser.#resolveDocumentPixelSize(svg, viewBox)
+        const coordinateMode = SvgPatternImportWorkerParser.#resolveCoordinateMode(svg, viewBox)
         const cssRules = SvgPatternImportWorkerParser.#parseCssRules(svg)
         const normalizeColor = SvgPatternImportWorkerParser.#createColorNormalizer()
         const baseColor = SvgPatternImportWorkerParser.#resolveBaseColor(svg, cssRules, normalizeColor)
@@ -126,6 +127,7 @@ export class SvgPatternImportWorkerParser {
             strokes,
             heightRatio,
             palette: palette.filter(Boolean),
+            coordinateMode,
             documentWidthPx: documentPixelSize.width,
             documentHeightPx: documentPixelSize.height,
             ...(baseColor ? { baseColor } : {})
@@ -499,6 +501,47 @@ export class SvgPatternImportWorkerParser {
             width: Math.max(1, width),
             height: Math.max(1, height)
         }
+    }
+
+    /**
+     * Resolves imported coordinate mode from explicit or legacy export metadata.
+     * @param {Element} svg
+     * @param {{ width: number, height: number }} viewBox
+     * @returns {'normalized-uv' | 'document-px-centered'}
+     */
+    static #resolveCoordinateMode(svg, viewBox) {
+        const explicitMode = String(svg.getAttribute('data-eggbot-coordinate-mode') || '')
+            .trim()
+            .toLowerCase()
+        if (explicitMode === 'normalized-uv') {
+            return 'normalized-uv'
+        }
+        if (SvgPatternImportWorkerParser.#isLegacyEggbotUvExport(svg, viewBox)) {
+            return 'normalized-uv'
+        }
+        return 'document-px-centered'
+    }
+
+    /**
+     * Detects legacy app exports created before explicit coordinate-mode tagging.
+     * @param {Element} svg
+     * @param {{ width: number, height: number }} viewBox
+     * @returns {boolean}
+     */
+    static #isLegacyEggbotUvExport(svg, viewBox) {
+        const width =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('width'), { reference: viewBox.width || 2048 }) ||
+            viewBox.width
+        const height =
+            SvgPatternImportWorkerGeometry.parseSvgLength(svg.getAttribute('height'), {
+                reference: viewBox.height || 1024
+            }) || viewBox.height
+        if (Math.abs(width - 2048) > 1e-6 || Math.abs(height - 1024) > 1e-6) {
+            return false
+        }
+
+        const metadataText = String(svg.querySelector('metadata')?.textContent || '').trim().toLowerCase()
+        return metadataText.includes('using eggbot-app')
     }
 
     /**
