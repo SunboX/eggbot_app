@@ -289,6 +289,48 @@ export class AppControllerRuntime extends AppControllerCoreControls {
     }
 
     /**
+     * Restores a visible DOM texture canvas after worker-backed fallback rendering.
+     * @returns {boolean}
+     */
+    _restoreVisibleTextureCanvasAfterWorkerFallback() {
+        if (!this.textureCanvasTransferredToWorker) return false
+        const currentTextureCanvas = this.els.textureCanvas
+        const renderedTextureCanvas = this.activeTextureCanvas
+        if (!currentTextureCanvas || !renderedTextureCanvas || renderedTextureCanvas === currentTextureCanvas) {
+            return false
+        }
+        if (typeof currentTextureCanvas.cloneNode !== 'function' || typeof currentTextureCanvas.parentNode?.replaceChild !== 'function') {
+            return false
+        }
+
+        const replacementCanvas = currentTextureCanvas.cloneNode(true)
+        const width = Math.max(
+            1,
+            Math.round(Number(renderedTextureCanvas.width) || Number(currentTextureCanvas.width) || 1)
+        )
+        const height = Math.max(
+            1,
+            Math.round(Number(renderedTextureCanvas.height) || Number(currentTextureCanvas.height) || 1)
+        )
+        replacementCanvas.width = width
+        replacementCanvas.height = height
+
+        const replacementContext = replacementCanvas.getContext('2d')
+        if (!replacementContext) return false
+        replacementContext.drawImage(renderedTextureCanvas, 0, 0, width, height)
+
+        currentTextureCanvas.parentNode.replaceChild(replacementCanvas, currentTextureCanvas)
+        this.els.textureCanvas = replacementCanvas
+        this.activeTextureCanvas = replacementCanvas
+        this.textureCanvasTransferredToWorker = false
+        this.fallbackRenderCanvas = null
+        if (typeof this._bindTextureCanvasRenderSync === 'function') {
+            this._bindTextureCanvasRenderSync()
+        }
+        return true
+    }
+
+    /**
      * Returns the currently active texture canvas for 3D updates.
      * @returns {HTMLCanvasElement}
      */

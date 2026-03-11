@@ -837,6 +837,9 @@ export class AppControllerRender extends AppControllerRuntime {
         try {
             const renderResult = await this._renderTextureFrame(renderInput, config.token)
             if (renderResult?.stale || config.token !== this.renderToken) return
+            if (this.renderBackendMode === 'main' && this.textureCanvasTransferredToWorker) {
+                this._restoreVisibleTextureCanvasAfterWorkerFallback()
+            }
             const postRenderAction = ImportedRenderSyncUtils.resolvePostRenderAction(config.importedSvgText, renderResult)
             if (postRenderAction.shouldSyncEggTextureNow) {
                 this._syncEggSceneTexture()

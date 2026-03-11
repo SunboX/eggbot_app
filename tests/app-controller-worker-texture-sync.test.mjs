@@ -153,3 +153,56 @@ test('AppControllerRender should prefer exact SVG raster preview for normalized 
         importedSvgScaleV: 0.75
     })
 })
+
+test('AppControllerRuntime should restore a visible texture canvas after worker fallback rendering', () => {
+    const replacementLog = []
+    const newCanvasContext = {
+        drawImage(source, x, y, width, height) {
+            replacementLog.push({ source, x, y, width, height })
+        }
+    }
+    const newCanvas = {
+        width: 2048,
+        height: 1024,
+        getContext() {
+            return newCanvasContext
+        },
+        addEventListener() {},
+        dispatchEvent() {
+            return true
+        }
+    }
+    const oldCanvas = {
+        width: 2048,
+        height: 1024,
+        cloneNode() {
+            return newCanvas
+        },
+        parentNode: {
+            replaceChild(replacement, existing) {
+                assert.equal(replacement, newCanvas)
+                assert.equal(existing, oldCanvas)
+            }
+        }
+    }
+    const fallbackCanvas = {
+        width: 2048,
+        height: 1024
+    }
+    const runtime = {
+        els: {
+            textureCanvas: oldCanvas
+        },
+        activeTextureCanvas: fallbackCanvas,
+        textureCanvasTransferredToWorker: true,
+        _syncEggSceneTexture() {}
+    }
+
+    const restored = AppControllerRuntime.prototype._restoreVisibleTextureCanvasAfterWorkerFallback.call(runtime)
+
+    assert.equal(restored, true)
+    assert.equal(runtime.els.textureCanvas, newCanvas)
+    assert.equal(runtime.activeTextureCanvas, newCanvas)
+    assert.equal(runtime.textureCanvasTransferredToWorker, false)
+    assert.deepEqual(replacementLog, [{ source: fallbackCanvas, x: 0, y: 0, width: 2048, height: 1024 }])
+})

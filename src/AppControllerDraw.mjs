@@ -58,9 +58,12 @@ export class AppControllerDraw extends AppControllerRender {
         const rendererCanvas = this.renderer2d.canvas
         const proxyImportedEvents = rendererCanvas !== this.els.textureCanvas
         const importedSvgText = String(input.importedSvgText || '').trim()
-        const hasImportedFallbackRaster = Boolean(importedSvgText && (!Array.isArray(input.strokes) || !input.strokes.length))
+        const usesImportedSvgRaster = Boolean(
+            importedSvgText &&
+                (input.preferImportedSvgRaster === true || !Array.isArray(input.strokes) || !input.strokes.length)
+        )
 
-        if (hasImportedFallbackRaster) {
+        if (usesImportedSvgRaster) {
             await new Promise((resolve, reject) => {
                 const onRendered = () => {
                     cleanup()
