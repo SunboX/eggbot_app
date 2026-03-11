@@ -95,6 +95,7 @@ export class AppControllerCoreControls {
         this.drawTraceLastActiveStrokeIndex = -1
         this.pendingEggTextureSyncAnimationFrame = 0
         this.pendingPenColorDialogResolve = null
+        this.textureCanvasRenderSyncHandler = null
         this.espFlashManifestMeta = null
         this.espFlashManifestLoadPromise = null
         this.espFlashManifestLoadFailed = false
@@ -141,9 +142,7 @@ export class AppControllerCoreControls {
             },
             { once: true }
         )
-        this.els.textureCanvas.addEventListener('pattern-rendered', () => {
-            this._syncEggSceneTexture()
-        })
+        this._bindTextureCanvasRenderSync()
         this._renderPattern()
         this._syncConnectionUi()
         await this._restoreSerialConnectionAfterReload()
@@ -152,6 +151,18 @@ export class AppControllerCoreControls {
         this._syncAutoGenerateOrnamentControlsUi()
         this._resetDrawProgressUi()
         this._scheduleProjectArtifactsRefreshIdle()
+    }
+
+    /**
+     * Binds the texture-canvas render completion listener to the current DOM canvas.
+     */
+    _bindTextureCanvasRenderSync() {
+        if (!this.textureCanvasRenderSyncHandler) {
+            this.textureCanvasRenderSyncHandler = () => {
+                this._syncEggSceneTexture()
+            }
+        }
+        this.els.textureCanvas.addEventListener('pattern-rendered', this.textureCanvasRenderSyncHandler)
     }
 
     /**
