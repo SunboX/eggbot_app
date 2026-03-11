@@ -56,9 +56,7 @@ export class EggScene {
     updateTexture(textureCanvas) {
         if (!this.texture) {
             this.texture = new THREE.CanvasTexture(textureCanvas)
-            this.texture.colorSpace = THREE.SRGBColorSpace
-            this.texture.wrapS = THREE.RepeatWrapping
-            this.texture.wrapT = THREE.ClampToEdgeWrapping
+            this.constructor._configurePatternTexture(this.texture)
             this.texture.needsUpdate = true
             this.mesh.material.map = this.texture
             this.mesh.material.needsUpdate = true
@@ -66,6 +64,19 @@ export class EggScene {
         }
         this.texture.image = textureCanvas
         this.texture.needsUpdate = true
+    }
+
+    /**
+     * Configures sampling to keep thin ornament strokes visible on the 3D egg.
+     * @param {THREE.CanvasTexture} texture
+     */
+    static _configurePatternTexture(texture) {
+        texture.colorSpace = THREE.SRGBColorSpace
+        texture.wrapS = THREE.RepeatWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+        texture.magFilter = THREE.LinearFilter
+        texture.minFilter = THREE.LinearFilter
+        texture.generateMipmaps = false
     }
 
     /**
