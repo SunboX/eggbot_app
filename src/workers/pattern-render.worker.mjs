@@ -118,7 +118,12 @@ async function drawImportedSvg(svgText, scaleU, scaleV, token) {
     const drawX = (width - drawWidth) / 2
     const drawY = (height - drawHeight) / 2
     const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })
-    const imageBitmap = await createImageBitmap(blob)
+    let imageBitmap = null
+    try {
+        imageBitmap = await createImageBitmap(blob)
+    } catch (_error) {
+        throw new Error('imported-svg-raster-unsupported')
+    }
     try {
         if (token !== latestRenderToken) {
             return
