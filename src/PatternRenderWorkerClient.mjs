@@ -56,7 +56,7 @@ export class PatternRenderWorkerClient {
 
     /**
      * Renders one texture frame in worker thread.
-     * @param {{ baseColor?: string, lineWidth?: number, fillPatterns?: boolean, palette?: string[], strokes?: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number }} data
+     * @param {{ baseColor?: string, lineWidth?: number, fillPatterns?: boolean, palette?: string[], strokes?: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, importedSvgText?: string, importedSvgHeightRatio?: number, importedSvgScaleU?: number, importedSvgScaleV?: number, preferImportedSvgRaster?: boolean }} data
      * @param {number} token
      * @returns {Promise<{ token: number, stale?: boolean }>}
      */

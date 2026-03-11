@@ -18,7 +18,7 @@ export class PatternRenderer2D {
 
     /**
      * Renders a full texture frame.
-     * @param {{ baseColor: string, lineWidth: number, fillPatterns?: boolean, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, importedSvgText?: string, importedSvgHeightRatio?: number }} data
+     * @param {{ baseColor: string, lineWidth: number, fillPatterns?: boolean, palette: string[], strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean }>, importedSvgText?: string, importedSvgHeightRatio?: number, importedSvgScaleU?: number, importedSvgScaleV?: number, preferImportedSvgRaster?: boolean }} data
      */
     render(data) {
         const width = this.canvas.width
@@ -31,9 +31,15 @@ export class PatternRenderer2D {
 
         const importedSvgText = String(data.importedSvgText || '').trim()
         const strokes = Array.isArray(data.strokes) ? data.strokes : []
+        const preferImportedSvgRaster = data.preferImportedSvgRaster === true
 
-        if (importedSvgText && !strokes.length) {
-            this.#drawImportedSvg(importedSvgText, token, Number(data.importedSvgHeightRatio) || 1)
+        if (importedSvgText && (preferImportedSvgRaster || !strokes.length)) {
+            this.#drawImportedSvg(
+                importedSvgText,
+                token,
+                Number(data.importedSvgScaleU) || Number(data.importedSvgHeightRatio) || 1,
+                Number(data.importedSvgScaleV) || Number(data.importedSvgHeightRatio) || 1
+            )
             return
         }
 
@@ -48,15 +54,17 @@ export class PatternRenderer2D {
      * Draws an imported SVG directly so fill-rule/hole semantics stay exact.
      * @param {string} svgText
      * @param {number} token
-     * @param {number} heightRatio
+     * @param {number} scaleU
+     * @param {number} scaleV
      * @returns {void}
      */
-    #drawImportedSvg(svgText, token, heightRatio) {
+    #drawImportedSvg(svgText, token, scaleU, scaleV) {
         const width = this.canvas.width
         const height = this.canvas.height
-        const ratio = Math.max(0.02, Math.min(3, Number(heightRatio) || 1))
-        const drawWidth = width * ratio
-        const drawHeight = height * ratio
+        const drawScaleU = Math.max(0.02, Math.min(3, Number(scaleU) || 1))
+        const drawScaleV = Math.max(0.02, Math.min(3, Number(scaleV) || 1))
+        const drawWidth = width * drawScaleU
+        const drawHeight = height * drawScaleV
         const drawX = (width - drawWidth) / 2
         const drawY = (height - drawHeight) / 2
         const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })

@@ -75,9 +75,15 @@ async function renderFrame(payload) {
 
     const importedSvgText = String(data.importedSvgText || '').trim()
     const strokes = Array.isArray(data.strokes) ? data.strokes : []
+    const preferImportedSvgRaster = data.preferImportedSvgRaster === true
 
-    if (importedSvgText && !strokes.length) {
-        await drawImportedSvg(importedSvgText, Number(data.importedSvgHeightRatio) || 1, token)
+    if (importedSvgText && (preferImportedSvgRaster || !strokes.length)) {
+        await drawImportedSvg(
+            importedSvgText,
+            Number(data.importedSvgScaleU) || Number(data.importedSvgHeightRatio) || 1,
+            Number(data.importedSvgScaleV) || Number(data.importedSvgHeightRatio) || 1,
+            token
+        )
         if (token !== latestRenderToken) {
             return { token, stale: true }
         }
@@ -91,11 +97,12 @@ async function renderFrame(payload) {
 /**
  * Draws imported SVG directly for exact fill semantics.
  * @param {string} svgText
- * @param {number} heightRatio
+ * @param {number} scaleU
+ * @param {number} scaleV
  * @param {number} token
  * @returns {Promise<void>}
  */
-async function drawImportedSvg(svgText, heightRatio, token) {
+async function drawImportedSvg(svgText, scaleU, scaleV, token) {
     if (!textureCanvas || !textureContext) {
         throw new Error('render-not-initialized')
     }
@@ -104,9 +111,10 @@ async function drawImportedSvg(svgText, heightRatio, token) {
     }
     const width = Number(textureCanvas.width) || 1
     const height = Number(textureCanvas.height) || 1
-    const ratio = Math.max(0.02, Math.min(3, Number(heightRatio) || 1))
-    const drawWidth = width * ratio
-    const drawHeight = height * ratio
+    const drawScaleU = Math.max(0.02, Math.min(3, Number(scaleU) || 1))
+    const drawScaleV = Math.max(0.02, Math.min(3, Number(scaleV) || 1))
+    const drawWidth = width * drawScaleU
+    const drawHeight = height * drawScaleV
     const drawX = (width - drawWidth) / 2
     const drawY = (height - drawHeight) / 2
     const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })

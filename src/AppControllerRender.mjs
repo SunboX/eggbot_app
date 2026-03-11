@@ -643,6 +643,26 @@ export class AppControllerRender extends AppControllerRuntime {
     }
 
     /**
+     * Resolves exact imported SVG raster preview parameters when vector restyling should be bypassed.
+     * @returns {{ preferImportedSvgRaster: boolean, importedSvgScaleU: number, importedSvgScaleV: number }}
+     */
+    _resolveImportedSvgRasterRenderConfig() {
+        if (!this.importedPattern || this._usesDocumentCenteredImportedMapping()) {
+            return {
+                preferImportedSvgRaster: false,
+                importedSvgScaleU: 1,
+                importedSvgScaleV: 1
+            }
+        }
+
+        return {
+            preferImportedSvgRaster: true,
+            importedSvgScaleU: 1,
+            importedSvgScaleV: this._resolveActiveRenderHeightRatio()
+        }
+    }
+
+    /**
      * Builds one worker-safe snapshot of generation settings.
      * @returns {Record<string, any>}
      */
@@ -800,6 +820,7 @@ export class AppControllerRender extends AppControllerRuntime {
      */
     async _renderComputedPattern(config) {
         if (config.token !== this.renderToken) return
+        const importedSvgRasterRenderConfig = this._resolveImportedSvgRasterRenderConfig()
         const renderInput = {
             baseColor: this.state.baseColor,
             lineWidth: this.state.lineWidth,
@@ -807,7 +828,10 @@ export class AppControllerRender extends AppControllerRuntime {
             palette: this.state.palette,
             strokes: this._buildRenderInputStrokes(this.state.strokes),
             importedSvgText: config.importedSvgText,
-            importedSvgHeightRatio: config.importedSvgHeightRatio
+            importedSvgHeightRatio: config.importedSvgHeightRatio,
+            preferImportedSvgRaster: importedSvgRasterRenderConfig.preferImportedSvgRaster,
+            importedSvgScaleU: importedSvgRasterRenderConfig.importedSvgScaleU,
+            importedSvgScaleV: importedSvgRasterRenderConfig.importedSvgScaleV
         }
 
         try {
