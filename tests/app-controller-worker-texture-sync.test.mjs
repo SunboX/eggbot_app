@@ -182,7 +182,7 @@ test('AppControllerRender should rerender worker failures onto a restored visibl
         activeTextureCanvas: oldCanvas,
         patternRenderWorker: {
             async render() {
-                const error = new Error('The source image could not be decoded.')
+                const error = new Error('Worker paint pipeline crashed.')
                 error.code = 'render-error'
                 throw error
             },
@@ -213,6 +213,79 @@ test('AppControllerRender should rerender worker failures onto a restored visibl
     assert.equal(controller._ensureMainThreadRendererArgs, false)
     assert.equal(controller._mainThreadRenderArgs, false)
     assert.notEqual(controller.els.textureCanvas, oldCanvas)
+})
+
+test('AppControllerRender should keep worker rendering enabled when imported SVG raster is unsupported in worker', async () => {
+    const controller = Object.assign(Object.create(AppControllerRender.prototype), {
+        renderBackendMode: 'worker',
+        disableRenderWorker: false,
+        textureCanvasTransferredToWorker: true,
+        workerImportedSvgRasterUnsupported: false,
+        workerImportedSvgRasterWarningShown: false,
+        els: {
+            textureCanvas: {
+                dispatchEvent() {
+                    return true
+                }
+            }
+        },
+        activeTextureCanvas: null,
+        patternRenderWorker: {
+            async render() {
+                controller.workerRenderCalls += 1
+                const error = new Error('imported-svg-raster-unsupported')
+                error.code = 'imported-svg-raster-unsupported'
+                throw error
+            },
+            dispose() {}
+        },
+        workerRenderCalls: 0,
+        mainThreadRenderCalls: 0,
+        async _renderWithMainThreadRenderer() {
+            this.mainThreadRenderCalls += 1
+            return { dispatchImportedRenderedEvent: false }
+        },
+        _switchToMainThreadRenderBackend() {
+            this.switchedToMainThread = true
+        }
+    })
+    const originalWarn = console.warn
+    let warningCount = 0
+    console.warn = () => {
+        warningCount += 1
+    }
+
+    try {
+        await AppControllerRender.prototype._renderTextureFrame.call(
+            controller,
+            {
+                importedSvgText: '<svg viewBox="0 0 10 10"></svg>',
+                preferImportedSvgRaster: true,
+                strokes: []
+            },
+            1
+        )
+        await AppControllerRender.prototype._renderTextureFrame.call(
+            controller,
+            {
+                importedSvgText: '<svg viewBox="0 0 10 10"></svg>',
+                preferImportedSvgRaster: true,
+                strokes: []
+            },
+            2
+        )
+    } finally {
+        console.warn = originalWarn
+    }
+
+    assert.equal(controller.workerRenderCalls, 1)
+    assert.equal(controller.mainThreadRenderCalls, 2)
+    assert.equal(controller.workerImportedSvgRasterUnsupported, true)
+    assert.equal(controller.workerImportedSvgRasterWarningShown, true)
+    assert.equal(controller.renderBackendMode, 'worker')
+    assert.equal(controller.disableRenderWorker, false)
+    assert.equal(controller.switchedToMainThread, undefined)
+    assert.equal(warningCount, 1)
 })
 
 test('AppControllerRuntime should restore a visible texture canvas after worker fallback rendering', () => {
