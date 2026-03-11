@@ -883,16 +883,6 @@ export class AppControllerRender extends AppControllerRuntime {
      * @returns {Promise<{ stale?: boolean, dispatchImportedRenderedEvent?: boolean }>}
      */
     async _renderTextureFrame(input, token) {
-        if (
-            this.renderBackendMode === 'worker' &&
-            !this.disableRenderWorker &&
-            this.workerImportedSvgRasterUnsupported &&
-            input.importedSvgText &&
-            input.preferImportedSvgRaster === true
-        ) {
-            return this._renderWithMainThreadRenderer(input, this.textureCanvasTransferredToWorker)
-        }
-
         if (this.renderBackendMode === 'worker' && !this.disableRenderWorker) {
             try {
                 const result = await this.patternRenderWorker.render(input, token)
@@ -906,14 +896,11 @@ export class AppControllerRender extends AppControllerRuntime {
                 }
             } catch (error) {
                 if (error?.code === 'imported-svg-raster-unsupported' && input.importedSvgText) {
-                    this.workerImportedSvgRasterUnsupported = true
-                    if (!this.workerImportedSvgRasterWarningShown) {
-                        console.warn(
-                            'Render worker cannot rasterize imported SVG in this runtime. Using main-thread fallback for imported SVG previews.'
-                        )
-                        this.workerImportedSvgRasterWarningShown = true
-                    }
-                    return this._renderWithMainThreadRenderer(input, this.textureCanvasTransferredToWorker)
+                    console.warn(
+                        'Render worker cannot rasterize imported SVG in this runtime. Switching to main-thread texture rendering.'
+                    )
+                    this._switchToMainThreadRenderBackend()
+                    return this._renderWithMainThreadRenderer(input, false)
                 }
                 console.warn('Render worker failed; switching to main-thread renderer.', error)
                 this._switchToMainThreadRenderBackend()

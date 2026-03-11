@@ -215,38 +215,47 @@ test('AppControllerRender should rerender worker failures onto a restored visibl
     assert.notEqual(controller.els.textureCanvas, oldCanvas)
 })
 
-test('AppControllerRender should keep worker rendering enabled when imported SVG raster is unsupported in worker', async () => {
-    const controller = Object.assign(Object.create(AppControllerRender.prototype), {
-        renderBackendMode: 'worker',
-        disableRenderWorker: false,
-        textureCanvasTransferredToWorker: true,
-        workerImportedSvgRasterUnsupported: false,
-        workerImportedSvgRasterWarningShown: false,
-        els: {
-            textureCanvas: {
+test('AppControllerRender should switch to main-thread rendering when imported SVG raster is unsupported in worker', async () => {
+    const oldCanvas = {
+        width: 2048,
+        height: 1024,
+        cloneNode() {
+            return {
+                width: 2048,
+                height: 1024,
+                addEventListener() {},
                 dispatchEvent() {
                     return true
                 }
             }
         },
-        activeTextureCanvas: null,
+        parentNode: {
+            replaceChild() {}
+        }
+    }
+    const controller = Object.assign(Object.create(AppControllerRender.prototype), {
+        renderBackendMode: 'worker',
+        disableRenderWorker: false,
+        textureCanvasTransferredToWorker: true,
+        els: {
+            textureCanvas: oldCanvas
+        },
+        activeTextureCanvas: oldCanvas,
         patternRenderWorker: {
             async render() {
-                controller.workerRenderCalls += 1
                 const error = new Error('imported-svg-raster-unsupported')
                 error.code = 'imported-svg-raster-unsupported'
                 throw error
             },
             dispose() {}
         },
-        workerRenderCalls: 0,
-        mainThreadRenderCalls: 0,
-        async _renderWithMainThreadRenderer() {
-            this.mainThreadRenderCalls += 1
-            return { dispatchImportedRenderedEvent: false }
+        _ensureMainThreadRenderer(useFallbackCanvas) {
+            this._ensureMainThreadRendererArgs = useFallbackCanvas
         },
-        _switchToMainThreadRenderBackend() {
-            this.switchedToMainThread = true
+        _bindTextureCanvasRenderSync() {},
+        async _renderWithMainThreadRenderer(_input, useFallbackCanvas) {
+            this._mainThreadRenderArgs = useFallbackCanvas
+            return { dispatchImportedRenderedEvent: false }
         }
     })
     const originalWarn = console.warn
@@ -265,26 +274,16 @@ test('AppControllerRender should keep worker rendering enabled when imported SVG
             },
             1
         )
-        await AppControllerRender.prototype._renderTextureFrame.call(
-            controller,
-            {
-                importedSvgText: '<svg viewBox="0 0 10 10"></svg>',
-                preferImportedSvgRaster: true,
-                strokes: []
-            },
-            2
-        )
     } finally {
         console.warn = originalWarn
     }
 
-    assert.equal(controller.workerRenderCalls, 1)
-    assert.equal(controller.mainThreadRenderCalls, 2)
-    assert.equal(controller.workerImportedSvgRasterUnsupported, true)
-    assert.equal(controller.workerImportedSvgRasterWarningShown, true)
-    assert.equal(controller.renderBackendMode, 'worker')
-    assert.equal(controller.disableRenderWorker, false)
-    assert.equal(controller.switchedToMainThread, undefined)
+    assert.equal(controller.renderBackendMode, 'main')
+    assert.equal(controller.disableRenderWorker, true)
+    assert.equal(controller.textureCanvasTransferredToWorker, false)
+    assert.equal(controller._ensureMainThreadRendererArgs, false)
+    assert.equal(controller._mainThreadRenderArgs, false)
+    assert.notEqual(controller.els.textureCanvas, oldCanvas)
     assert.equal(warningCount, 1)
 })
 
