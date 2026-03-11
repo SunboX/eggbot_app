@@ -170,6 +170,43 @@ test('PatternRenderer2D should draw imported fallback SVG with proportional widt
     }
 })
 
+test('PatternRenderer2D should prefer direct imported SVG raster when requested', () => {
+    const restore = installImportedSvgImageMocks()
+    const { canvas, ctx } = createMockCanvas()
+    const renderer = new PatternRenderer2D(canvas)
+
+    try {
+        renderer.render({
+            baseColor: '#efe7ce',
+            lineWidth: 1.8,
+            palette: ['#8b1f1a'],
+            importedSvgText: '<svg viewBox="0 0 10 10"></svg>',
+            preferImportedSvgRaster: true,
+            importedSvgScaleU: 1,
+            importedSvgScaleV: 0.5,
+            strokes: [
+                {
+                    colorIndex: 0,
+                    points: [
+                        { u: 0.1, v: 0.2 },
+                        { u: 0.9, v: 0.8 }
+                    ]
+                }
+            ]
+        })
+
+        assert.equal(ctx.drawImageCalls, 1)
+        assert.equal(ctx.strokeCalls, 0)
+        const [, drawX, drawY, drawWidth, drawHeight] = /** @type {unknown[]} */ (ctx.lastDrawImageArgs)
+        assert.equal(drawX, 0)
+        assert.equal(drawY, 200)
+        assert.equal(drawWidth, 3200)
+        assert.equal(drawHeight, 400)
+    } finally {
+        restore()
+    }
+})
+
 test('PatternRenderer2D should skip closed-shape fills when fillPatterns is false', () => {
     const { canvas, ctx } = createMockCanvas()
     const renderer = new PatternRenderer2D(canvas)

@@ -94,6 +94,13 @@ test('AppControllerRender should schedule a follow-up egg texture sync after wor
         _buildRenderInputStrokes(strokes) {
             return strokes
         },
+        _resolveImportedSvgRasterRenderConfig() {
+            return {
+                preferImportedSvgRaster: false,
+                importedSvgScaleU: 1,
+                importedSvgScaleV: 1
+            }
+        },
         async _renderTextureFrame() {
             return { scheduleFollowUpTextureSync: true }
         },
@@ -122,4 +129,27 @@ test('AppControllerRender should schedule a follow-up egg texture sync after wor
     assert.equal(syncCount, 1)
     assert.equal(scheduledToken, 5)
     assert.equal(deferredStartupCount, 1)
+})
+
+test('AppControllerRender should prefer exact SVG raster preview for normalized UV imports', () => {
+    const controller = {
+        importedPattern: {
+            coordinateMode: 'normalized-uv'
+        },
+        state: {
+            fillPatterns: true
+        },
+        _resolveActiveRenderHeightRatio() {
+            return 0.75
+        },
+        _usesDocumentCenteredImportedMapping() {
+            return false
+        }
+    }
+
+    assert.deepEqual(AppControllerRender.prototype._resolveImportedSvgRasterRenderConfig.call(controller), {
+        preferImportedSvgRaster: true,
+        importedSvgScaleU: 1,
+        importedSvgScaleV: 0.75
+    })
 })
