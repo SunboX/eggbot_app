@@ -148,6 +148,8 @@ export class AppControllerRender extends AppControllerRuntime {
         })
         this.els.baseColor.addEventListener('input', () => {
             this.state.baseColor = this.els.baseColor.value
+            this._normalizePaletteLength(this.state.palette.length)
+            this._renderPaletteControls()
             this._scheduleRender()
         })
         this.els.colorCount.addEventListener('change', () => {

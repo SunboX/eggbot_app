@@ -48,6 +48,7 @@ import {
     SERVO_VALUE_MAX
 } from './AppControllerShared.mjs'
 import { AppControllerRender } from './AppControllerRender.mjs'
+import { ColorPaletteUtils } from './ColorPaletteUtils.mjs'
 
 /**
  * AppControllerDraw segment of the application controller.
@@ -269,6 +270,8 @@ export class AppControllerDraw extends AppControllerRender {
             input.addEventListener('input', () => {
                 const targetIndex = this.constructor._parseInteger(input.dataset.index, index)
                 this.state.palette[targetIndex] = input.value
+                this._normalizePaletteLength(this.state.palette.length)
+                this._renderPaletteControls()
                 this._scheduleRender()
             })
             wrapper.appendChild(input)
@@ -281,12 +284,12 @@ export class AppControllerDraw extends AppControllerRender {
      * @param {number} desiredCount
      */
     _normalizePaletteLength(desiredCount) {
-        const defaultPalette = AppRuntimeConfig.getDefaultPalette()
         const count = Math.max(1, Math.min(6, desiredCount))
-        while (this.state.palette.length < count) {
-            this.state.palette.push(defaultPalette[this.state.palette.length % defaultPalette.length])
-        }
-        this.state.palette = this.state.palette.slice(0, count)
+        this.state.palette = ColorPaletteUtils.sanitizeFeaturePalette({
+            baseColor: this.state.baseColor,
+            palette: this.state.palette,
+            desiredCount: count
+        })
     }
 
     /**
