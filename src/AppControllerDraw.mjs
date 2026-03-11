@@ -565,12 +565,35 @@ export class AppControllerDraw extends AppControllerRender {
     }
 
     /**
+     * Resolves imported stroke coordinate mode.
+     * @returns {'normalized-uv' | 'document-px-centered'}
+     */
+    _resolveImportedPatternCoordinateMode() {
+        if (String(this.importedPattern?.coordinateMode || '').trim() === 'normalized-uv') {
+            return 'normalized-uv'
+        }
+        return 'document-px-centered'
+    }
+
+    /**
+     * Returns whether imported preview/draw mapping should use document-centered scaling.
+     * @returns {boolean}
+     */
+    _usesDocumentCenteredImportedMapping() {
+        return (
+            Boolean(this.importedPattern) &&
+            !this._isInkscapeSvgCompatModeEnabled() &&
+            this._resolveImportedPatternCoordinateMode() === 'document-px-centered'
+        )
+    }
+
+    /**
      * Resolves draw-coordinate conversion mode for serial plotting.
-     * Imported SVGs use v281-style document-centered pixel coordinates.
+     * External imported SVGs use v281-style document-centered pixel coordinates.
      * @returns {{ coordinateMode: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number }}
      */
     _resolveDrawCoordinateConfig() {
-        if (!this.importedPattern) {
+        if (!this.importedPattern || !this._usesDocumentCenteredImportedMapping()) {
             return {
                 coordinateMode: 'normalized-uv'
             }
@@ -671,7 +694,7 @@ export class AppControllerDraw extends AppControllerRender {
             drawStrokeSequence.push(...batch.strokes.slice(batchStartOffset))
         }
         const tracePreviewScales =
-            this.importedPattern && !this._isInkscapeSvgCompatModeEnabled()
+            this._usesDocumentCenteredImportedMapping()
                 ? ImportedPatternScaleUtils.resolveDrawAreaPreviewScales({
                       documentWidthPx: this.importedPattern.documentWidthPx,
                       documentHeightPx: this.importedPattern.documentHeightPx,

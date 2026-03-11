@@ -77,6 +77,8 @@ export class AppControllerProjects extends AppControllerDraw {
             this.importedPattern.strokes = parsed.strokes
             this.importedPattern.heightRatio = parsed.heightRatio
             this.importedPattern.heightScale = this._resolveImportedPatternStoredHeightScale()
+            this.importedPattern.coordinateMode =
+                parsed.coordinateMode === 'normalized-uv' ? 'normalized-uv' : 'document-px-centered'
             this.importedPattern.documentWidthPx = Math.max(1, Number(parsed.documentWidthPx) || 3200)
             this.importedPattern.documentHeightPx = Math.max(1, Number(parsed.documentHeightPx) || 800)
             this._setStatus(this._t('messages.patternImportPreparingPreview', { name: importedPatternName }), 'loading')
@@ -110,7 +112,7 @@ export class AppControllerProjects extends AppControllerDraw {
     /**
      * Parses imported SVG in worker thread.
      * @param {string} svgText
-     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number, documentWidthPx?: number, documentHeightPx?: number }>}
+     * @returns {Promise<{ strokes: Array<{ colorIndex: number, points: Array<{u:number,v:number}>, closed?: boolean, fillGroupId?: number | null, fillAlpha?: number, fillRule?: 'nonzero' | 'evenodd' }>, palette: string[], baseColor?: string, heightRatio?: number, documentWidthPx?: number, documentHeightPx?: number, coordinateMode?: 'normalized-uv' | 'document-px-centered' }>}
      */
     async _parseImportedPattern(svgText) {
         return this.patternImportWorker.parse(svgText, this._resolveImportedPatternParseOptions())
@@ -156,6 +158,7 @@ export class AppControllerProjects extends AppControllerDraw {
                 svgText,
                 heightRatio: parsed.heightRatio,
                 heightScale: this._resolveImportedPatternStoredHeightScale(),
+                coordinateMode: parsed.coordinateMode === 'normalized-uv' ? 'normalized-uv' : 'document-px-centered',
                 documentWidthPx: Math.max(1, Number(parsed.documentWidthPx) || 3200),
                 documentHeightPx: Math.max(1, Number(parsed.documentHeightPx) || 800)
             }

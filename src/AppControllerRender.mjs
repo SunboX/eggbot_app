@@ -619,7 +619,7 @@ export class AppControllerRender extends AppControllerRuntime {
      * @returns {number}
      */
     _resolveImportedPreviewDrawAreaRatio() {
-        if (!this.importedPattern) return 1
+        if (!this._usesDocumentCenteredImportedMapping()) return 1
         const drawConfig = this._resolveDrawCoordinateConfig()
         return ImportedPatternScaleUtils.resolveDrawAreaPreviewRatio({
             documentWidthPx: Number(this.importedPattern.documentWidthPx),
@@ -702,6 +702,7 @@ export class AppControllerRender extends AppControllerRuntime {
         if (this.importedPattern) {
             const preview = ImportedPreviewStrokeUtils.buildPreviewStrokes({
                 strokes: this.importedPattern.strokes,
+                coordinateMode: this._resolveImportedPatternCoordinateMode(),
                 parsedHeightRatio: this.importedPattern.heightRatio,
                 parsedHeightScale: this.importedPattern.heightScale,
                 activeHeightScale: this.state.importHeightScale,

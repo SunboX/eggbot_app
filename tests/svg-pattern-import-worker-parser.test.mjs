@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { PatternSvgExportUtils } from '../src/PatternSvgExportUtils.mjs'
 import { SvgPatternImportWorkerParser } from '../src/workers/SvgPatternImportWorkerParser.mjs'
 
 /**
@@ -92,4 +93,58 @@ test('SvgPatternImportWorkerParser should keep rectangle segmentation compact li
 
     assert.ok(firstStroke)
     assert.equal(firstStroke.points.length <= 6, true)
+})
+
+test('SvgPatternImportWorkerParser should keep app exports in normalized UV mode', () => {
+    const svgText = PatternSvgExportUtils.buildSvg({
+        strokes: [
+            {
+                colorIndex: 0,
+                points: [
+                    { u: 0.1, v: 0.2 },
+                    { u: 0.9, v: 0.8 }
+                ]
+            }
+        ]
+    })
+
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 800,
+        curveSmoothing: 0.2
+    })
+
+    assert.equal(parsed.coordinateMode, 'normalized-uv')
+})
+
+test('SvgPatternImportWorkerParser should keep legacy app exports in normalized UV mode', () => {
+    const svgText = `
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:dc="http://purl.org/dc/elements/1.1/"
+            xmlns:cc="http://creativecommons.org/ns#"
+            xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            viewBox="0 0 2048 1024"
+            width="2048"
+            height="1024"
+            fill="none"
+        >
+            <metadata id="metadata1">
+                <rdf:RDF>
+                    <cc:Work rdf:about="">
+                        <dc:description>Generated with EggBot Sorbische Eier using eggbot-app 1.3.85</dc:description>
+                    </cc:Work>
+                </rdf:RDF>
+            </metadata>
+            <path d="M 204.8 204.8 L 1843.2 819.2" stroke="#8b1f1a" fill="none" />
+        </svg>
+    `
+
+    const parsed = SvgPatternImportWorkerParser.parse(svgText, {
+        heightScale: 1,
+        heightReference: 800,
+        curveSmoothing: 0.2
+    })
+
+    assert.equal(parsed.coordinateMode, 'normalized-uv')
 })

@@ -52,7 +52,7 @@ export class PatternSvgExportUtils {
 
         return [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            `<svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="${PatternSvgExportUtils.#DC_NAMESPACE}" xmlns:cc="${PatternSvgExportUtils.#CC_NAMESPACE}" xmlns:rdf="${PatternSvgExportUtils.#RDF_NAMESPACE}" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" fill="none">`,
+            `<svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="${PatternSvgExportUtils.#DC_NAMESPACE}" xmlns:cc="${PatternSvgExportUtils.#CC_NAMESPACE}" xmlns:rdf="${PatternSvgExportUtils.#RDF_NAMESPACE}" data-eggbot-coordinate-mode="normalized-uv" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" fill="none">`,
             `    ${metadataElement}`,
             `    <rect width="${width}" height="${height}" fill="${PatternSvgExportUtils.#escapeXml(baseColor)}" />`,
             body ? `    ${body.split('\n').join('\n    ')}` : '',

@@ -616,6 +616,7 @@ export class AppControllerWebMcp extends AppControllerProjects {
                 svgText,
                 heightRatio: parsed.heightRatio,
                 heightScale: this._resolveImportedPatternStoredHeightScale(),
+                coordinateMode: parsed.coordinateMode === 'normalized-uv' ? 'normalized-uv' : 'document-px-centered',
                 documentWidthPx: Math.max(1, Number(parsed.documentWidthPx) || 3200),
                 documentHeightPx: Math.max(1, Number(parsed.documentHeightPx) || 800)
             }
