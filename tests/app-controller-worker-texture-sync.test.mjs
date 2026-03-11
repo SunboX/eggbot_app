@@ -154,6 +154,67 @@ test('AppControllerRender should prefer exact SVG raster preview for normalized 
     })
 })
 
+test('AppControllerRender should rerender worker failures onto a restored visible texture canvas', async () => {
+    const oldCanvas = {
+        width: 2048,
+        height: 1024,
+        cloneNode() {
+            return {
+                width: 2048,
+                height: 1024,
+                addEventListener() {},
+                dispatchEvent() {
+                    return true
+                }
+            }
+        },
+        parentNode: {
+            replaceChild() {}
+        }
+    }
+    const controller = Object.assign(Object.create(AppControllerRender.prototype), {
+        renderBackendMode: 'worker',
+        disableRenderWorker: false,
+        textureCanvasTransferredToWorker: true,
+        els: {
+            textureCanvas: oldCanvas
+        },
+        activeTextureCanvas: oldCanvas,
+        patternRenderWorker: {
+            async render() {
+                const error = new Error('The source image could not be decoded.')
+                error.code = 'render-error'
+                throw error
+            },
+            dispose() {}
+        },
+        _ensureMainThreadRenderer(useFallbackCanvas) {
+            this._ensureMainThreadRendererArgs = useFallbackCanvas
+        },
+        _bindTextureCanvasRenderSync() {},
+        async _renderWithMainThreadRenderer(_input, useFallbackCanvas) {
+            this._mainThreadRenderArgs = useFallbackCanvas
+            return { dispatchImportedRenderedEvent: false }
+        }
+    })
+
+    await AppControllerRender.prototype._renderTextureFrame.call(
+        controller,
+        {
+            importedSvgText: '<svg viewBox="0 0 10 10"></svg>',
+            preferImportedSvgRaster: true,
+            strokes: []
+        },
+        1
+    )
+
+    assert.equal(controller.renderBackendMode, 'main')
+    assert.equal(controller.textureCanvasTransferredToWorker, false)
+    assert.equal(controller._ensureMainThreadRendererArgs, false)
+    assert.equal(controller._mainThreadRenderArgs, false)
+    assert.notEqual(controller.els.textureCanvas, oldCanvas)
+})
+
 test('AppControllerRuntime should restore a visible texture canvas after worker fallback rendering', () => {
     const replacementLog = []
     const newCanvasContext = {
@@ -189,14 +250,14 @@ test('AppControllerRuntime should restore a visible texture canvas after worker 
         width: 2048,
         height: 1024
     }
-    const runtime = {
+    const runtime = Object.assign(Object.create(AppControllerRuntime.prototype), {
         els: {
             textureCanvas: oldCanvas
         },
         activeTextureCanvas: fallbackCanvas,
         textureCanvasTransferredToWorker: true,
         _syncEggSceneTexture() {}
-    }
+    })
 
     const restored = AppControllerRuntime.prototype._restoreVisibleTextureCanvasAfterWorkerFallback.call(runtime)
 
