@@ -70,8 +70,6 @@ export class AppControllerCoreControls {
         this.disableComputeWorker = false
         this.disableRenderWorker = false
         this.textureCanvasTransferredToWorker = false
-        this.workerImportedSvgRasterUnsupported = false
-        this.workerImportedSvgRasterWarningShown = false
         this.isDrawing = false
         this.isPatternImporting = false
         this.idleTasks = new Map()
