@@ -63,6 +63,15 @@ test('Default drawing palette should not include white by default', () => {
     assert.equal(normalizedHex.includes('#f3f0e7'), false)
 })
 
+test('ProjectIoUtils should keep egg base color out of the feature palette', () => {
+    const normalized = ProjectIoUtils.normalizeProjectState({
+        baseColor: '#efe7ce',
+        palette: ['#8b1f1a', '#efe7ce', '#1f3f8b']
+    })
+
+    assert.deepEqual(normalized.palette, ['#8b1f1a', '#c78916', '#1f3f8b'])
+})
+
 test('ProjectIoUtils should stamp project payload with app version', () => {
     const payload = ProjectIoUtils.buildProjectPayload(AppRuntimeConfig.createDefaultState())
 

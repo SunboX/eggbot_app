@@ -46,3 +46,16 @@ test('AppControllerDraw should wait for async imported SVG raster renders on fal
 
     assert.equal(resolved, true)
 })
+
+test('AppControllerDraw should not grow the palette with the egg base color', () => {
+    const controller = {
+        state: {
+            baseColor: '#8b1f1a',
+            palette: ['#1f3f8b']
+        }
+    }
+
+    AppControllerDraw.prototype._normalizePaletteLength.call(controller, 4)
+
+    assert.deepEqual(controller.state.palette, ['#1f3f8b', '#c78916', '#4c7f3b', '#2f2f2f'])
+})

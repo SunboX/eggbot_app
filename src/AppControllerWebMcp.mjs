@@ -203,10 +203,13 @@ export class AppControllerWebMcp extends AppControllerProjects {
     _webMcpSetColorSettings(args) {
         const patch = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
         let shouldRender = false
+        let desiredColorCount = this.state.palette.length
+        let shouldNormalizePalette = false
 
         if (Object.hasOwn(patch, 'baseColor')) {
             this.state.baseColor = String(patch.baseColor || this.state.baseColor)
             shouldRender = true
+            shouldNormalizePalette = true
         }
         if (Array.isArray(patch.palette) && patch.palette.length) {
             const normalizedPalette = patch.palette
@@ -215,14 +218,18 @@ export class AppControllerWebMcp extends AppControllerProjects {
                 .slice(0, 6)
             if (normalizedPalette.length) {
                 this.state.palette = normalizedPalette
-                this._normalizePaletteLength(normalizedPalette.length)
+                desiredColorCount = normalizedPalette.length
                 shouldRender = true
+                shouldNormalizePalette = true
             }
         }
         if (Object.hasOwn(patch, 'colorCount')) {
-            const colorCount = Math.max(1, Math.min(6, this.constructor._parseInteger(patch.colorCount, this.state.palette.length)))
-            this._normalizePaletteLength(colorCount)
+            desiredColorCount = Math.max(1, Math.min(6, this.constructor._parseInteger(patch.colorCount, this.state.palette.length)))
             shouldRender = true
+            shouldNormalizePalette = true
+        }
+        if (shouldNormalizePalette) {
+            this._normalizePaletteLength(desiredColorCount)
         }
 
         if (shouldRender) {
@@ -630,6 +637,7 @@ export class AppControllerWebMcp extends AppControllerProjects {
             if (parsed.baseColor) {
                 this.state.baseColor = parsed.baseColor
             }
+            this._normalizePaletteLength(this.state.palette.length)
             this._markProjectArtifactsDirty()
             this._syncControlsFromState()
             this._setStatus(this._t('messages.patternImportPreparingPreview', { name: fileName }), 'loading')

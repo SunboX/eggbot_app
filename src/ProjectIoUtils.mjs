@@ -1,5 +1,6 @@
 import { AppRuntimeConfig } from './AppRuntimeConfig.mjs'
 import { AppVersion } from './AppVersion.mjs'
+import { ColorPaletteUtils } from './ColorPaletteUtils.mjs'
 
 /**
  * Project serialization and normalization helpers.
@@ -204,6 +205,17 @@ export class ProjectIoUtils {
      * @returns {Record<string, any>}
      */
     static buildProjectPayload(state) {
+        const baseColor = String(state.baseColor || '#efe7ce')
+        const palette =
+            Array.isArray(state.palette) && state.palette.length
+                ? state.palette.map((value) => String(value || '')).filter(Boolean)
+                : AppRuntimeConfig.getDefaultPalette().slice(0, 4)
+        const sanitizedPalette = ColorPaletteUtils.sanitizeFeaturePalette({
+            baseColor,
+            palette,
+            desiredCount: palette.length
+        })
+
         return {
             version: AppVersion.get(),
             schemaVersion: 2,
@@ -221,10 +233,8 @@ export class ProjectIoUtils {
             resumeState: ProjectIoUtils.#normalizeResumeState(state.resumeState),
             showHorizontalLines: ProjectIoUtils.#toBoolean(state.showHorizontalLines, true),
             fillPatterns: ProjectIoUtils.#toBoolean(state.fillPatterns, true),
-            baseColor: String(state.baseColor || '#efe7ce'),
-            palette: Array.isArray(state.palette)
-                ? state.palette.map((value) => String(value || '')).filter(Boolean)
-                : AppRuntimeConfig.getDefaultPalette().slice(0, 4),
+            baseColor,
+            palette: sanitizedPalette,
             motifs: {
                 dots: ProjectIoUtils.#toBoolean(state?.motifs?.dots, true),
                 rays: ProjectIoUtils.#toBoolean(state?.motifs?.rays, true),

@@ -171,8 +171,9 @@ export class AppControllerProjects extends AppControllerDraw {
             }
             if (parsed.baseColor) {
                 this.state.baseColor = parsed.baseColor
-                this.els.baseColor.value = parsed.baseColor
             }
+            this._normalizePaletteLength(this.state.palette.length)
+            this.els.baseColor.value = this.state.baseColor
             this.els.colorCount.value = String(this.state.palette.length)
             this._renderPaletteControls()
             this._markProjectArtifactsDirty()
