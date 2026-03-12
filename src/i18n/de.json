@@ -98,7 +98,7 @@
         "controlHint": "Öffne den EggBot-Steuerungsdialog für Setup, Timing, Optionen und manuelle Aktionen.",
         "openControlDialog": "EggBot-Steuerungsdialog öffnen",
         "flashTitle": "ESP32-Firmware",
-        "flashHint": "Öffne den Flash-Dialog, um die EggDuino-Firmware per USB mit ESP Web Tools zu installieren.",
+        "flashHint": "Öffne den Flash-Dialog, um die EggDuino-Firmware per USB mit dem eingebauten Flasher zu installieren.",
         "openFlashDialog": "ESP32-Flash-Dialog öffnen",
         "flashDialog": {
             "title": "ESP32 EggDuino Flasher",
@@ -109,7 +109,9 @@
             "versionLoading": "Firmware-Version wird geladen...",
             "versionUnavailable": "Firmware-Version nicht verfügbar (Manifest konnte nicht geladen werden).",
             "flashButton": "ESP32-Firmware flashen",
-            "unsupported": "Dieser Browser unterstützt ESP Web Tools Flashing nicht."
+            "flashButtonBusy": "Firmware wird geflasht...",
+            "browserNote": "Erfordert einen Chromium-basierten Browser mit Web-Serial-Unterstützung.",
+            "bootHint": "Wenn das Board weiterhin normal startet, halte BOOT gedrückt und klicke dann auf Flash."
         },
         "mappingTitle": "Zeichen-Mapping",
         "stepsPerTurn": "Motor-2 Schritte pro Ei-Umdrehung",
@@ -245,6 +247,13 @@
         "drawBlockedWhileImporting": "Warte, bis der SVG-Import abgeschlossen ist, bevor du das Zeichnen startest.",
         "connectingBeforeDraw": "EggBot wird vor dem Zeichnen verbunden...",
         "connectBeforeDraw": "Bitte EggBot vor dem Zeichnen verbinden.",
+        "espFlashPreparing": "ESP32-Firmware-Flash wird vorbereitet...",
+        "espFlashProgress": "ESP32-Firmware wird geflasht: Teil {{part}}/{{total}} ({{percent}}%).",
+        "espFlashComplete": "ESP32-Firmware erfolgreich geflasht.",
+        "espFlashCanceled": "ESP32-Firmware-Flash abgebrochen.",
+        "espFlashUnsupported": "Für das ESP32-Flashen wird ein Chromium-basierter Browser mit Web-Serial-Unterstützung benötigt.",
+        "espFlashFailed": "ESP32-Flash fehlgeschlagen: {{message}}",
+        "espFlashConnectFailed": "ESP32-Flash fehlgeschlagen: {{message}} Wenn das Board weiterhin normal startet, halte BOOT gedrückt und klicke dann auf Flash.",
         "drawingProgress": "Zeichnung läuft: Linienzug {{done}}/{{total}}",
         "drawingRemainingPercent": "Verbleibend: {{percent}}%",
         "drawingRemainingTime": "Restzeit: {{time}}",

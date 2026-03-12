@@ -441,11 +441,8 @@
     font-weight: 600;
 }
 
-.eggbot-flash-dialog-panel esp-web-install-button {
-    display: block;
-}
-
-.eggbot-flash-dialog-panel esp-web-install-button > button[slot='activate'] {
+.eggbot-flash-dialog-panel [data-esp-flash-install] {
+    justify-self: start;
     min-width: 220px;
     border-radius: 8px;
     background: linear-gradient(180deg, #353c48, #2a2f39);
@@ -453,14 +450,17 @@
     border-color: #1d2026;
 }
 
-.eggbot-flash-dialog-panel esp-web-install-button > button[slot='activate']:hover {
+.eggbot-flash-dialog-panel [data-esp-flash-install]:hover {
     transform: translateY(-1px);
     border-color: #273040;
 }
 
-.eggbot-flash-dialog-panel esp-web-install-button > [slot='unsupported'] {
-    display: block;
-    margin-top: 0.62rem;
+.eggbot-flash-dialog-panel [data-esp-flash-install]:disabled {
+    transform: none;
+}
+
+.eggbot-flash-dialog-panel > .eggbot-note {
+    margin-top: -0.2rem;
 }
 
 .eggbot-pen-dialog {
