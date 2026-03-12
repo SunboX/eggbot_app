@@ -439,6 +439,11 @@ export class AppControllerRender extends AppControllerRuntime {
         })
         this.els.eggbotControlOpen.addEventListener('click', () => this._openEggBotControlDialog())
         this.els.espFlashOpen.addEventListener('click', () => this._openEspFlashDialog())
+        this.els.espFlashInstall.addEventListener('click', () => {
+            this._installEspFirmware().catch((error) => {
+                this._setStatus(this._formatEspFlashFailedStatusMessage(error), 'error')
+            })
+        })
         this.els.eggbotDialogClose.addEventListener('click', () => this._closeEggBotControlDialog())
         this.els.eggbotDialogCloseIcon.addEventListener('click', () => this._closeEggBotControlDialog())
         this.els.espFlashDialogClose.addEventListener('click', () => this._closeEspFlashDialog())
@@ -580,6 +585,7 @@ export class AppControllerRender extends AppControllerRuntime {
         this.i18n.setLocale(locale)
         this._applyLocaleToUi()
         this._syncEspFlashManifestVersionUi()
+        this._syncEspFlashInstallUi()
         this._syncConnectionTransportUi()
         this._renderPaletteControls()
         if (!this.isDrawing) {

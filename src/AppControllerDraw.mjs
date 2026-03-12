@@ -886,18 +886,20 @@ export class AppControllerDraw extends AppControllerRender {
         const transport = this.serial.connectionTransportKind
         const transportSupported = this.serial.isTransportSupported(transport)
         const connected = this.serial.isConnected
+        const interactionLocked = this.isDrawing || this.isEspFlashing
         const drawStartBlocked = PatternImportRuntimeGuards.isDrawStartBlocked({
             isPatternImporting: this.isPatternImporting
         })
-        this.els.connectionTransport.disabled = connected || this.isDrawing
+        this.els.connectionTransport.disabled = connected || interactionLocked
         this._syncConnectionTransportUi()
-        this.els.serialConnect.disabled = connected || this.isDrawing || !transportSupported
-        this.els.serialDisconnect.disabled = !connected || this.isDrawing
-        this.els.espFlashOpen.disabled = connected || this.isDrawing
-        this.els.drawButton.disabled = this.isDrawing || !transportSupported || drawStartBlocked
+        this.els.serialConnect.disabled = connected || interactionLocked || !transportSupported
+        this.els.serialDisconnect.disabled = !connected || interactionLocked
+        this.els.espFlashOpen.disabled = connected || interactionLocked
+        this.els.drawButton.disabled = interactionLocked || !transportSupported || drawStartBlocked
         this.els.stopButton.disabled = !this.isDrawing || !connected
         this._syncPatternImportUi()
         this._syncResumeUi()
+        this._syncEspFlashInstallUi()
     }
 
     /**

@@ -46,6 +46,7 @@ import {
     SERVO_VALUE_MIN,
     SERVO_VALUE_MAX
 } from './AppControllerShared.mjs'
+import { EspFirmwareInstaller } from './EspFirmwareInstaller.mjs'
 
 /**
  * AppControllerCoreControls segment of the application controller.
@@ -96,6 +97,8 @@ export class AppControllerCoreControls {
         this.pendingEggTextureSyncAnimationFrame = 0
         this.pendingPenColorDialogResolve = null
         this.textureCanvasRenderSyncHandler = null
+        this.espFirmwareInstaller = new EspFirmwareInstaller()
+        this.isEspFlashing = false
         this.espFlashManifestMeta = null
         this.espFlashManifestLoadPromise = null
         this.espFlashManifestLoadFailed = false
@@ -127,6 +130,7 @@ export class AppControllerCoreControls {
         this._applyLocaleToUi()
         this._renderAppVersion()
         this._syncEspFlashManifestVersionUi()
+        this._syncEspFlashInstallUi()
         this._ensureEspFlashManifestMetaLoaded()
         this._loadSettingsFromLocalStorage()
         this._syncControlsFromState()
@@ -209,6 +213,20 @@ export class AppControllerCoreControls {
             return
         }
         this.els.espFlashVersionValue.textContent = this._t('machine.flashDialog.versionLoading')
+    }
+
+    /**
+     * Syncs ESP flash dialog button labels and availability.
+     */
+    _syncEspFlashInstallUi() {
+        const flashSupported = EspFirmwareInstaller.isSupported(globalThis)
+        this.els.espFlashInstall.disabled = this.isEspFlashing || !flashSupported
+        this.els.espFlashInstall.setAttribute('aria-busy', this.isEspFlashing ? 'true' : 'false')
+        this.els.espFlashInstall.textContent = this.isEspFlashing
+            ? this._t('machine.flashDialog.flashButtonBusy')
+            : this._t('machine.flashDialog.flashButton')
+        this.els.espFlashDialogClose.disabled = this.isEspFlashing
+        this.els.espFlashDialogCloseIcon.disabled = this.isEspFlashing
     }
 
     /**
@@ -391,6 +409,19 @@ export class AppControllerCoreControls {
         this.els.status.removeAttribute('data-i18n')
         this.els.status.textContent = text
         this.els.status.dataset.type = type
+    }
+
+    /**
+     * Formats one flashing failure into a localized status message.
+     * @param {unknown} error
+     * @returns {string}
+     */
+    _formatEspFlashFailedStatusMessage(error) {
+        const reason = String(error?.message || error || 'Unknown error').trim()
+        if (/failed to connect with the device/i.test(reason)) {
+            return this._t('messages.espFlashConnectFailed', { message: reason })
+        }
+        return this._t('messages.espFlashFailed', { message: reason })
     }
 
     /**
@@ -591,9 +622,9 @@ export class AppControllerCoreControls {
         this._ensureEspFlashManifestMetaLoaded()
         this.els.espFlashDialogBackdrop.hidden = false
         this._syncDialogBodyScrollLock()
-        const activateButton = this.els.espFlashInstall.querySelector('[slot="activate"]')
-        if (activateButton instanceof HTMLElement) {
-            activateButton.focus()
+        this._syncEspFlashInstallUi()
+        if (this.els.espFlashInstall instanceof HTMLElement) {
+            this.els.espFlashInstall.focus()
             return
         }
         this.els.espFlashDialogClose.focus()
@@ -603,6 +634,9 @@ export class AppControllerCoreControls {
      * Closes the ESP32 flashing modal dialog.
      */
     _closeEspFlashDialog() {
+        if (this.isEspFlashing) {
+            return
+        }
         this.els.espFlashDialogBackdrop.hidden = true
         this._syncDialogBodyScrollLock()
     }
@@ -613,6 +647,60 @@ export class AppControllerCoreControls {
      */
     _isEspFlashDialogOpen() {
         return !this.els.espFlashDialogBackdrop.hidden
+    }
+
+    /**
+     * Runs the local ESP32 firmware flashing flow.
+     * @returns {Promise<void>}
+     */
+    async _installEspFirmware() {
+        if (this.isEspFlashing) {
+            return
+        }
+
+        if (!EspFirmwareInstaller.isSupported(globalThis)) {
+            this._setStatus(this._t('messages.espFlashUnsupported'), 'error')
+            this._syncEspFlashInstallUi()
+            return
+        }
+
+        const manifestUrl = this._resolveEspFlashManifestUrl()
+        if (!manifestUrl) {
+            this._setStatus(this._t('messages.espFlashFailed', { message: 'Missing firmware manifest URL.' }), 'error')
+            return
+        }
+
+        this.isEspFlashing = true
+        this._syncEspFlashInstallUi()
+        this._syncConnectionUi()
+        this._setStatus(this._t('messages.espFlashPreparing'), 'loading')
+
+        try {
+            await this.espFirmwareInstaller.install({
+                manifestUrl,
+                onProgress: ({ partIndex, partCount, percent }) => {
+                    this._setStatus(
+                        this._t('messages.espFlashProgress', {
+                            part: partIndex,
+                            total: partCount,
+                            percent
+                        }),
+                        'loading'
+                    )
+                }
+            })
+            this._setStatus(this._t('messages.espFlashComplete'), 'success')
+        } catch (error) {
+            if (error?.name === 'AbortError' || error?.name === 'NotFoundError') {
+                this._setStatus(this._t('messages.espFlashCanceled'), 'info')
+            } else {
+                this._setStatus(this._formatEspFlashFailedStatusMessage(error), 'error')
+            }
+        } finally {
+            this.isEspFlashing = false
+            this._syncEspFlashInstallUi()
+            this._syncConnectionUi()
+        }
     }
 
     /**

@@ -98,7 +98,7 @@
         "controlHint": "Open the EggBot Control / Configuration dialog for setup, timing, options, and manual actions.",
         "openControlDialog": "Open EggBot control dialog",
         "flashTitle": "ESP32 firmware",
-        "flashHint": "Open the flashing dialog to install EggDuino firmware over USB with ESP Web Tools.",
+        "flashHint": "Open the flashing dialog to install EggDuino firmware over USB with the built-in flasher.",
         "openFlashDialog": "Open ESP32 flashing dialog",
         "flashDialog": {
             "title": "ESP32 EggDuino Flasher",
@@ -109,7 +109,9 @@
             "versionLoading": "Loading firmware version...",
             "versionUnavailable": "Firmware version unavailable (manifest could not be loaded).",
             "flashButton": "Flash ESP32 firmware",
-            "unsupported": "This browser does not support ESP Web Tools flashing."
+            "flashButtonBusy": "Flashing firmware...",
+            "browserNote": "Requires a Chromium-based browser with Web Serial support.",
+            "bootHint": "If the board keeps starting normal firmware, hold BOOT while clicking Flash."
         },
         "mappingTitle": "Drawing mapping",
         "stepsPerTurn": "Motor-2 steps / egg turn",
@@ -245,6 +247,13 @@
         "drawBlockedWhileImporting": "Wait until SVG import is finished before starting a draw run.",
         "connectingBeforeDraw": "Connecting EggBot before drawing...",
         "connectBeforeDraw": "Connect EggBot before drawing.",
+        "espFlashPreparing": "Preparing ESP32 firmware flashing...",
+        "espFlashProgress": "Flashing ESP32 firmware: part {{part}}/{{total}} ({{percent}}%).",
+        "espFlashComplete": "ESP32 firmware flashing completed.",
+        "espFlashCanceled": "ESP32 firmware flashing canceled.",
+        "espFlashUnsupported": "ESP32 flashing requires a Chromium-based browser with Web Serial support.",
+        "espFlashFailed": "ESP32 flashing failed: {{message}}",
+        "espFlashConnectFailed": "ESP32 flashing failed: {{message}} If the board keeps starting normal firmware, hold BOOT while clicking Flash.",
         "drawingProgress": "Drawing in progress: stroke {{done}}/{{total}}",
         "drawingRemainingPercent": "Remaining: {{percent}}%",
         "drawingRemainingTime": "Remaining time: {{time}}",
