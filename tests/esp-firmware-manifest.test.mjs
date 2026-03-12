@@ -16,6 +16,7 @@ test('ESP firmware manifest should define required ESP32 parts', async () => {
     const manifest = JSON.parse(manifestText)
 
     assert.equal(manifest.name, 'EggDuino ESP32 Firmware')
+    assert.equal(manifest.new_install_improv_wait_time, 0)
     assert.ok(Array.isArray(manifest.builds))
     assert.ok(manifest.builds.length > 0)
     assert.equal(manifest.builds[0].chipFamily, 'ESP32')
