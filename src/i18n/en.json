@@ -252,6 +252,7 @@
         "connectingBeforeDraw": "Connecting EggBot before drawing...",
         "connectBeforeDraw": "Connect EggBot before drawing.",
         "espFlashPreparing": "Preparing ESP32 firmware flashing...",
+        "espFlashWaitingForBootloader": "Waiting for ESP32 bootloader...",
         "espFlashProgress": "Flashing ESP32 firmware: part {{part}}/{{total}} ({{percent}}% overall).",
         "espFlashComplete": "ESP32 firmware flashing completed.",
         "espFlashCanceled": "ESP32 firmware flashing canceled.",

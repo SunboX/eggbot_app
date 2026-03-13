@@ -252,6 +252,7 @@
         "connectingBeforeDraw": "EggBot wird vor dem Zeichnen verbunden...",
         "connectBeforeDraw": "Bitte EggBot vor dem Zeichnen verbinden.",
         "espFlashPreparing": "ESP32-Firmware-Flash wird vorbereitet...",
+        "espFlashWaitingForBootloader": "Warte auf den ESP32-Bootloader...",
         "espFlashProgress": "ESP32-Firmware wird geflasht: Teil {{part}}/{{total}} ({{percent}}% gesamt).",
         "espFlashComplete": "ESP32-Firmware erfolgreich geflasht.",
         "espFlashCanceled": "ESP32-Firmware-Flash abgebrochen.",
