@@ -218,3 +218,87 @@ test('EspFirmwareInstaller should retry without reset after wrong boot mode when
     assert.equal(promptCalls.length, 1)
     assert.match(promptCalls[0], /Wrong boot mode detected/)
 })
+
+test('EspFirmwareInstaller should tolerate one missing trailing sync reply after download mode responds', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
+    let writeFlashCalls = 0
+    let afterCalls = 0
+    let syncCommandCalls = 0
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            return { id: 1 }
+        },
+        transportFactory() {
+            return {
+                async disconnect() {}
+            }
+        },
+        loaderFactory() {
+            return {
+                debug() {},
+                async command(opCode) {
+                    if (opCode === 8) {
+                        syncCommandCalls += 1
+                        return [0x55552012, new Uint8Array([0, 0, 0, 0])]
+                    }
+
+                    syncCommandCalls += 1
+                    if (syncCommandCalls <= 7) {
+                        return [0x20120707, new Uint8Array([0, 0, 0, 0])]
+                    }
+
+                    throw new Error('Read timeout exceeded')
+                },
+                async sync() {
+                    let response = await this.command(8)
+                    for (let index = 0; index < 7; index += 1) {
+                        response = await this.command()
+                    }
+                    return response
+                },
+                async main() {
+                    await this.sync()
+                },
+                async writeFlash() {
+                    writeFlashCalls += 1
+                },
+                async after() {
+                    afterCalls += 1
+                }
+            }
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json'
+    })
+
+    assert.equal(writeFlashCalls, 1)
+    assert.equal(afterCalls, 1)
+    assert.equal(syncCommandCalls, 8)
+})
