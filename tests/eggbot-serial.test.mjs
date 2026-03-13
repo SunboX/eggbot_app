@@ -246,6 +246,27 @@ test('EggBotSerial.connectForDraw should sanitize mojibake artifacts in version 
     }
 })
 
+test('EggBotSerial.connectForDraw should strip leading ASCII noise before firmware version tokens', async () => {
+    const requestedPort = createMockPort(
+        { usbVendorId: 0xfeed, usbProductId: 0xbeef },
+        'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxEBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a'
+    )
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [],
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.connectForDraw()
+
+        assert.equal(version, 'EBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a')
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
 test('EggBotSerial.sendCommand should ignore OK and echoed lines before returning query data', async () => {
     const restoreTimers = installFastWindowTimers()
     const serial = new EggBotSerial()
