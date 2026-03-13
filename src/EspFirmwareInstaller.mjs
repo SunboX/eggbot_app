@@ -5,14 +5,11 @@ const ESP_ROM_BAUD_RATE = 115200
 const ESP32_CHIP_FAMILY = 'ESP32'
 const CLASSIC_RESET_INITIAL_DELAY_MS = 100
 const MANUAL_BOOT_RETRY_PATTERN = /wrong boot mode detected|download mode successfully detected|download mode/i
-const NORMAL_FIRMWARE_BOOT_TRACE_PATTERN = /boot:0x13|spi_fast_flash_boot/i
-const NORMAL_FIRMWARE_APP_TRACE_PATTERN = /ap aktiv:|https?:\/\/192\.168\.4\.1/i
-const WRONG_BOOT_MODE_TRACE_MESSAGE = 'Wrong boot mode detected (0x13). This chip needs to be in download mode.'
 const SYNC_COMMAND_OPCODE = 0x08
-const SYNC_COMMAND_TIMEOUT_MS = 2000
+const SYNC_COMMAND_TIMEOUT_MS = 100
 const SYNC_FOLLOW_UP_REPLY_COUNT = 7
-const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 3
-const MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES = 2
+const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 6
+const CHIP_MAGIC_RECOVERY_MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 0
 const SYNC_RECOVERABLE_ERROR_PATTERN =
     /read timeout exceeded|no serial data received|invalid response|serial data stream stopped|packet content transfer stopped/i
 const CHIP_MAGIC_READ_RETRY_COUNT = 2
@@ -363,6 +360,7 @@ export class EspFirmwareInstaller {
      *   manifestUrl: string,
      *   mode?: string,
      *   onLog?: (message: string) => void,
+     *   onStage?: (update: { stage: string, context?: string }) => void,
      *   onProgress?: (update: {
      *     partIndex: number,
      *     partCount: number,
@@ -395,6 +393,7 @@ export class EspFirmwareInstaller {
                 fileArray,
                 mode: initialMode,
                 onLog: options?.onLog,
+                onStage: options?.onStage,
                 onProgress: options?.onProgress,
                 port
             })
@@ -415,6 +414,7 @@ export class EspFirmwareInstaller {
                 fileArray,
                 mode: 'no_reset',
                 onLog: options?.onLog,
+                onStage: options?.onStage,
                 onProgress: options?.onProgress,
                 port
             })
@@ -427,6 +427,7 @@ export class EspFirmwareInstaller {
      *   fileArray: Array<{ address: number, data: string }>,
      *   mode: string,
      *   onLog?: (message: string) => void,
+     *   onStage?: (update: { stage: string, context?: string }) => void,
      *   onProgress?: (update: {
      *     partIndex: number,
      *     partCount: number,
@@ -442,6 +443,16 @@ export class EspFirmwareInstaller {
      * @returns {Promise<void>}
      */
     async #runInstallAttempt(options) {
+        const emitStage = (stage, context = '') => {
+            if (typeof options?.onStage !== 'function') {
+                return
+            }
+
+            options.onStage({
+                stage: normalizeString(stage),
+                context: normalizeString(context)
+            })
+        }
         const partByteOffsets = []
         let accumulatedPartBytes = 0
         options.fileArray.forEach((file) => {
@@ -460,10 +471,11 @@ export class EspFirmwareInstaller {
         })
         const shouldUseCompatibilityWrappers = this.#shouldUseCompatibilityWrappers()
         if (shouldUseCompatibilityWrappers) {
-            this.#installSyncCompatibilityWrapper(loader)
-            this.#installChipMagicReadCompatibilityWrapper(loader)
+            this.#installSyncCompatibilityWrapper(loader, emitStage)
+            this.#installChipMagicReadCompatibilityWrapper(loader, emitStage)
         }
         let connectFailureMessage = ''
+        let syncRecoveryStatusReported = false
         const originalConnectAttempt =
             loader && typeof loader._connectAttempt === 'function' ? loader._connectAttempt.bind(loader) : null
         if (shouldUseCompatibilityWrappers && originalConnectAttempt) {
@@ -472,18 +484,16 @@ export class EspFirmwareInstaller {
                     const response = await originalConnectAttempt(...args)
                     if (response !== 'success') {
                         connectFailureMessage = normalizeString(response) || connectFailureMessage
-                        const inferredTraceFailure = this.#inferConnectFailureFromTraceLog(transport?.traceLog)
-                        if (inferredTraceFailure) {
-                            connectFailureMessage = inferredTraceFailure
-                            throw new Error(inferredTraceFailure)
+                        if (!syncRecoveryStatusReported && this.#isRecoverableSyncError(response)) {
+                            syncRecoveryStatusReported = true
+                            emitStage('recoveringSerialTimeout', 'syncing')
                         }
                     }
                     return response
                 } catch (error) {
-                    const inferredTraceFailure = this.#inferConnectFailureFromTraceLog(transport?.traceLog)
-                    if (inferredTraceFailure) {
-                        connectFailureMessage = inferredTraceFailure
-                        throw new Error(inferredTraceFailure)
+                    if (!syncRecoveryStatusReported && this.#isRecoverableSyncError(error)) {
+                        syncRecoveryStatusReported = true
+                        emitStage('recoveringSerialTimeout', 'syncing')
                     }
                     throw error
                 }
@@ -492,6 +502,7 @@ export class EspFirmwareInstaller {
 
         try {
             await loader.main(options.mode)
+            emitStage('writingFirmware')
             await loader.writeFlash({
                 ...DEFAULT_FLASH_OPTIONS,
                 fileArray: options.fileArray,
@@ -515,7 +526,9 @@ export class EspFirmwareInstaller {
                     })
                 }
             })
+            emitStage('finalizing')
             await loader.after('hard_reset')
+            emitStage('done')
         } catch (error) {
             throw this.#normalizeInstallError(error, connectFailureMessage)
         } finally {
@@ -535,14 +548,13 @@ export class EspFirmwareInstaller {
     }
 
     /**
-     * Wraps sync to tolerate delayed or missing ROM follow-up replies after valid sync packets arrive.
+     * Runs one sync cycle with configurable tolerance for missing trailing replies.
      * @param {Record<string, unknown>} loader
+     * @param {(stage: string, context?: string) => void} emitStage
+     * @param {number} minimumFollowUpReplyCount
+     * @returns {Promise<unknown>}
      */
-    #installSyncCompatibilityWrapper(loader) {
-        if (!loader || typeof loader.sync !== 'function' || typeof loader.command !== 'function') {
-            return
-        }
-
+    async #runCompatibleSync(loader, emitStage, minimumFollowUpReplyCount = MIN_SYNC_FOLLOW_UP_REPLY_COUNT) {
         const syncPacket = new Uint8Array(36)
         syncPacket[0] = 0x07
         syncPacket[1] = 0x07
@@ -550,121 +562,70 @@ export class EspFirmwareInstaller {
         syncPacket[3] = 0x20
         syncPacket.fill(0x55, 4)
 
-        loader.sync = async () => {
-            if (typeof loader.debug === 'function') {
-                loader.debug('Sync')
-            }
+        const normalizedMinimumFollowUpReplyCount = Math.max(
+            0,
+            Math.min(SYNC_FOLLOW_UP_REPLY_COUNT, Math.trunc(Number(minimumFollowUpReplyCount) || 0))
+        )
 
-            let response = await loader.command(SYNC_COMMAND_OPCODE, syncPacket, undefined, undefined, SYNC_COMMAND_TIMEOUT_MS)
-            loader.syncStubDetected = response[0] === 0
-            let completedFollowUpReplies = 0
-            let intermediateIdleGapRetries = 0
+        if (typeof loader.debug === 'function') {
+            loader.debug('Sync')
+        }
+        emitStage('syncing')
 
-            while (completedFollowUpReplies < SYNC_FOLLOW_UP_REPLY_COUNT) {
-                try {
-                    response = await loader.command()
-                    loader.syncStubDetected = loader.syncStubDetected && response[0] === 0
-                    completedFollowUpReplies += 1
-                    intermediateIdleGapRetries = 0
-                } catch (error) {
-                    if (!this.#isRecoverableSyncError(error)) {
-                        throw error
-                    }
+        let response = await loader.command(SYNC_COMMAND_OPCODE, syncPacket, undefined, undefined, SYNC_COMMAND_TIMEOUT_MS)
+        loader.syncStubDetected = response[0] === 0
 
-                    if (completedFollowUpReplies >= MIN_SYNC_FOLLOW_UP_REPLY_COUNT) {
-                        if (typeof loader.debug === 'function') {
-                            loader.debug(`Sync tolerated missing trailing reply after ${completedFollowUpReplies} follow-up packets`)
-                        }
-                        await this.#flushSyncInput(loader)
-                        return response
-                    }
-
-                    if (intermediateIdleGapRetries >= MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES) {
-                        throw error
-                    }
-
-                    intermediateIdleGapRetries += 1
+        for (
+            let completedFollowUpReplies = 0;
+            completedFollowUpReplies < SYNC_FOLLOW_UP_REPLY_COUNT;
+            completedFollowUpReplies += 1
+        ) {
+            try {
+                response = await loader.command()
+                loader.syncStubDetected = loader.syncStubDetected && response[0] === 0
+            } catch (error) {
+                if (
+                    completedFollowUpReplies >= normalizedMinimumFollowUpReplyCount &&
+                    this.#isRecoverableSyncError(error)
+                ) {
                     if (typeof loader.debug === 'function') {
                         loader.debug(
-                            `Sync tolerated delayed follow-up gap ${intermediateIdleGapRetries}/${MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES} after ${completedFollowUpReplies} follow-up packets`
+                            `Sync tolerated missing trailing reply after ${completedFollowUpReplies} follow-up packets`
                         )
                     }
+                    return response
                 }
+                throw error
             }
-
-            await this.#flushSyncInput(loader)
-            return response
         }
+
+        return response
     }
 
     /**
-     * Clears any queued sync replies before the next command starts waiting for a different opcode.
+     * Wraps sync to tolerate delayed or missing ROM follow-up replies after valid sync packets arrive.
      * @param {Record<string, unknown>} loader
-     * @returns {Promise<void>}
+     * @param {(stage: string, context?: string) => void} emitStage
      */
-    async #flushSyncInput(loader) {
-        const transport = loader?.transport
-        if (!transport) {
+    #installSyncCompatibilityWrapper(loader, emitStage) {
+        if (!loader || typeof loader.sync !== 'function' || typeof loader.command !== 'function') {
             return
         }
 
-        if ('buffer' in transport) {
-            try {
-                transport.buffer = new Uint8Array(0)
-            } catch (_error) {
-                // Ignore transports that do not expose a writable buffer.
-            }
-        }
-
-        const reader = transport.reader
-        const readable = transport.device?.readable
-        if (
-            reader &&
-            typeof reader.cancel === 'function' &&
-            typeof reader.releaseLock === 'function' &&
-            readable &&
-            typeof readable.getReader === 'function'
-        ) {
-            try {
-                await reader.cancel()
-            } catch (_error) {
-                // Ignore reader cancel races and continue rebuilding the reader lock.
-            }
-
-            try {
-                reader.releaseLock()
-            } catch (_error) {
-                // Ignore already-released reader locks.
-            }
-
-            try {
-                transport.reader = readable.getReader()
-            } catch (_error) {
-                // Ignore reader reinitialization failures and let the next command recover.
-            }
-            return
-        }
-
-        if (typeof transport.flushInput !== 'function') {
-            return
-        }
-
-        try {
-            await transport.flushInput()
-        } catch (_error) {
-            // Ignore transport flush races and let the next command decide if recovery is needed.
-        }
+        loader.sync = async () => this.#runCompatibleSync(loader, emitStage, MIN_SYNC_FOLLOW_UP_REPLY_COUNT)
     }
 
     /**
      * Wraps the initial chip-detect register read to retry after one recoverable sync loss.
      * @param {Record<string, unknown>} loader
+     * @param {(stage: string, context?: string) => void} emitStage
      */
-    #installChipMagicReadCompatibilityWrapper(loader) {
+    #installChipMagicReadCompatibilityWrapper(loader, emitStage) {
         if (
             !loader ||
             typeof loader.readReg !== 'function' ||
             typeof loader.sync !== 'function' ||
+            typeof loader.command !== 'function' ||
             !Number.isFinite(Number(loader.CHIP_DETECT_MAGIC_REG_ADDR))
         ) {
             return
@@ -672,6 +633,7 @@ export class EspFirmwareInstaller {
 
         const chipDetectMagicRegister = Number(loader.CHIP_DETECT_MAGIC_REG_ADDR)
         const originalReadReg = loader.readReg.bind(loader)
+        let chipDetectRecoveryStatusReported = false
         loader.readReg = async (registerAddress, timeout) => {
             const normalizedRegisterAddress = Number(registerAddress)
             if (normalizedRegisterAddress !== chipDetectMagicRegister) {
@@ -681,6 +643,7 @@ export class EspFirmwareInstaller {
             let lastError = null
             for (let attemptIndex = 0; attemptIndex < CHIP_MAGIC_READ_RETRY_COUNT; attemptIndex += 1) {
                 try {
+                    emitStage('detectingChip')
                     return await originalReadReg(registerAddress, timeout)
                 } catch (error) {
                     lastError = error
@@ -689,11 +652,19 @@ export class EspFirmwareInstaller {
                         throw error
                     }
 
+                    if (!chipDetectRecoveryStatusReported) {
+                        chipDetectRecoveryStatusReported = true
+                        emitStage('recoveringSerialTimeout', 'detectingChip')
+                    }
                     if (typeof loader.debug === 'function') {
                         loader.debug('Retrying chip detection after recoverable read timeout')
                     }
                     await sleep(CHIP_MAGIC_READ_RETRY_DELAY_MS)
-                    await loader.sync()
+                    await this.#runCompatibleSync(
+                        loader,
+                        emitStage,
+                        CHIP_MAGIC_RECOVERY_MIN_SYNC_FOLLOW_UP_REPLY_COUNT
+                    )
                 }
             }
 
@@ -798,27 +769,6 @@ export class EspFirmwareInstaller {
             return error
         }
         return new Error(normalizedErrorMessage || 'ESP firmware flashing failed.')
-    }
-
-    /**
-     * Infers one clearer connect failure from accumulated transport trace output.
-     * @param {unknown} traceLog
-     * @returns {string}
-     */
-    #inferConnectFailureFromTraceLog(traceLog) {
-        const normalizedTraceLog = normalizeString(traceLog)
-        if (!normalizedTraceLog) {
-            return ''
-        }
-
-        if (
-            NORMAL_FIRMWARE_BOOT_TRACE_PATTERN.test(normalizedTraceLog) ||
-            NORMAL_FIRMWARE_APP_TRACE_PATTERN.test(normalizedTraceLog)
-        ) {
-            return WRONG_BOOT_MODE_TRACE_MESSAGE
-        }
-
-        return ''
     }
 
     /**

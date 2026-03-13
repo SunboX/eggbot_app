@@ -156,7 +156,7 @@ test('AppControllerCoreControls should only show the BOOT hint for connect-like 
     )
 })
 
-test('AppControllerCoreControls should start ESP flashing with a bootloader-waiting status', async () => {
+test('AppControllerCoreControls should surface explicit flash stages through the dialog status', async () => {
     const statusUpdates = []
 
     const controller = {
@@ -164,7 +164,13 @@ test('AppControllerCoreControls should start ESP flashing with a bootloader-wait
         espFlashBootHintVisible: false,
         espFlashRetryWithoutResetPending: false,
         espFirmwareInstaller: {
-            async install() {}
+            async install(options) {
+                options.onStage?.({ stage: 'syncing' })
+                options.onStage?.({ stage: 'detectingChip' })
+                options.onStage?.({ stage: 'writingFirmware' })
+                options.onStage?.({ stage: 'finalizing' })
+                options.onStage?.({ stage: 'done' })
+            }
         },
         _resolveEspFlashManifestUrl() {
             return 'https://example.com/firmware/manifest.json'
@@ -173,14 +179,31 @@ test('AppControllerCoreControls should start ESP flashing with a bootloader-wait
         _updateEspFlashProgressUi() {},
         _syncEspFlashInstallUi() {},
         _syncConnectionUi() {},
+        _formatEspFlashStageStatus: AppControllerCoreControls.prototype._formatEspFlashStageStatus,
+        _handleEspFlashStageUpdate: AppControllerCoreControls.prototype._handleEspFlashStageUpdate,
         _formatEspFlashFailedStatusMessage: AppControllerCoreControls.prototype._formatEspFlashFailedStatusMessage,
         _shouldShowEspFlashBootHint: AppControllerCoreControls.prototype._shouldShowEspFlashBootHint,
         _setEspFlashStatus(message, type) {
             statusUpdates.push({ message, type })
         },
         _t(key, replacements = {}) {
-            if (key === 'messages.espFlashWaitingForBootloader') {
-                return 'waiting'
+            if (key === 'messages.espFlashStageEnteringBootloader') {
+                return 'entering'
+            }
+            if (key === 'messages.espFlashStageSyncing') {
+                return 'syncing'
+            }
+            if (key === 'messages.espFlashStageDetectingChip') {
+                return 'detecting'
+            }
+            if (key === 'messages.espFlashStageWriting') {
+                return 'writing'
+            }
+            if (key === 'messages.espFlashStageFinalizing') {
+                return 'finalizing'
+            }
+            if (key === 'messages.espFlashRecoveringTimeout') {
+                return 'recovering'
             }
             if (key === 'messages.espFlashComplete') {
                 return 'complete'
@@ -208,9 +231,80 @@ test('AppControllerCoreControls should start ESP flashing with a bootloader-wait
 
     try {
         await AppControllerCoreControls.prototype._installEspFirmware.call(controller)
-        assert.equal(statusUpdates[0]?.message, 'waiting')
+        assert.equal(statusUpdates[0]?.message, 'entering')
         assert.equal(statusUpdates[0]?.type, 'loading')
+        assert.equal(statusUpdates.some((entry) => entry.message === 'syncing'), true)
+        assert.equal(statusUpdates.some((entry) => entry.message === 'detecting'), true)
+        assert.equal(statusUpdates.some((entry) => entry.message === 'writing'), true)
+        assert.equal(statusUpdates.some((entry) => entry.message === 'finalizing'), true)
         assert.equal(statusUpdates.at(-1)?.message, 'complete')
+    } finally {
+        restoreNavigator()
+    }
+})
+
+test('AppControllerCoreControls should show a temporary recovery status when ESP flashing retries after a serial timeout', async () => {
+    const statusUpdates = []
+
+    const controller = {
+        isEspFlashing: false,
+        espFlashBootHintVisible: false,
+        espFlashRetryWithoutResetPending: false,
+        espFirmwareInstaller: {
+            async install(options) {
+                options.onStage?.({ stage: 'recoveringSerialTimeout', context: 'syncing' })
+                options.onStage?.({ stage: 'syncing' })
+            }
+        },
+        _resolveEspFlashManifestUrl() {
+            return 'https://example.com/firmware/manifest.json'
+        },
+        _startEspFlashProgressUi() {},
+        _updateEspFlashProgressUi() {},
+        _syncEspFlashInstallUi() {},
+        _syncConnectionUi() {},
+        _formatEspFlashStageStatus: AppControllerCoreControls.prototype._formatEspFlashStageStatus,
+        _handleEspFlashStageUpdate: AppControllerCoreControls.prototype._handleEspFlashStageUpdate,
+        _formatEspFlashFailedStatusMessage: AppControllerCoreControls.prototype._formatEspFlashFailedStatusMessage,
+        _shouldShowEspFlashBootHint: AppControllerCoreControls.prototype._shouldShowEspFlashBootHint,
+        _setEspFlashStatus(message, type) {
+            statusUpdates.push({ message, type })
+        },
+        _t(key, replacements = {}) {
+            if (key === 'messages.espFlashStageEnteringBootloader') {
+                return 'entering'
+            }
+            if (key === 'messages.espFlashStageSyncing') {
+                return 'syncing'
+            }
+            if (key === 'messages.espFlashRecoveringTimeout') {
+                return 'recovering'
+            }
+            if (key === 'messages.espFlashComplete') {
+                return 'complete'
+            }
+            if (key === 'messages.espFlashConnectFailed') {
+                return `connect:${replacements.message || ''}`
+            }
+            if (key === 'messages.espFlashFailed') {
+                return `failed:${replacements.message || ''}`
+            }
+            return key
+        }
+    }
+
+    const restoreNavigator = installNavigatorOverride({
+        serial: {
+            async requestPort() {
+                return {}
+            }
+        }
+    })
+
+    try {
+        await AppControllerCoreControls.prototype._installEspFirmware.call(controller)
+        assert.equal(statusUpdates.some((entry) => entry.message === 'recovering'), true)
+        assert.equal(statusUpdates.some((entry) => entry.message === 'syncing'), true)
     } finally {
         restoreNavigator()
     }
@@ -248,14 +342,16 @@ test('AppControllerCoreControls should keep manual BOOT retry inside the flasher
         _updateEspFlashProgressUi() {},
         _syncEspFlashInstallUi() {},
         _syncConnectionUi() {},
+        _formatEspFlashStageStatus: AppControllerCoreControls.prototype._formatEspFlashStageStatus,
+        _handleEspFlashStageUpdate: AppControllerCoreControls.prototype._handleEspFlashStageUpdate,
         _formatEspFlashFailedStatusMessage: AppControllerCoreControls.prototype._formatEspFlashFailedStatusMessage,
         _shouldShowEspFlashBootHint: AppControllerCoreControls.prototype._shouldShowEspFlashBootHint,
         _setEspFlashStatus(message, type) {
             statusUpdates.push({ message, type })
         },
         _t(key, replacements = {}) {
-            if (key === 'messages.espFlashWaitingForBootloader') {
-                return 'waiting'
+            if (key === 'messages.espFlashStageEnteringBootloader') {
+                return 'entering'
             }
             if (key === 'messages.espFlashConnectFailed') {
                 return `connect:${replacements.message || ''}`
@@ -293,7 +389,7 @@ test('AppControllerCoreControls should keep manual BOOT retry inside the flasher
 
         assert.deepEqual(installModes, ['default_reset', 'no_reset'])
         assert.equal(confirmCalls, 0)
-        assert.equal(statusUpdates[0]?.message, 'waiting')
+        assert.equal(statusUpdates[0]?.message, 'entering')
         assert.equal(controller.espFlashRetryWithoutResetPending, false)
         assert.equal(controller.espFlashBootHintVisible, false)
         assert.equal(

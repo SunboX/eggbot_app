@@ -391,89 +391,6 @@ test('EspFirmwareInstaller should retry without reset after wrong boot mode when
     assert.match(promptCalls[0], /Wrong boot mode detected/)
 })
 
-test('EspFirmwareInstaller should stop repeated connect retries when transport trace shows normal firmware boot logs', async () => {
-    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    const loaderModes = []
-    const promptCalls = []
-    let loaderAttempt = 0
-    let firstAttemptConnectCalls = 0
-
-    const installer = new EspFirmwareInstaller({
-        fetchImpl: async (url) => {
-            if (String(url).endsWith('/manifest.json')) {
-                return {
-                    ok: true,
-                    async json() {
-                        return {
-                            builds: [
-                                {
-                                    chipFamily: 'ESP32',
-                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            return {
-                ok: true,
-                async arrayBuffer() {
-                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
-                }
-            }
-        },
-        async portRequester() {
-            return { id: 1 }
-        },
-        transportFactory() {
-            return {
-                traceLog:
-                    'boot:0x13 (SPI_FAST_FLASH_BOOT)\r\nentry 0x400805e4\r\nAP aktiv: EggBot_D8CBB0 / http://192.168.4.1\r\n',
-                async disconnect() {}
-            }
-        },
-        loaderFactory(options) {
-            loaderAttempt += 1
-            return {
-                transport: options.transport,
-                async _connectAttempt(mode) {
-                    loaderModes.push(`${mode}:connect`)
-                    if (loaderAttempt === 1) {
-                        firstAttemptConnectCalls += 1
-                        return 'Read timeout exceeded'
-                    }
-                    return 'success'
-                },
-                async main(mode) {
-                    loaderModes.push(mode)
-                    if (loaderAttempt === 1) {
-                        for (let index = 0; index < 7; index += 1) {
-                            await this._connectAttempt(mode)
-                        }
-                        throw new Error('Failed to connect with the device')
-                    }
-                },
-                async writeFlash() {},
-                async after() {}
-            }
-        },
-        async promptManualBootRetry(error) {
-            promptCalls.push(error.message)
-            return true
-        }
-    })
-
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
-
-    assert.equal(firstAttemptConnectCalls, 1)
-    assert.deepEqual(loaderModes, ['default_reset', 'default_reset:connect', 'no_reset'])
-    assert.equal(promptCalls.length, 1)
-    assert.match(promptCalls[0], /Wrong boot mode detected/)
-})
-
 test('EspFirmwareInstaller should tolerate one missing trailing sync reply after download mode responds', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     let writeFlashCalls = 0
@@ -558,10 +475,8 @@ test('EspFirmwareInstaller should tolerate one missing trailing sync reply after
     assert.equal(syncCommandCalls, 8)
 })
 
-test('EspFirmwareInstaller should continue sync after one recoverable idle gap before trailing replies arrive', async () => {
+test('EspFirmwareInstaller should fail sync after one recoverable idle gap before enough replies arrive', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    let writeFlashCalls = 0
-    let afterCalls = 0
     let syncCommandCalls = 0
 
     const delayedFollowUpReplies = [
@@ -644,19 +559,88 @@ test('EspFirmwareInstaller should continue sync after one recoverable idle gap b
         }
     })
 
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
+    await assert.rejects(
+        installer.install({
+            manifestUrl: 'https://example.com/firmware/manifest.json'
+        }),
+        /Possible serial noise or corruption/
+    )
 
-    assert.equal(writeFlashCalls, 1)
-    assert.equal(afterCalls, 1)
-    assert.equal(syncCommandCalls, 9)
+    assert.equal(syncCommandCalls, 2)
 })
 
-test('EspFirmwareInstaller should tolerate sync when only five follow-up replies arrive', async () => {
+test('EspFirmwareInstaller should emit one recovery stage when sync retries recover after a serial timeout', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    let writeFlashCalls = 0
-    let afterCalls = 0
+    const stageUpdates = []
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            return { id: 1 }
+        },
+        transportFactory() {
+            return {
+                async disconnect() {}
+            }
+        },
+        loaderFactory() {
+            let connectAttemptCount = 0
+            return {
+                async _connectAttempt() {
+                    connectAttemptCount += 1
+                    if (connectAttemptCount === 1) {
+                        return 'Read timeout exceeded'
+                    }
+                    return 'success'
+                },
+                async main() {
+                    let response = await this._connectAttempt('default_reset')
+                    if (response !== 'success') {
+                        response = await this._connectAttempt('default_reset')
+                    }
+                    if (response !== 'success') {
+                        throw new Error('Failed to connect with the device')
+                    }
+                },
+                async writeFlash() {},
+                async after() {}
+            }
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json',
+        onStage: (update) => stageUpdates.push(update.stage)
+    })
+
+    assert.deepEqual(stageUpdates, ['recoveringSerialTimeout', 'writingFirmware', 'finalizing', 'done'])
+})
+
+test('EspFirmwareInstaller should require at least six follow-up replies before tolerating a missing trailing sync reply', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     let syncCommandCalls = 0
 
     const installer = new EspFirmwareInstaller({
@@ -730,16 +714,17 @@ test('EspFirmwareInstaller should tolerate sync when only five follow-up replies
         }
     })
 
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
+    await assert.rejects(
+        installer.install({
+            manifestUrl: 'https://example.com/firmware/manifest.json'
+        }),
+        /Read timeout exceeded/
+    )
 
-    assert.equal(writeFlashCalls, 1)
-    assert.equal(afterCalls, 1)
     assert.equal(syncCommandCalls, 7)
 })
 
-test('EspFirmwareInstaller should use an extended timeout for the initial sync command', async () => {
+test('EspFirmwareInstaller should use the short legacy timeout for the initial sync command on the compatibility path', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     let writeFlashCalls = 0
     let afterCalls = 0
@@ -786,7 +771,7 @@ test('EspFirmwareInstaller should use an extended timeout for the initial sync c
                 async command(opCode, _data, _chk, _waitResponse, timeout) {
                     if (opCode === 8) {
                         syncCommandCalls += 1
-                        if (timeout < 2000) {
+                        if (timeout !== 100) {
                             throw new Error('Read timeout exceeded')
                         }
 
@@ -794,7 +779,7 @@ test('EspFirmwareInstaller should use an extended timeout for the initial sync c
                     }
 
                     syncCommandCalls += 1
-                    if (syncCommandCalls <= 4) {
+                    if (syncCommandCalls <= 8) {
                         return [0x20120707, new Uint8Array([0, 0, 0, 0])]
                     }
 
@@ -826,103 +811,7 @@ test('EspFirmwareInstaller should use an extended timeout for the initial sync c
 
     assert.equal(writeFlashCalls, 1)
     assert.equal(afterCalls, 1)
-    assert.equal(syncCommandCalls, 5)
-})
-
-test('EspFirmwareInstaller should continue sync after two recoverable idle gaps and three follow-up replies', async () => {
-    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    let writeFlashCalls = 0
-    let afterCalls = 0
-    let syncCommandCalls = 0
-
-    const delayedFollowUpReplies = [
-        new Error('Serial data stream stopped: Possible serial noise or corruption.'),
-        new Error('Serial data stream stopped: Possible serial noise or corruption.'),
-        [0x20120707, new Uint8Array([0, 0, 0, 0])],
-        [0x20120707, new Uint8Array([0, 0, 0, 0])],
-        [0x20120707, new Uint8Array([0, 0, 0, 0])],
-        new Error('Read timeout exceeded')
-    ]
-
-    const installer = new EspFirmwareInstaller({
-        fetchImpl: async (url) => {
-            if (String(url).endsWith('/manifest.json')) {
-                return {
-                    ok: true,
-                    async json() {
-                        return {
-                            builds: [
-                                {
-                                    chipFamily: 'ESP32',
-                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            return {
-                ok: true,
-                async arrayBuffer() {
-                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
-                }
-            }
-        },
-        async portRequester() {
-            return { id: 1 }
-        },
-        transportFactory() {
-            return {
-                async disconnect() {},
-                async flushInput() {}
-            }
-        },
-        loaderFactory(options) {
-            return {
-                transport: options.transport,
-                debug() {},
-                async command(opCode) {
-                    if (opCode === 8) {
-                        syncCommandCalls += 1
-                        return [0x55555555, new Uint8Array([0, 0, 0, 0])]
-                    }
-
-                    syncCommandCalls += 1
-                    const nextReply = delayedFollowUpReplies.shift()
-                    if (nextReply instanceof Error) {
-                        throw nextReply
-                    }
-
-                    return nextReply || [0x20120707, new Uint8Array([0, 0, 0, 0])]
-                },
-                async sync() {
-                    let response = await this.command(8)
-                    for (let index = 0; index < 7; index += 1) {
-                        response = await this.command()
-                    }
-                    return response
-                },
-                async main() {
-                    await this.sync()
-                },
-                async writeFlash() {
-                    writeFlashCalls += 1
-                },
-                async after() {
-                    afterCalls += 1
-                }
-            }
-        }
-    })
-
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
-
-    assert.equal(writeFlashCalls, 1)
-    assert.equal(afterCalls, 1)
-    assert.equal(syncCommandCalls, 7)
+    assert.equal(syncCommandCalls, 8)
 })
 
 test('EspFirmwareInstaller should preserve bytes consumed by connect boot-log sniff before sync starts', async () => {
@@ -932,7 +821,7 @@ test('EspFirmwareInstaller should preserve bytes consumed by connect boot-log sn
 
     const packetBody = new Uint8Array([0x01, 0x08, 0x04, 0x00, 0x55, 0x55, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00])
     const packet = new Uint8Array([0xc0, ...packetBody, 0xc0])
-    const packetQueue = [packet, packet, packet, packet]
+    const packetQueue = Array.from({ length: 9 }, () => packet)
 
     const mockReader = {
         closed: Promise.resolve(false),
@@ -1108,186 +997,13 @@ test('EspFirmwareInstaller should preserve bytes consumed by connect boot-log sn
     assert.equal(afterCalls, 1)
 })
 
-test('EspFirmwareInstaller should flush stale sync replies before chip detection continues', async () => {
-    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    let flushInputCalls = 0
-
-    const installer = new EspFirmwareInstaller({
-        fetchImpl: async (url) => {
-            if (String(url).endsWith('/manifest.json')) {
-                return {
-                    ok: true,
-                    async json() {
-                        return {
-                            builds: [
-                                {
-                                    chipFamily: 'ESP32',
-                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            return {
-                ok: true,
-                async arrayBuffer() {
-                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
-                }
-            }
-        },
-        async portRequester() {
-            return { id: 1 }
-        },
-        transportFactory() {
-            return {
-                async disconnect() {},
-                async flushInput() {
-                    flushInputCalls += 1
-                }
-            }
-        },
-        loaderFactory(options) {
-            return {
-                transport: options.transport,
-                debug() {},
-                async command(opCode) {
-                    if (opCode === 8) {
-                        return [0x55552012, new Uint8Array([0, 0, 0, 0])]
-                    }
-                    return [0x20120707, new Uint8Array([0, 0, 0, 0])]
-                },
-                async sync() {
-                    let response = await this.command(8)
-                    for (let index = 0; index < 7; index += 1) {
-                        response = await this.command()
-                    }
-                    return response
-                },
-                async main() {
-                    await this.sync()
-                },
-                async writeFlash() {},
-                async after() {}
-            }
-        }
-    })
-
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
-
-    assert.equal(flushInputCalls, 1)
-})
-
-test('EspFirmwareInstaller should refresh the active reader directly after sync without awaiting a hanging flushInput', async () => {
-    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
-    let flushInputCalls = 0
-    let cancelCalls = 0
-    let releaseLockCalls = 0
-    let getReaderCalls = 0
-    const replacementReader = {
-        async cancel() {},
-        releaseLock() {}
-    }
-
-    const installer = new EspFirmwareInstaller({
-        fetchImpl: async (url) => {
-            if (String(url).endsWith('/manifest.json')) {
-                return {
-                    ok: true,
-                    async json() {
-                        return {
-                            builds: [
-                                {
-                                    chipFamily: 'ESP32',
-                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            return {
-                ok: true,
-                async arrayBuffer() {
-                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
-                }
-            }
-        },
-        async portRequester() {
-            return { id: 1 }
-        },
-        transportFactory() {
-            return {
-                buffer: new Uint8Array([0x01, 0x02, 0x03]),
-                reader: {
-                    async cancel() {
-                        cancelCalls += 1
-                    },
-                    releaseLock() {
-                        releaseLockCalls += 1
-                    }
-                },
-                device: {
-                    readable: {
-                        getReader() {
-                            getReaderCalls += 1
-                            return replacementReader
-                        }
-                    }
-                },
-                async disconnect() {},
-                async flushInput() {
-                    flushInputCalls += 1
-                    return new Promise(() => {})
-                }
-            }
-        },
-        loaderFactory(options) {
-            return {
-                transport: options.transport,
-                debug() {},
-                async command(opCode) {
-                    if (opCode === 8) {
-                        return [0x55552012, new Uint8Array([0, 0, 0, 0])]
-                    }
-                    return [0x20120707, new Uint8Array([0, 0, 0, 0])]
-                },
-                async sync() {
-                    let response = await this.command(8)
-                    for (let index = 0; index < 7; index += 1) {
-                        response = await this.command()
-                    }
-                    return response
-                },
-                async main() {
-                    await this.sync()
-                },
-                async writeFlash() {},
-                async after() {}
-            }
-        }
-    })
-
-    await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
-    })
-
-    assert.equal(flushInputCalls, 0)
-    assert.equal(cancelCalls, 1)
-    assert.equal(releaseLockCalls, 1)
-    assert.equal(getReaderCalls, 1)
-})
-
 test('EspFirmwareInstaller should retry chip detection after one recoverable readReg timeout', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     let writeFlashCalls = 0
     let afterCalls = 0
     let syncOpcodeCalls = 0
     let readRegCalls = 0
+    const stageUpdates = []
 
     const installer = new EspFirmwareInstaller({
         fetchImpl: async (url) => {
@@ -1363,13 +1079,135 @@ test('EspFirmwareInstaller should retry chip detection after one recoverable rea
     })
 
     await installer.install({
-        manifestUrl: 'https://example.com/firmware/manifest.json'
+        manifestUrl: 'https://example.com/firmware/manifest.json',
+        onStage: (update) => stageUpdates.push(update.stage)
     })
 
     assert.equal(syncOpcodeCalls, 2)
     assert.equal(readRegCalls, 2)
     assert.equal(writeFlashCalls, 1)
     assert.equal(afterCalls, 1)
+    assert.deepEqual(stageUpdates, [
+        'syncing',
+        'detectingChip',
+        'recoveringSerialTimeout',
+        'syncing',
+        'detectingChip',
+        'writingFirmware',
+        'finalizing',
+        'done'
+    ])
+})
+
+test('EspFirmwareInstaller should accept one valid recovery sync reply before retrying chip detection', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
+    let writeFlashCalls = 0
+    let afterCalls = 0
+    let syncOpcodeCalls = 0
+    let followUpCallsInCurrentSync = 0
+    let syncCycleIndex = 0
+    let readRegCalls = 0
+    const stageUpdates = []
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            return { id: 1 }
+        },
+        transportFactory() {
+            return {
+                async disconnect() {}
+            }
+        },
+        loaderFactory() {
+            return {
+                CHIP_DETECT_MAGIC_REG_ADDR: 0x40001000,
+                debug() {},
+                async command(opCode) {
+                    if (opCode === 8) {
+                        syncOpcodeCalls += 1
+                        syncCycleIndex += 1
+                        followUpCallsInCurrentSync = 0
+                        return [0x55552012, new Uint8Array([0, 0, 0, 0])]
+                    }
+
+                    followUpCallsInCurrentSync += 1
+                    if (syncCycleIndex === 2 && followUpCallsInCurrentSync === 1) {
+                        throw new Error('Read timeout exceeded')
+                    }
+
+                    return [0x20120707, new Uint8Array([0, 0, 0, 0])]
+                },
+                async sync() {
+                    let response = await this.command(8)
+                    for (let index = 0; index < 7; index += 1) {
+                        response = await this.command()
+                    }
+                    return response
+                },
+                async readReg(address) {
+                    readRegCalls += 1
+                    if (address === this.CHIP_DETECT_MAGIC_REG_ADDR && readRegCalls === 1) {
+                        throw new Error('Read timeout exceeded')
+                    }
+                    return 0x00f01d83
+                },
+                async main() {
+                    await this.sync()
+                    await this.readReg(this.CHIP_DETECT_MAGIC_REG_ADDR)
+                },
+                async writeFlash() {
+                    writeFlashCalls += 1
+                },
+                async after() {
+                    afterCalls += 1
+                }
+            }
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json',
+        onStage: (update) => stageUpdates.push(update.stage)
+    })
+
+    assert.equal(syncOpcodeCalls, 2)
+    assert.equal(readRegCalls, 2)
+    assert.equal(writeFlashCalls, 1)
+    assert.equal(afterCalls, 1)
+    assert.deepEqual(stageUpdates, [
+        'syncing',
+        'detectingChip',
+        'recoveringSerialTimeout',
+        'syncing',
+        'detectingChip',
+        'writingFirmware',
+        'finalizing',
+        'done'
+    ])
 })
 
 test('EspFirmwareInstaller should report overall flashing progress across all firmware parts', async () => {
