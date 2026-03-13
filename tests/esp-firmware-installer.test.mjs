@@ -302,3 +302,93 @@ test('EspFirmwareInstaller should tolerate one missing trailing sync reply after
     assert.equal(afterCalls, 1)
     assert.equal(syncCommandCalls, 8)
 })
+
+test('EspFirmwareInstaller should retry chip detection after one recoverable readReg timeout', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
+    let writeFlashCalls = 0
+    let afterCalls = 0
+    let syncOpcodeCalls = 0
+    let readRegCalls = 0
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            return { id: 1 }
+        },
+        transportFactory() {
+            return {
+                async disconnect() {}
+            }
+        },
+        loaderFactory() {
+            return {
+                CHIP_DETECT_MAGIC_REG_ADDR: 0x40001000,
+                debug() {},
+                async command(opCode) {
+                    if (opCode === 8) {
+                        syncOpcodeCalls += 1
+                        return [0x55552012, new Uint8Array([0, 0, 0, 0])]
+                    }
+
+                    return [0x20120707, new Uint8Array([0, 0, 0, 0])]
+                },
+                async sync() {
+                    let response = await this.command(8)
+                    for (let index = 0; index < 7; index += 1) {
+                        response = await this.command()
+                    }
+                    return response
+                },
+                async readReg(address) {
+                    readRegCalls += 1
+                    if (address === this.CHIP_DETECT_MAGIC_REG_ADDR && readRegCalls === 1) {
+                        throw new Error('Read timeout exceeded')
+                    }
+                    return 0x00f01d83
+                },
+                async main() {
+                    await this.sync()
+                    await this.readReg(this.CHIP_DETECT_MAGIC_REG_ADDR)
+                },
+                async writeFlash() {
+                    writeFlashCalls += 1
+                },
+                async after() {
+                    afterCalls += 1
+                }
+            }
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json'
+    })
+
+    assert.equal(syncOpcodeCalls, 2)
+    assert.equal(readRegCalls, 2)
+    assert.equal(writeFlashCalls, 1)
+    assert.equal(afterCalls, 1)
+})

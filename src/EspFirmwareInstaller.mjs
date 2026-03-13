@@ -11,6 +11,8 @@ const SYNC_FOLLOW_UP_REPLY_COUNT = 7
 const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 6
 const SYNC_RECOVERABLE_ERROR_PATTERN =
     /read timeout exceeded|no serial data received|invalid response|serial data stream stopped|packet content transfer stopped/i
+const CHIP_MAGIC_READ_RETRY_COUNT = 2
+const CHIP_MAGIC_READ_RETRY_DELAY_MS = 50
 const DEFAULT_FLASH_OPTIONS = Object.freeze({
     compress: true,
     eraseAll: false,
@@ -376,6 +378,7 @@ export class EspFirmwareInstaller {
             resetConstructors: this.#resolveResetConstructors()
         })
         this.#installSyncCompatibilityWrapper(loader)
+        this.#installChipMagicReadCompatibilityWrapper(loader)
         let connectFailureMessage = ''
         const originalConnectAttempt =
             loader && typeof loader._connectAttempt === 'function' ? loader._connectAttempt.bind(loader) : null
@@ -466,6 +469,51 @@ export class EspFirmwareInstaller {
             }
 
             return response
+        }
+    }
+
+    /**
+     * Wraps the initial chip-detect register read to retry after one recoverable sync loss.
+     * @param {Record<string, unknown>} loader
+     */
+    #installChipMagicReadCompatibilityWrapper(loader) {
+        if (
+            !loader ||
+            typeof loader.readReg !== 'function' ||
+            typeof loader.sync !== 'function' ||
+            !Number.isFinite(Number(loader.CHIP_DETECT_MAGIC_REG_ADDR))
+        ) {
+            return
+        }
+
+        const chipDetectMagicRegister = Number(loader.CHIP_DETECT_MAGIC_REG_ADDR)
+        const originalReadReg = loader.readReg.bind(loader)
+        loader.readReg = async (registerAddress, timeout) => {
+            const normalizedRegisterAddress = Number(registerAddress)
+            if (normalizedRegisterAddress !== chipDetectMagicRegister) {
+                return originalReadReg(registerAddress, timeout)
+            }
+
+            let lastError = null
+            for (let attemptIndex = 0; attemptIndex < CHIP_MAGIC_READ_RETRY_COUNT; attemptIndex += 1) {
+                try {
+                    return await originalReadReg(registerAddress, timeout)
+                } catch (error) {
+                    lastError = error
+                    const isFinalAttempt = attemptIndex >= CHIP_MAGIC_READ_RETRY_COUNT - 1
+                    if (isFinalAttempt || !this.#isRecoverableSyncError(error)) {
+                        throw error
+                    }
+
+                    if (typeof loader.debug === 'function') {
+                        loader.debug('Retrying chip detection after recoverable read timeout')
+                    }
+                    await sleep(CHIP_MAGIC_READ_RETRY_DELAY_MS)
+                    await loader.sync()
+                }
+            }
+
+            throw lastError instanceof Error ? lastError : new Error('ESP chip detection failed.')
         }
     }
 
