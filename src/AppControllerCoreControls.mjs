@@ -441,6 +441,50 @@ export class AppControllerCoreControls {
     }
 
     /**
+     * Formats one ESP flash stage into one localized status string.
+     * @param {unknown} stage
+     * @returns {string}
+     */
+    _formatEspFlashStageStatus(stage) {
+        const normalizedStage = String(stage || '').trim()
+        if (normalizedStage === 'enteringBootloader') {
+            return this._t('messages.espFlashStageEnteringBootloader')
+        }
+        if (normalizedStage === 'syncing') {
+            return this._t('messages.espFlashStageSyncing')
+        }
+        if (normalizedStage === 'detectingChip') {
+            return this._t('messages.espFlashStageDetectingChip')
+        }
+        if (normalizedStage === 'writingFirmware') {
+            return this._t('messages.espFlashStageWriting')
+        }
+        if (normalizedStage === 'finalizing') {
+            return this._t('messages.espFlashStageFinalizing')
+        }
+        if (normalizedStage === 'recoveringSerialTimeout') {
+            return this._t('messages.espFlashRecoveringTimeout')
+        }
+        if (normalizedStage === 'done') {
+            return this._t('messages.espFlashComplete')
+        }
+        return ''
+    }
+
+    /**
+     * Applies one installer-reported ESP flash stage to the status UI.
+     * @param {{ stage?: unknown }} update
+     */
+    _handleEspFlashStageUpdate(update) {
+        const normalizedStage = String(update?.stage || '').trim()
+        const message = this._formatEspFlashStageStatus(normalizedStage)
+        if (!message) {
+            return
+        }
+        this._setEspFlashStatus(message, normalizedStage === 'done' ? 'success' : 'loading')
+    }
+
+    /**
      * Formats one flashing failure into a localized status message.
      * @param {unknown} error
      * @returns {string}
@@ -792,13 +836,16 @@ export class AppControllerCoreControls {
         this._startEspFlashProgressUi()
         this._syncEspFlashInstallUi()
         this._syncConnectionUi()
-        this._setEspFlashStatus(this._t('messages.espFlashWaitingForBootloader'), 'loading')
+        this._handleEspFlashStageUpdate({ stage: 'enteringBootloader' })
         const installMode = this.espFlashRetryWithoutResetPending ? 'no_reset' : 'default_reset'
 
         try {
             await this.espFirmwareInstaller.install({
                 manifestUrl,
                 mode: installMode,
+                onStage: (update) => {
+                    this._handleEspFlashStageUpdate(update)
+                },
                 onProgress: ({ partIndex, partCount, percent, overallPercent }) => {
                     const normalizedOverallPercent = Math.max(
                         0,
