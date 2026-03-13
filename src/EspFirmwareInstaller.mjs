@@ -5,6 +5,12 @@ const ESP_ROM_BAUD_RATE = 115200
 const ESP32_CHIP_FAMILY = 'ESP32'
 const CLASSIC_RESET_INITIAL_DELAY_MS = 100
 const MANUAL_BOOT_RETRY_PATTERN = /wrong boot mode detected|download mode successfully detected|download mode/i
+const SYNC_COMMAND_OPCODE = 0x08
+const SYNC_COMMAND_TIMEOUT_MS = 100
+const SYNC_FOLLOW_UP_REPLY_COUNT = 7
+const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 6
+const SYNC_RECOVERABLE_ERROR_PATTERN =
+    /read timeout exceeded|no serial data received|invalid response|serial data stream stopped|packet content transfer stopped/i
 const DEFAULT_FLASH_OPTIONS = Object.freeze({
     compress: true,
     eraseAll: false,
@@ -369,6 +375,7 @@ export class EspFirmwareInstaller {
             enableTracing: false,
             resetConstructors: this.#resolveResetConstructors()
         })
+        this.#installSyncCompatibilityWrapper(loader)
         let connectFailureMessage = ''
         const originalConnectAttempt =
             loader && typeof loader._connectAttempt === 'function' ? loader._connectAttempt.bind(loader) : null
@@ -407,6 +414,58 @@ export class EspFirmwareInstaller {
             if (typeof transport?.disconnect === 'function') {
                 await transport.disconnect().catch(() => {})
             }
+        }
+    }
+
+    /**
+     * Wraps sync to tolerate one missing trailing ROM reply after valid sync packets arrive.
+     * @param {Record<string, unknown>} loader
+     */
+    #installSyncCompatibilityWrapper(loader) {
+        if (!loader || typeof loader.sync !== 'function' || typeof loader.command !== 'function') {
+            return
+        }
+
+        const syncPacket = new Uint8Array(36)
+        syncPacket[0] = 0x07
+        syncPacket[1] = 0x07
+        syncPacket[2] = 0x12
+        syncPacket[3] = 0x20
+        syncPacket.fill(0x55, 4)
+
+        loader.sync = async () => {
+            if (typeof loader.debug === 'function') {
+                loader.debug('Sync')
+            }
+
+            let response = await loader.command(SYNC_COMMAND_OPCODE, syncPacket, undefined, undefined, SYNC_COMMAND_TIMEOUT_MS)
+            loader.syncStubDetected = response[0] === 0
+
+            for (
+                let completedFollowUpReplies = 0;
+                completedFollowUpReplies < SYNC_FOLLOW_UP_REPLY_COUNT;
+                completedFollowUpReplies += 1
+            ) {
+                try {
+                    response = await loader.command()
+                    loader.syncStubDetected = loader.syncStubDetected && response[0] === 0
+                } catch (error) {
+                    if (
+                        completedFollowUpReplies >= MIN_SYNC_FOLLOW_UP_REPLY_COUNT &&
+                        this.#isRecoverableSyncError(error)
+                    ) {
+                        if (typeof loader.debug === 'function') {
+                            loader.debug(
+                                `Sync tolerated missing trailing reply after ${completedFollowUpReplies} follow-up packets`
+                            )
+                        }
+                        return response
+                    }
+                    throw error
+                }
+            }
+
+            return response
         }
     }
 
@@ -516,6 +575,15 @@ export class EspFirmwareInstaller {
      */
     #shouldOfferManualBootRetry(error) {
         return MANUAL_BOOT_RETRY_PATTERN.test(normalizeString(error?.message || error))
+    }
+
+    /**
+     * Returns true when one sync failure can be treated as a missing trailing ROM reply.
+     * @param {unknown} error
+     * @returns {boolean}
+     */
+    #isRecoverableSyncError(error) {
+        return SYNC_RECOVERABLE_ERROR_PATTERN.test(normalizeString(error?.message || error))
     }
 
     /**
