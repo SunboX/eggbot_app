@@ -3,6 +3,11 @@ import { EggBotPathWorkerClient } from './EggBotPathWorkerClient.mjs'
 
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
 const RECONNECT_ON_LOAD_STORAGE_KEY = 'eggbot.serial.reconnectOnLoad.v1'
+const RUNTIME_SIGNAL_SETTLE_DELAY_MS = 150
+const RUNTIME_READY_PROBE_ATTEMPTS = 5
+const RUNTIME_READY_PROBE_TIMEOUT_MS = 350
+const RUNTIME_READY_RETRY_DELAY_MS = 150
+const VERSION_RESPONSE_TOKEN_PATTERN = /(EBB|EiBotBoard|Eggduino|Firmware)/i
 
 /**
  * Web Serial bridge for EggBot EBB command streaming.
@@ -29,6 +34,8 @@ export class EggBotSerial {
         this.abortDrawing = false
         this.pathWorker = new EggBotPathWorkerClient()
         this.disablePathWorker = false
+        this.buttonQuerySupported = true
+        this.buttonQueryWarningShown = false
     }
 
     /**
@@ -222,7 +229,8 @@ export class EggBotSerial {
                 this.#startReadLoop()
             }
 
-            const version = await this.#probeVersion()
+            await this.#stabilizeRuntimeSignals()
+            const version = await this.#awaitReadyVersion()
             this.#savePortHint(this.port)
             this.#persistReconnectOnLoad(true)
             return version
@@ -239,7 +247,11 @@ export class EggBotSerial {
      */
     async queryVersion(options = {}) {
         const timeoutMs = Number(options.timeoutMs) || 1500
-        const versionLine = await this.sendCommand('v', { expectResponse: true, timeoutMs })
+        const versionLine = await this.sendCommand('v', {
+            expectResponse: true,
+            timeoutMs,
+            responseLineFilter: EggBotSerial.#isVersionResponseLine
+        })
         return EggBotSerial.#normalizeVersionLine(versionLine) || 'Connected'
     }
 
@@ -295,13 +307,38 @@ export class EggBotSerial {
         let normalized = EggBotSerial.#sanitizeResponseLine(line)
         if (!normalized) return ''
 
-        const versionTokenMatch = /(EBB|EiBotBoard|Eggduino|Firmware)/i.exec(normalized)
+        const versionTokenMatch = VERSION_RESPONSE_TOKEN_PATTERN.exec(normalized)
         if (versionTokenMatch?.index && versionTokenMatch.index > 0) {
             // Serial adapters occasionally prepend boot/noise text before the actual firmware token.
             normalized = normalized.slice(versionTokenMatch.index)
         }
         normalized = normalized.replace(/\s+/g, ' ').trim()
         return normalized
+    }
+
+    /**
+     * Returns true when one line looks like an EggBot firmware version reply.
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    static #isVersionResponseLine(value) {
+        return VERSION_RESPONSE_TOKEN_PATTERN.test(EggBotSerial.#sanitizeResponseLine(value))
+    }
+
+    /**
+     * Waits for one timer duration using the available host timer API.
+     * @param {number} durationMs
+     * @returns {Promise<void>}
+     */
+    static #sleep(durationMs) {
+        const waitDurationMs = Math.max(0, Math.round(Number(durationMs) || 0))
+        return new Promise((resolve) => {
+            const scheduleTimer =
+                typeof globalThis.window?.setTimeout === 'function'
+                    ? globalThis.window.setTimeout.bind(globalThis.window)
+                    : globalThis.setTimeout.bind(globalThis)
+            scheduleTimer(resolve, waitDurationMs)
+        })
     }
 
     /**
@@ -355,6 +392,53 @@ export class EggBotSerial {
         this.pendingLineResolvers = []
         this.readLoopActive = false
         this.readLoopAbort = false
+        this.buttonQuerySupported = true
+        this.buttonQueryWarningShown = false
+    }
+
+    /**
+     * Releases runtime DTR/RTS lines so the ESP32 can leave reset/bootloader mode.
+     * @returns {Promise<void>}
+     */
+    async #stabilizeRuntimeSignals() {
+        if (typeof this.port?.setSignals !== 'function') {
+            return
+        }
+
+        try {
+            await this.port.setSignals({
+                dataTerminalReady: false,
+                requestToSend: false
+            })
+            await EggBotSerial.#sleep(RUNTIME_SIGNAL_SETTLE_DELAY_MS)
+        } catch (_error) {
+            // Ignore signal-control failures and fall back to version retries.
+        }
+    }
+
+    /**
+     * Waits for one real EggBot runtime version response before draw-time use.
+     * @returns {Promise<string>}
+     */
+    async #awaitReadyVersion() {
+        let lastError = null
+
+        for (let attemptIndex = 0; attemptIndex < RUNTIME_READY_PROBE_ATTEMPTS; attemptIndex += 1) {
+            try {
+                return await this.queryVersion({ timeoutMs: RUNTIME_READY_PROBE_TIMEOUT_MS })
+            } catch (error) {
+                lastError = error
+                if (attemptIndex >= RUNTIME_READY_PROBE_ATTEMPTS - 1) {
+                    break
+                }
+                await EggBotSerial.#sleep(RUNTIME_READY_RETRY_DELAY_MS)
+            }
+        }
+
+        const detail = String(lastError?.message || 'Timed out waiting for EBB response.')
+        throw new Error(
+            `Failed to detect EggBot runtime on the selected serial port. The ESP32 may still be rebooting or stuck in bootloader mode. ${detail}`
+        )
     }
 
     /**
@@ -621,7 +705,7 @@ export class EggBotSerial {
                         total,
                         this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
                     )
-                })
+                }, onStatus)
                 if (this.abortDrawing) break
 
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: pen down`)
@@ -643,7 +727,7 @@ export class EggBotSerial {
                             total,
                             this.#buildProgressDetail(strokeIndex, total, completedMs, estimatedTotalMs, progressStartedAtMs)
                         )
-                    })
+                    }, onStatus)
                 }
 
                 if (await setPenState(false)) {
@@ -665,7 +749,7 @@ export class EggBotSerial {
                         total,
                         this.#buildProgressDetail(total, total, completedMs, estimatedTotalMs, progressStartedAtMs)
                     )
-                })
+                }, onStatus)
             }
 
             if (!this.abortDrawing) {
@@ -943,6 +1027,51 @@ export class EggBotSerial {
     }
 
     /**
+     * Returns true when one button-query error should not stop drawing.
+     * @param {unknown} error
+     * @returns {boolean}
+     */
+    #isRecoverableButtonQueryError(error) {
+        const message = String(error?.message || '')
+        return /timed out waiting for ebb response/i.test(message)
+    }
+
+    /**
+     * Queries one optional button-state response and falls back when unavailable.
+     * @param {number} timeoutMs
+     * @param {(text: string) => void} [onStatus]
+     * @returns {Promise<number | null>}
+     */
+    async #queryButtonState(timeoutMs, onStatus) {
+        if (!this.buttonQuerySupported) {
+            return null
+        }
+
+        try {
+            const buttonStateLine = await this.sendCommand('QB', {
+                expectResponse: true,
+                timeoutMs,
+                responseLineFilter: EggBotSerial.#isPlainUnsignedIntegerLine
+            })
+            return EggBotSerial.#parsePlainUnsignedIntegerLine(buttonStateLine)
+        } catch (error) {
+            if (!this.#isRecoverableButtonQueryError(error)) {
+                throw error
+            }
+
+            this.buttonQuerySupported = false
+            if (!this.buttonQueryWarningShown) {
+                this.buttonQueryWarningShown = true
+                console.warn('EggBot QB polling unavailable; continuing draw without pause-button checks.', error)
+                if (typeof onStatus === 'function') {
+                    onStatus('Pause-button checks unavailable; continuing draw.')
+                }
+            }
+            return null
+        }
+    }
+
+    /**
      * Estimates total draw duration for prepared strokes.
      * @param {Array<Array<{x:number,y:number}>>} drawableStrokes
      * @param {{ penUpSpeed: number, penDownSpeed: number, penMotorSpeed: number, eggMotorSpeed: number, penRaiseDelayMs: number, penLowerDelayMs: number, returnHome: boolean }} cfg
@@ -1016,9 +1145,10 @@ export class EggBotSerial {
      * @param {number} speedStepsPerSecond
      * @param {{ reversePenMotor: boolean, reverseEggMotor: boolean }} cfg
      * @param {(durationMs: number) => void} [onChunkComplete]
+     * @param {(text: string) => void} [onStatus]
      * @returns {Promise<void>}
      */
-    async #moveTo(target, current, speedStepsPerSecond, cfg, onChunkComplete) {
+    async #moveTo(target, current, speedStepsPerSecond, cfg, onChunkComplete, onStatus) {
         const dx = Math.round(target.x - current.x)
         const dy = Math.round(target.y - current.y)
         if (dx === 0 && dy === 0) return
@@ -1031,14 +1161,9 @@ export class EggBotSerial {
         const axis2Egg = cfg.reverseEggMotor ? -dx : dx
 
         await this.sendCommand(`SM,${durationMs},${axis1Pen},${axis2Egg}`)
-        const buttonStateLine = await this.sendCommand('QB', {
-            expectResponse: true,
-            timeoutMs: 5000,
-            responseLineFilter: EggBotSerial.#isPlainUnsignedIntegerLine
-        })
-        const buttonState = EggBotSerial.#parsePlainUnsignedIntegerLine(buttonStateLine)
+        const buttonState = await this.#queryButtonState(Math.max(5000, durationMs + 1500), onStatus)
         // EBB/EggDuino reports input states as bit flags. Bit 0 represents the PRG/pause button.
-        if ((buttonState & 1) === 1) {
+        if (buttonState !== null && (buttonState & 1) === 1) {
             this.abortDrawing = true
         }
 
