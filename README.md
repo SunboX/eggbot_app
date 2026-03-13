@@ -59,7 +59,7 @@ Open [http://localhost:3000/](http://localhost:3000/).
 ## WebMCP Notes
 
 - The frontend exposes app functionality through `navigator.modelContext` tools.
-- Runtime is native-first with `@mcp-b/global` fallback bridge loaded from `/node_modules/@mcp-b/global/dist/index.iife.js`.
+- Runtime is native-first; the `@mcp-b/global` fallback bridge now loads only when the URL includes `?webmcp=1`.
 - Bridge transport is enabled with wildcard origins (`allowedOrigins: ['*']`).
 - Dangerous actions (`serial connect/disconnect/draw/stop`, local delete) require `confirm: true`.
 - Content-based tools are provided for project JSON, share URL, and SVG export (no file-picker requirement).

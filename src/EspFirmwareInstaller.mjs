@@ -5,10 +5,14 @@ const ESP_ROM_BAUD_RATE = 115200
 const ESP32_CHIP_FAMILY = 'ESP32'
 const CLASSIC_RESET_INITIAL_DELAY_MS = 100
 const MANUAL_BOOT_RETRY_PATTERN = /wrong boot mode detected|download mode successfully detected|download mode/i
+const NORMAL_FIRMWARE_BOOT_TRACE_PATTERN = /boot:0x13|spi_fast_flash_boot/i
+const NORMAL_FIRMWARE_APP_TRACE_PATTERN = /ap aktiv:|https?:\/\/192\.168\.4\.1/i
+const WRONG_BOOT_MODE_TRACE_MESSAGE = 'Wrong boot mode detected (0x13). This chip needs to be in download mode.'
 const SYNC_COMMAND_OPCODE = 0x08
-const SYNC_COMMAND_TIMEOUT_MS = 100
+const SYNC_COMMAND_TIMEOUT_MS = 2000
 const SYNC_FOLLOW_UP_REPLY_COUNT = 7
-const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 6
+const MIN_SYNC_FOLLOW_UP_REPLY_COUNT = 3
+const MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES = 2
 const SYNC_RECOVERABLE_ERROR_PATTERN =
     /read timeout exceeded|no serial data received|invalid response|serial data stream stopped|packet content transfer stopped/i
 const CHIP_MAGIC_READ_RETRY_COUNT = 2
@@ -61,6 +65,26 @@ function encodeFirmwareBytes(bytes) {
  */
 function isWindowsUserAgent(userAgent) {
     return /windows/i.test(normalizeString(userAgent))
+}
+
+/**
+ * Returns true when the current user agent is macOS.
+ * @param {string} userAgent
+ * @returns {boolean}
+ */
+function isMacUserAgent(userAgent) {
+    return /macintosh|mac os x/i.test(normalizeString(userAgent))
+}
+
+/**
+ * Returns true when the platform should use the boot-log-tolerant transport.
+ * Windows USB serial adapters rely on the custom framing behavior; macOS should
+ * stay on the stock esptool-js transport to match the pre-regression flashing path.
+ * @param {string} userAgent
+ * @returns {boolean}
+ */
+function shouldUseBootLogTolerantTransport(userAgent) {
+    return isWindowsUserAgent(userAgent)
 }
 
 /**
@@ -284,6 +308,19 @@ class EspLoaderTerminalBridge {
 }
 
 /**
+ * Creates the preferred serial transport for the current platform.
+ * @param {SerialPort} port
+ * @param {string} userAgent
+ * @returns {Transport}
+ */
+function createPlatformTransport(port, userAgent) {
+    if (shouldUseBootLogTolerantTransport(userAgent)) {
+        return new EspInstallerTransport(port)
+    }
+    return new Transport(port)
+}
+
+/**
  * Flashes ESP32 firmware packages through Web Serial using esptool-js.
  */
 export class EspFirmwareInstaller {
@@ -302,11 +339,13 @@ export class EspFirmwareInstaller {
         this.portRequester = typeof options.portRequester === 'function' ? options.portRequester : null
         this.promptManualBootRetry =
             typeof options.promptManualBootRetry === 'function' ? options.promptManualBootRetry : null
+        this.userAgent = normalizeString(options.userAgent) || EspFirmwareInstaller.#resolveUserAgent()
         this.transportFactory =
-            typeof options.transportFactory === 'function' ? options.transportFactory : (port) => new EspInstallerTransport(port)
+            typeof options.transportFactory === 'function'
+                ? options.transportFactory
+                : (port) => createPlatformTransport(port, this.userAgent)
         this.loaderFactory =
             typeof options.loaderFactory === 'function' ? options.loaderFactory : (loaderOptions) => new ESPLoader(loaderOptions)
-        this.userAgent = normalizeString(options.userAgent) || EspFirmwareInstaller.#resolveUserAgent()
     }
 
     /**
@@ -322,6 +361,7 @@ export class EspFirmwareInstaller {
      * Requests one serial port, loads the firmware package, and flashes it.
      * @param {{
      *   manifestUrl: string,
+     *   mode?: string,
      *   onLog?: (message: string) => void,
      *   onProgress?: (update: {
      *     partIndex: number,
@@ -348,16 +388,20 @@ export class EspFirmwareInstaller {
         const fileArray = await this.#loadFirmwareFiles(build.parts, manifestUrl)
         const promptManualBootRetry =
             typeof options?.promptManualBootRetry === 'function' ? options.promptManualBootRetry : this.promptManualBootRetry
+        const initialMode = normalizeString(options?.mode) || 'default_reset'
 
         try {
             await this.#runInstallAttempt({
                 fileArray,
-                mode: 'default_reset',
+                mode: initialMode,
                 onLog: options?.onLog,
                 onProgress: options?.onProgress,
                 port
             })
         } catch (error) {
+            if (initialMode === 'no_reset') {
+                throw error
+            }
             if (!this.#shouldOfferManualBootRetry(error) || typeof promptManualBootRetry !== 'function') {
                 throw error
             }
@@ -414,18 +458,35 @@ export class EspFirmwareInstaller {
             enableTracing: false,
             resetConstructors: this.#resolveResetConstructors()
         })
-        this.#installSyncCompatibilityWrapper(loader)
-        this.#installChipMagicReadCompatibilityWrapper(loader)
+        const shouldUseCompatibilityWrappers = this.#shouldUseCompatibilityWrappers()
+        if (shouldUseCompatibilityWrappers) {
+            this.#installSyncCompatibilityWrapper(loader)
+            this.#installChipMagicReadCompatibilityWrapper(loader)
+        }
         let connectFailureMessage = ''
         const originalConnectAttempt =
             loader && typeof loader._connectAttempt === 'function' ? loader._connectAttempt.bind(loader) : null
-        if (originalConnectAttempt) {
+        if (shouldUseCompatibilityWrappers && originalConnectAttempt) {
             loader._connectAttempt = async (...args) => {
-                const response = await originalConnectAttempt(...args)
-                if (response !== 'success') {
-                    connectFailureMessage = normalizeString(response) || connectFailureMessage
+                try {
+                    const response = await originalConnectAttempt(...args)
+                    if (response !== 'success') {
+                        connectFailureMessage = normalizeString(response) || connectFailureMessage
+                        const inferredTraceFailure = this.#inferConnectFailureFromTraceLog(transport?.traceLog)
+                        if (inferredTraceFailure) {
+                            connectFailureMessage = inferredTraceFailure
+                            throw new Error(inferredTraceFailure)
+                        }
+                    }
+                    return response
+                } catch (error) {
+                    const inferredTraceFailure = this.#inferConnectFailureFromTraceLog(transport?.traceLog)
+                    if (inferredTraceFailure) {
+                        connectFailureMessage = inferredTraceFailure
+                        throw new Error(inferredTraceFailure)
+                    }
+                    throw error
                 }
-                return response
             }
         }
 
@@ -465,7 +526,16 @@ export class EspFirmwareInstaller {
     }
 
     /**
-     * Wraps sync to tolerate one missing trailing ROM reply after valid sync packets arrive.
+     * Returns true when platform-specific loader compatibility wrappers should be enabled.
+     * macOS stays on the stock loader path to preserve the previously working flashing flow.
+     * @returns {boolean}
+     */
+    #shouldUseCompatibilityWrappers() {
+        return !isMacUserAgent(this.userAgent)
+    }
+
+    /**
+     * Wraps sync to tolerate delayed or missing ROM follow-up replies after valid sync packets arrive.
      * @param {Record<string, unknown>} loader
      */
     #installSyncCompatibilityWrapper(loader) {
@@ -487,32 +557,102 @@ export class EspFirmwareInstaller {
 
             let response = await loader.command(SYNC_COMMAND_OPCODE, syncPacket, undefined, undefined, SYNC_COMMAND_TIMEOUT_MS)
             loader.syncStubDetected = response[0] === 0
+            let completedFollowUpReplies = 0
+            let intermediateIdleGapRetries = 0
 
-            for (
-                let completedFollowUpReplies = 0;
-                completedFollowUpReplies < SYNC_FOLLOW_UP_REPLY_COUNT;
-                completedFollowUpReplies += 1
-            ) {
+            while (completedFollowUpReplies < SYNC_FOLLOW_UP_REPLY_COUNT) {
                 try {
                     response = await loader.command()
                     loader.syncStubDetected = loader.syncStubDetected && response[0] === 0
+                    completedFollowUpReplies += 1
+                    intermediateIdleGapRetries = 0
                 } catch (error) {
-                    if (
-                        completedFollowUpReplies >= MIN_SYNC_FOLLOW_UP_REPLY_COUNT &&
-                        this.#isRecoverableSyncError(error)
-                    ) {
+                    if (!this.#isRecoverableSyncError(error)) {
+                        throw error
+                    }
+
+                    if (completedFollowUpReplies >= MIN_SYNC_FOLLOW_UP_REPLY_COUNT) {
                         if (typeof loader.debug === 'function') {
-                            loader.debug(
-                                `Sync tolerated missing trailing reply after ${completedFollowUpReplies} follow-up packets`
-                            )
+                            loader.debug(`Sync tolerated missing trailing reply after ${completedFollowUpReplies} follow-up packets`)
                         }
+                        await this.#flushSyncInput(loader)
                         return response
                     }
-                    throw error
+
+                    if (intermediateIdleGapRetries >= MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES) {
+                        throw error
+                    }
+
+                    intermediateIdleGapRetries += 1
+                    if (typeof loader.debug === 'function') {
+                        loader.debug(
+                            `Sync tolerated delayed follow-up gap ${intermediateIdleGapRetries}/${MAX_SYNC_INTERMEDIATE_IDLE_GAP_RETRIES} after ${completedFollowUpReplies} follow-up packets`
+                        )
+                    }
                 }
             }
 
+            await this.#flushSyncInput(loader)
             return response
+        }
+    }
+
+    /**
+     * Clears any queued sync replies before the next command starts waiting for a different opcode.
+     * @param {Record<string, unknown>} loader
+     * @returns {Promise<void>}
+     */
+    async #flushSyncInput(loader) {
+        const transport = loader?.transport
+        if (!transport) {
+            return
+        }
+
+        if ('buffer' in transport) {
+            try {
+                transport.buffer = new Uint8Array(0)
+            } catch (_error) {
+                // Ignore transports that do not expose a writable buffer.
+            }
+        }
+
+        const reader = transport.reader
+        const readable = transport.device?.readable
+        if (
+            reader &&
+            typeof reader.cancel === 'function' &&
+            typeof reader.releaseLock === 'function' &&
+            readable &&
+            typeof readable.getReader === 'function'
+        ) {
+            try {
+                await reader.cancel()
+            } catch (_error) {
+                // Ignore reader cancel races and continue rebuilding the reader lock.
+            }
+
+            try {
+                reader.releaseLock()
+            } catch (_error) {
+                // Ignore already-released reader locks.
+            }
+
+            try {
+                transport.reader = readable.getReader()
+            } catch (_error) {
+                // Ignore reader reinitialization failures and let the next command recover.
+            }
+            return
+        }
+
+        if (typeof transport.flushInput !== 'function') {
+            return
+        }
+
+        try {
+            await transport.flushInput()
+        } catch (_error) {
+            // Ignore transport flush races and let the next command decide if recovery is needed.
         }
     }
 
@@ -658,6 +798,27 @@ export class EspFirmwareInstaller {
             return error
         }
         return new Error(normalizedErrorMessage || 'ESP firmware flashing failed.')
+    }
+
+    /**
+     * Infers one clearer connect failure from accumulated transport trace output.
+     * @param {unknown} traceLog
+     * @returns {string}
+     */
+    #inferConnectFailureFromTraceLog(traceLog) {
+        const normalizedTraceLog = normalizeString(traceLog)
+        if (!normalizedTraceLog) {
+            return ''
+        }
+
+        if (
+            NORMAL_FIRMWARE_BOOT_TRACE_PATTERN.test(normalizedTraceLog) ||
+            NORMAL_FIRMWARE_APP_TRACE_PATTERN.test(normalizedTraceLog)
+        ) {
+            return WRONG_BOOT_MODE_TRACE_MESSAGE
+        }
+
+        return ''
     }
 
     /**

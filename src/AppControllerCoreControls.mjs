@@ -102,6 +102,7 @@ export class AppControllerCoreControls {
         this.espFirmwareInstaller = new EspFirmwareInstaller()
         this.isEspFlashing = false
         this.espFlashBootHintVisible = false
+        this.espFlashRetryWithoutResetPending = false
         this.espFlashManifestMeta = null
         this.espFlashManifestLoadPromise = null
         this.espFlashManifestLoadFailed = false
@@ -791,18 +792,13 @@ export class AppControllerCoreControls {
         this._startEspFlashProgressUi()
         this._syncEspFlashInstallUi()
         this._syncConnectionUi()
-        this._setEspFlashStatus(this._t('messages.espFlashPreparing'), 'loading')
+        this._setEspFlashStatus(this._t('messages.espFlashWaitingForBootloader'), 'loading')
+        const installMode = this.espFlashRetryWithoutResetPending ? 'no_reset' : 'default_reset'
 
         try {
             await this.espFirmwareInstaller.install({
                 manifestUrl,
-                promptManualBootRetry: async (error) => {
-                    return window.confirm(
-                        this._t('messages.espFlashManualBootRetryConfirm', {
-                            message: String(error?.message || error || '')
-                        })
-                    )
-                },
+                mode: installMode,
                 onProgress: ({ partIndex, partCount, percent, overallPercent }) => {
                     const normalizedOverallPercent = Math.max(
                         0,
@@ -825,14 +821,17 @@ export class AppControllerCoreControls {
                 }
             })
             this._updateEspFlashProgressUi(1, 0)
+            this.espFlashRetryWithoutResetPending = false
             this.espFlashBootHintVisible = false
             this._setEspFlashStatus(this._t('messages.espFlashComplete'), 'success')
         } catch (error) {
             if (error?.name === 'AbortError' || error?.name === 'NotFoundError') {
+                this.espFlashRetryWithoutResetPending = false
                 this.espFlashBootHintVisible = false
                 this._setEspFlashStatus(this._t('messages.espFlashCanceled'), 'info')
             } else {
-                this.espFlashBootHintVisible = this._shouldShowEspFlashBootHint(error)
+                this.espFlashRetryWithoutResetPending = this._shouldShowEspFlashBootHint(error)
+                this.espFlashBootHintVisible = this.espFlashRetryWithoutResetPending
                 this._setEspFlashStatus(this._formatEspFlashFailedStatusMessage(error), 'error')
             }
         } finally {

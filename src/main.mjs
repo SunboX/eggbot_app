@@ -1,6 +1,7 @@
 import { AppController } from './AppController.mjs'
 import { AppVersion } from './AppVersion.mjs'
 import { I18n } from './I18n.mjs'
+import { WebModelContextBootstrap } from './WebModelContextBootstrap.mjs'
 
 const i18n = new I18n({
     storageKey: 'eggbot_app_locale'
@@ -13,6 +14,7 @@ async function startApp() {
     await AppVersion.loadFromPackageJson()
     await i18n.init()
     i18n.applyTranslations(document)
+    await WebModelContextBootstrap.ensure()
     const app = new AppController(i18n)
     await app.init()
 }
@@ -27,6 +29,5 @@ startApp().catch((error) => {
             : translated
     statusElement.dataset.type = 'error'
 })
-
 
 
