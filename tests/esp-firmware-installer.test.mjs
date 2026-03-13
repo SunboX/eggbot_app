@@ -73,3 +73,87 @@ test('EspInstallerTransport should ignore boot log noise before the first SLIP p
     assert.equal(firstPacket.done, false)
     assert.deepEqual(Array.from(firstPacket.value), [0x01, 0x02])
 })
+
+test('EspFirmwareInstaller should retry without reset after wrong boot mode when manual boot is confirmed', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
+    const requestedPorts = []
+    const disconnectCalls = []
+    const loaderModes = []
+    const promptCalls = []
+    let loaderAttempt = 0
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [{ path: 'firmware.bin', offset: 65536 }]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([0xe9, 0, 0, 0]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            const port = { id: requestedPorts.length + 1 }
+            requestedPorts.push(port)
+            return port
+        },
+        transportFactory(port) {
+            return {
+                port,
+                async disconnect() {
+                    disconnectCalls.push(port.id)
+                }
+            }
+        },
+        loaderFactory() {
+            loaderAttempt += 1
+            return {
+                async _connectAttempt(mode) {
+                    loaderModes.push(`${mode}:connect`)
+                    if (loaderAttempt === 1) {
+                        return 'Wrong boot mode detected (0x13). This chip needs to be in download mode.'
+                    }
+                    return 'success'
+                },
+                async main(mode) {
+                    loaderModes.push(mode)
+                    if (loaderAttempt === 1) {
+                        await this._connectAttempt(mode)
+                        throw new Error('Failed to connect with the device')
+                    }
+                },
+                async writeFlash() {},
+                async after() {}
+            }
+        },
+        async promptManualBootRetry(error) {
+            promptCalls.push(error.message)
+            return true
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json'
+    })
+
+    assert.deepEqual(loaderModes, ['default_reset', 'default_reset:connect', 'no_reset'])
+    assert.deepEqual(requestedPorts.map((port) => port.id), [1])
+    assert.deepEqual(disconnectCalls, [1, 1])
+    assert.equal(promptCalls.length, 1)
+    assert.match(promptCalls[0], /Wrong boot mode detected/)
+})

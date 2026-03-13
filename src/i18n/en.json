@@ -254,6 +254,7 @@
         "espFlashUnsupported": "ESP32 flashing requires a Chromium-based browser with Web Serial support.",
         "espFlashFailed": "ESP32 flashing failed: {{message}}",
         "espFlashConnectFailed": "ESP32 flashing failed: {{message}} If the board keeps starting normal firmware, hold BOOT while clicking Flash.",
+        "espFlashManualBootRetryConfirm": "Automatic bootloader entry failed.\n\nError: {{message}}\n\nTo retry manually:\n1. Hold BOOT.\n2. Tap RESET or EN once if your board has it.\n3. Keep BOOT held until you click OK.\n\nClick OK to retry without auto-reset, or Cancel to stop.",
         "drawingProgress": "Drawing in progress: stroke {{done}}/{{total}}",
         "drawingRemainingPercent": "Remaining: {{percent}}%",
         "drawingRemainingTime": "Remaining time: {{time}}",
