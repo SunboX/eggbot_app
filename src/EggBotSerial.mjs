@@ -297,10 +297,8 @@ export class EggBotSerial {
 
         const versionTokenMatch = /(EBB|EiBotBoard|Eggduino|Firmware)/i.exec(normalized)
         if (versionTokenMatch?.index && versionTokenMatch.index > 0) {
-            const prefix = normalized.slice(0, versionTokenMatch.index)
-            if (/^[^A-Za-z0-9]*$/.test(prefix)) {
-                normalized = normalized.slice(versionTokenMatch.index)
-            }
+            // Serial adapters occasionally prepend boot/noise text before the actual firmware token.
+            normalized = normalized.slice(versionTokenMatch.index)
         }
         normalized = normalized.replace(/\s+/g, ' ').trim()
         return normalized
