@@ -429,6 +429,9 @@ export class AppControllerCoreControls {
      * @param {'info' | 'success' | 'error' | 'loading'} [type='info']
      */
     _setEspFlashDialogStatus(text, type = 'info') {
+        if (!this.els.espFlashStatus) {
+            return
+        }
         this.els.espFlashStatus.removeAttribute('data-i18n')
         this.els.espFlashStatus.textContent = text
         this.els.espFlashStatus.dataset.type = type
@@ -621,7 +624,9 @@ export class AppControllerCoreControls {
     _startEspFlashProgressUi() {
         this.espFlashProgressStartedAtMs = Date.now()
         this.espFlashProgressSmoother.reset()
-        this.els.espFlashProgress.hidden = false
+        if (this.els.espFlashProgress) {
+            this.els.espFlashProgress.hidden = false
+        }
         this._updateEspFlashProgressUi(0, null)
     }
 
@@ -631,6 +636,15 @@ export class AppControllerCoreControls {
     _resetEspFlashProgressUi() {
         this.espFlashProgressStartedAtMs = 0
         this.espFlashProgressSmoother.reset()
+        if (
+            !this.els.espFlashProgress ||
+            !this.els.espFlashProgressFill ||
+            !this.els.espFlashProgressTrack ||
+            !this.els.espFlashProgressPercent ||
+            !this.els.espFlashProgressTime
+        ) {
+            return
+        }
         this.els.espFlashProgress.hidden = true
         this.els.espFlashProgressFill.style.width = '0%'
         this.els.espFlashProgressTrack.setAttribute('aria-valuenow', '0')
@@ -654,6 +668,14 @@ export class AppControllerCoreControls {
                 ? this._estimateEspFlashRemainingMsFromRatio(normalizedCompletedRatio)
                 : normalizedRemainingMsFromDetail
         const normalizedRemainingMs = this.espFlashProgressSmoother.update(rawRemainingMs)
+        if (
+            !this.els.espFlashProgressFill ||
+            !this.els.espFlashProgressTrack ||
+            !this.els.espFlashProgressPercent ||
+            !this.els.espFlashProgressTime
+        ) {
+            return
+        }
 
         this.els.espFlashProgressFill.style.width = `${completedPercent}%`
         this.els.espFlashProgressTrack.setAttribute('aria-valuenow', String(completedPercent))
