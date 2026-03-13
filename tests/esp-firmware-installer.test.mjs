@@ -135,6 +135,60 @@ test('EspInstallerTransport should ignore duplicate SLIP delimiters after boot n
     assert.deepEqual(Array.from(firstPacket.value), [0x01, 0x08, 0x04, 0x00, 0x12, 0x20, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00])
 })
 
+test('EspInstallerTransport should accept a follow-up packet that starts without an extra SLIP delimiter', async () => {
+    const { EspInstallerTransport } = await importIsolatedInstallerModule()
+    const transport = new EspInstallerTransport({
+        getInfo() {
+            return {}
+        }
+    })
+
+    transport.trace = () => {}
+    transport.detectPanicHandler = () => {}
+    transport.buffer = new Uint8Array([
+        0xc0,
+        0x01,
+        0x08,
+        0x04,
+        0x00,
+        0x12,
+        0x20,
+        0x55,
+        0x55,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xc0,
+        0x01,
+        0x0a,
+        0x04,
+        0x00,
+        0x83,
+        0x1d,
+        0xf0,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xc0
+    ])
+    transport.inWaiting = () => transport.buffer.length
+    transport.newRead = async (count) => {
+        const output = transport.buffer.slice(0, count)
+        transport.buffer = transport.buffer.slice(count)
+        return output
+    }
+
+    const firstPacket = await transport.read(100).next()
+    const secondPacket = await transport.read(100).next()
+
+    assert.equal(firstPacket.done, false)
+    assert.deepEqual(Array.from(firstPacket.value), [0x01, 0x08, 0x04, 0x00, 0x12, 0x20, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00])
+    assert.equal(secondPacket.done, false)
+    assert.deepEqual(Array.from(secondPacket.value), [0x01, 0x0a, 0x04, 0x00, 0x83, 0x1d, 0xf0, 0x00, 0x00, 0x00, 0x00])
+})
+
 test('EspFirmwareInstaller should retry without reset after wrong boot mode when manual boot is confirmed', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     const requestedPorts = []
@@ -391,4 +445,80 @@ test('EspFirmwareInstaller should retry chip detection after one recoverable rea
     assert.equal(readRegCalls, 2)
     assert.equal(writeFlashCalls, 1)
     assert.equal(afterCalls, 1)
+})
+
+test('EspFirmwareInstaller should report overall flashing progress across all firmware parts', async () => {
+    const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
+    const progressUpdates = []
+
+    const installer = new EspFirmwareInstaller({
+        fetchImpl: async (url) => {
+            if (String(url).endsWith('/manifest.json')) {
+                return {
+                    ok: true,
+                    async json() {
+                        return {
+                            builds: [
+                                {
+                                    chipFamily: 'ESP32',
+                                    parts: [
+                                        { path: 'bootloader.bin', offset: 4096 },
+                                        { path: 'firmware.bin', offset: 65536 }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            if (String(url).endsWith('/bootloader.bin')) {
+                return {
+                    ok: true,
+                    async arrayBuffer() {
+                        return new Uint8Array([1, 2, 3, 4]).buffer
+                    }
+                }
+            }
+
+            return {
+                ok: true,
+                async arrayBuffer() {
+                    return new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).buffer
+                }
+            }
+        },
+        async portRequester() {
+            return { id: 1 }
+        },
+        transportFactory() {
+            return {
+                async disconnect() {}
+            }
+        },
+        loaderFactory() {
+            return {
+                async main() {},
+                async writeFlash(options) {
+                    options.reportProgress(0, 0, 2)
+                    options.reportProgress(0, 2, 2)
+                    options.reportProgress(1, 0, 6)
+                    options.reportProgress(1, 3, 6)
+                    options.reportProgress(1, 6, 6)
+                },
+                async after() {}
+            }
+        }
+    })
+
+    await installer.install({
+        manifestUrl: 'https://example.com/firmware/manifest.json',
+        onProgress: (update) => progressUpdates.push(update)
+    })
+
+    assert.deepEqual(
+        progressUpdates.map((update) => update.overallPercent),
+        [0, 25, 25, 63, 100]
+    )
+    assert.equal(progressUpdates[progressUpdates.length - 1]?.overallTotal, 16)
 })

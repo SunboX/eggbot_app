@@ -964,10 +964,36 @@
                         >
                             Flash ESP32 firmware
                         </button>
-                        <p class="eggbot-note" data-i18n="machine.flashDialog.browserNote">
+                        <p
+                            class="status eggbot-flash-status"
+                            data-esp-flash-status
+                            data-i18n="machine.flashDialog.statusReady"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            Ready to flash. Select the ESP32 port and start the installer.
+                        </p>
+                        <div class="draw-progress eggbot-flash-progress" data-esp-flash-progress hidden>
+                            <div
+                                class="draw-progress-track"
+                                data-esp-flash-progress-track
+                                role="progressbar"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="0"
+                                data-i18n-aria-label="machine.flashDialog.progressAria"
+                            >
+                                <div class="draw-progress-fill" data-esp-flash-progress-fill></div>
+                            </div>
+                            <div class="draw-progress-meta">
+                                <span class="draw-progress-remaining" data-esp-flash-progress-percent>Progress: 0%</span>
+                                <span class="draw-progress-time" data-esp-flash-progress-time>Remaining time: --:--</span>
+                            </div>
+                        </div>
+                        <p class="eggbot-note" data-esp-flash-browser-note data-i18n="machine.flashDialog.browserNote">
                             Requires a Chromium-based browser with Web Serial support.
                         </p>
-                        <p class="eggbot-note" data-i18n="machine.flashDialog.bootHint">
+                        <p class="eggbot-note" data-esp-flash-boot-hint data-i18n="machine.flashDialog.bootHint" hidden>
                             If the board keeps starting normal firmware, hold BOOT while clicking Flash.
                         </p>
                     </section>

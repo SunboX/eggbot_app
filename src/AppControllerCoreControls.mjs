@@ -88,6 +88,8 @@ export class AppControllerCoreControls {
         this.setupActionTogglePenDown = false
         this.drawProgressStartedAtMs = 0
         this.drawProgressSmoother = new DrawProgressSmoother()
+        this.espFlashProgressStartedAtMs = 0
+        this.espFlashProgressSmoother = new DrawProgressSmoother()
         this.drawTraceOverlayCanvas = null
         this.drawTraceCompositeCanvas = null
         this.drawTraceStrokes = []
@@ -99,6 +101,7 @@ export class AppControllerCoreControls {
         this.textureCanvasRenderSyncHandler = null
         this.espFirmwareInstaller = new EspFirmwareInstaller()
         this.isEspFlashing = false
+        this.espFlashBootHintVisible = false
         this.espFlashManifestMeta = null
         this.espFlashManifestLoadPromise = null
         this.espFlashManifestLoadFailed = false
@@ -154,6 +157,8 @@ export class AppControllerCoreControls {
         this._syncResumeUi()
         this._syncAutoGenerateOrnamentControlsUi()
         this._resetDrawProgressUi()
+        this._resetEspFlashProgressUi()
+        this._setEspFlashDialogStatus(this._t('machine.flashDialog.statusReady'))
         this._scheduleProjectArtifactsRefreshIdle()
     }
 
@@ -227,6 +232,8 @@ export class AppControllerCoreControls {
             : this._t('machine.flashDialog.flashButton')
         this.els.espFlashDialogClose.disabled = this.isEspFlashing
         this.els.espFlashDialogCloseIcon.disabled = this.isEspFlashing
+        this.els.espFlashBrowserNote.hidden = flashSupported
+        this.els.espFlashBootHint.hidden = !this.espFlashBootHintVisible
     }
 
     /**
@@ -412,6 +419,27 @@ export class AppControllerCoreControls {
     }
 
     /**
+     * Writes one status message inside the ESP flashing dialog.
+     * @param {string} text
+     * @param {'info' | 'success' | 'error' | 'loading'} [type='info']
+     */
+    _setEspFlashDialogStatus(text, type = 'info') {
+        this.els.espFlashStatus.removeAttribute('data-i18n')
+        this.els.espFlashStatus.textContent = text
+        this.els.espFlashStatus.dataset.type = type
+    }
+
+    /**
+     * Mirrors one flashing status to both the main status area and dialog.
+     * @param {string} text
+     * @param {'info' | 'success' | 'error' | 'loading'} [type='info']
+     */
+    _setEspFlashStatus(text, type = 'info') {
+        this._setStatus(text, type)
+        this._setEspFlashDialogStatus(text, type)
+    }
+
+    /**
      * Formats one flashing failure into a localized status message.
      * @param {unknown} error
      * @returns {string}
@@ -425,6 +453,18 @@ export class AppControllerCoreControls {
             return this._t('messages.espFlashConnectFailed', { message: reason })
         }
         return this._t('messages.espFlashFailed', { message: reason })
+    }
+
+    /**
+     * Returns true when the manual BOOT hint should be shown for one flash error.
+     * @param {unknown} error
+     * @returns {boolean}
+     */
+    _shouldShowEspFlashBootHint(error) {
+        const reason = String(error?.message || error || '').trim()
+        return /wrong boot mode detected|download mode successfully detected|download mode|failed to connect with the device|read timeout exceeded|no serial data received|invalid response|serial data stream stopped|packet content transfer stopped/i.test(
+            reason
+        )
     }
 
     /**
@@ -527,6 +567,75 @@ export class AppControllerCoreControls {
     }
 
     /**
+     * Initializes ESP flashing progress UI for a new install attempt.
+     */
+    _startEspFlashProgressUi() {
+        this.espFlashProgressStartedAtMs = Date.now()
+        this.espFlashProgressSmoother.reset()
+        this.els.espFlashProgress.hidden = false
+        this._updateEspFlashProgressUi(0, null)
+    }
+
+    /**
+     * Resets ESP flashing progress UI to the default idle state.
+     */
+    _resetEspFlashProgressUi() {
+        this.espFlashProgressStartedAtMs = 0
+        this.espFlashProgressSmoother.reset()
+        this.els.espFlashProgress.hidden = true
+        this.els.espFlashProgressFill.style.width = '0%'
+        this.els.espFlashProgressTrack.setAttribute('aria-valuenow', '0')
+        this.els.espFlashProgressPercent.textContent = this._t('machine.flashDialog.progressPercent', { percent: 0 })
+        this.els.espFlashProgressTime.textContent = this._t('machine.flashDialog.progressTime', {
+            time: this._t('messages.drawingRemainingTimeUnknown')
+        })
+    }
+
+    /**
+     * Updates ESP flashing progress UI with completed percentage and duration.
+     * @param {number} completedRatio
+     * @param {number | null | undefined} remainingMs
+     */
+    _updateEspFlashProgressUi(completedRatio, remainingMs) {
+        const normalizedCompletedRatio = Math.max(0, Math.min(1, Number(completedRatio) || 0))
+        const completedPercent = Math.max(0, Math.min(100, Math.round(normalizedCompletedRatio * 100)))
+        const normalizedRemainingMsFromDetail = DrawProgressTimeUtils.normalizeRemainingMs(remainingMs)
+        const rawRemainingMs =
+            normalizedRemainingMsFromDetail === null
+                ? this._estimateEspFlashRemainingMsFromRatio(normalizedCompletedRatio)
+                : normalizedRemainingMsFromDetail
+        const normalizedRemainingMs = this.espFlashProgressSmoother.update(rawRemainingMs)
+
+        this.els.espFlashProgressFill.style.width = `${completedPercent}%`
+        this.els.espFlashProgressTrack.setAttribute('aria-valuenow', String(completedPercent))
+        this.els.espFlashProgressPercent.textContent = this._t('machine.flashDialog.progressPercent', {
+            percent: completedPercent
+        })
+        this.els.espFlashProgressTime.textContent = this._t('machine.flashDialog.progressTime', {
+            time:
+                normalizedRemainingMs === null
+                    ? this._t('messages.drawingRemainingTimeUnknown')
+                    : this._formatDurationLabel(normalizedRemainingMs)
+        })
+    }
+
+    /**
+     * Estimates remaining ESP flashing duration from elapsed runtime and completion ratio.
+     * @param {number} completedRatio
+     * @returns {number | null}
+     */
+    _estimateEspFlashRemainingMsFromRatio(completedRatio) {
+        if (this.espFlashProgressStartedAtMs <= 0) return null
+        const normalizedCompletedRatio = Math.max(0, Math.min(1, Number(completedRatio) || 0))
+        if (normalizedCompletedRatio <= 0) return null
+        if (normalizedCompletedRatio >= 1) return 0
+
+        const elapsedMs = Math.max(1, Date.now() - this.espFlashProgressStartedAtMs)
+        const remainingRatio = Math.max(0, 1 - normalizedCompletedRatio)
+        return Math.max(0, Math.round((elapsedMs / normalizedCompletedRatio) * remainingRatio))
+    }
+
+    /**
      * Updates draw-progress UI with remaining percentage and duration.
      * @param {number} remainingRatio
      * @param {number | null | undefined} remainingMs
@@ -622,6 +731,7 @@ export class AppControllerCoreControls {
         if (this._isEggBotControlDialogOpen()) {
             this._closeEggBotControlDialog()
         }
+        this.espFlashBootHintVisible = false
         this._ensureEspFlashManifestMetaLoaded()
         this.els.espFlashDialogBackdrop.hidden = false
         this._syncDialogBodyScrollLock()
@@ -662,21 +772,26 @@ export class AppControllerCoreControls {
         }
 
         if (!EspFirmwareInstaller.isSupported(globalThis)) {
-            this._setStatus(this._t('messages.espFlashUnsupported'), 'error')
+            this.espFlashBootHintVisible = false
+            this._setEspFlashStatus(this._t('messages.espFlashUnsupported'), 'error')
             this._syncEspFlashInstallUi()
             return
         }
 
         const manifestUrl = this._resolveEspFlashManifestUrl()
         if (!manifestUrl) {
-            this._setStatus(this._t('messages.espFlashFailed', { message: 'Missing firmware manifest URL.' }), 'error')
+            this.espFlashBootHintVisible = false
+            this._setEspFlashStatus(this._t('messages.espFlashFailed', { message: 'Missing firmware manifest URL.' }), 'error')
+            this._syncEspFlashInstallUi()
             return
         }
 
         this.isEspFlashing = true
+        this.espFlashBootHintVisible = false
+        this._startEspFlashProgressUi()
         this._syncEspFlashInstallUi()
         this._syncConnectionUi()
-        this._setStatus(this._t('messages.espFlashPreparing'), 'loading')
+        this._setEspFlashStatus(this._t('messages.espFlashPreparing'), 'loading')
 
         try {
             await this.espFirmwareInstaller.install({
@@ -688,23 +803,37 @@ export class AppControllerCoreControls {
                         })
                     )
                 },
-                onProgress: ({ partIndex, partCount, percent }) => {
-                    this._setStatus(
+                onProgress: ({ partIndex, partCount, percent, overallPercent }) => {
+                    const normalizedOverallPercent = Math.max(
+                        0,
+                        Math.min(
+                            100,
+                            Number.isFinite(Number(overallPercent))
+                                ? Math.round(Number(overallPercent))
+                                : Math.round((((partIndex - 1) + (Number(percent) || 0) / 100) / Math.max(1, partCount)) * 100)
+                        )
+                    )
+                    this._updateEspFlashProgressUi(normalizedOverallPercent / 100, null)
+                    this._setEspFlashStatus(
                         this._t('messages.espFlashProgress', {
                             part: partIndex,
                             total: partCount,
-                            percent
+                            percent: normalizedOverallPercent
                         }),
                         'loading'
                     )
                 }
             })
-            this._setStatus(this._t('messages.espFlashComplete'), 'success')
+            this._updateEspFlashProgressUi(1, 0)
+            this.espFlashBootHintVisible = false
+            this._setEspFlashStatus(this._t('messages.espFlashComplete'), 'success')
         } catch (error) {
             if (error?.name === 'AbortError' || error?.name === 'NotFoundError') {
-                this._setStatus(this._t('messages.espFlashCanceled'), 'info')
+                this.espFlashBootHintVisible = false
+                this._setEspFlashStatus(this._t('messages.espFlashCanceled'), 'info')
             } else {
-                this._setStatus(this._formatEspFlashFailedStatusMessage(error), 'error')
+                this.espFlashBootHintVisible = this._shouldShowEspFlashBootHint(error)
+                this._setEspFlashStatus(this._formatEspFlashFailedStatusMessage(error), 'error')
             }
         } finally {
             this.isEspFlashing = false

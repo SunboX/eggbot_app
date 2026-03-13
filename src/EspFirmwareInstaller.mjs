@@ -116,6 +116,8 @@ export function createWindowsResetConstructors() {
  * Web Serial transport that skips boot-log bytes before the first SLIP frame.
  */
 export class EspInstallerTransport extends Transport {
+    #hasSeenSlipPacket = false
+
     /**
      * Reads SLIP packets while ignoring leading boot-log noise.
      * @param {number} timeout
@@ -128,7 +130,7 @@ export class EspInstallerTransport extends Transport {
 
         let partialPacket = null
         let isEscaping = false
-        let successfulSlip = false
+        let successfulSlip = this.#hasSeenSlipPacket
         let leadingNoise = []
 
         while (true) {
@@ -154,6 +156,14 @@ export class EspInstallerTransport extends Transport {
                         this.#flushLeadingNoise(leadingNoise)
                         leadingNoise = []
                         partialPacket = new Uint8Array(0)
+                        continue
+                    }
+
+                    // ESP ROM replies can begin immediately after the previous packet terminator.
+                    // Once we have decoded one valid frame, treat a leading response byte as an
+                    // implicit packet start so buffered follow-up replies stay aligned.
+                    if (successfulSlip && leadingNoise.length === 0 && byte === 0x01) {
+                        partialPacket = new Uint8Array([byte])
                         continue
                     }
 
@@ -192,9 +202,11 @@ export class EspInstallerTransport extends Transport {
                     }
                     this.trace(`Received full packet: ${this.hexConvert(partialPacket)}`)
                     this.buffer = this.appendArray(this.buffer, readBytes.slice(byteIndex))
-                    yield partialPacket
+                    const completedPacket = partialPacket
                     partialPacket = null
                     successfulSlip = true
+                    this.#hasSeenSlipPacket = true
+                    yield completedPacket
                     continue
                 }
 
@@ -311,7 +323,16 @@ export class EspFirmwareInstaller {
      * @param {{
      *   manifestUrl: string,
      *   onLog?: (message: string) => void,
-     *   onProgress?: (update: { partIndex: number, partCount: number, written: number, total: number, percent: number }) => void
+     *   onProgress?: (update: {
+     *     partIndex: number,
+     *     partCount: number,
+     *     written: number,
+     *     total: number,
+     *     percent: number,
+     *     overallWritten: number,
+     *     overallTotal: number,
+     *     overallPercent: number
+     *   }) => void
      * }} options
      * @returns {Promise<void>}
      */
@@ -362,12 +383,28 @@ export class EspFirmwareInstaller {
      *   fileArray: Array<{ address: number, data: string }>,
      *   mode: string,
      *   onLog?: (message: string) => void,
-     *   onProgress?: (update: { partIndex: number, partCount: number, written: number, total: number, percent: number }) => void,
+     *   onProgress?: (update: {
+     *     partIndex: number,
+     *     partCount: number,
+     *     written: number,
+     *     total: number,
+     *     percent: number,
+     *     overallWritten: number,
+     *     overallTotal: number,
+     *     overallPercent: number
+     *   }) => void,
      *   port: SerialPort
      * }} options
      * @returns {Promise<void>}
      */
     async #runInstallAttempt(options) {
+        const partByteOffsets = []
+        let accumulatedPartBytes = 0
+        options.fileArray.forEach((file) => {
+            partByteOffsets.push(accumulatedPartBytes)
+            accumulatedPartBytes += file.data.length
+        })
+        const totalPartBytes = accumulatedPartBytes
         const transport = this.transportFactory(options.port)
         const loader = this.loaderFactory({
             transport,
@@ -401,12 +438,19 @@ export class EspFirmwareInstaller {
                     if (typeof options?.onProgress !== 'function') {
                         return
                     }
+                    const currentPartBytes = options.fileArray[fileIndex]?.data.length || 0
+                    const currentPartRatio = total > 0 ? Math.max(0, Math.min(1, written / total)) : 0
+                    const overallWritten = (partByteOffsets[fileIndex] || 0) + currentPartBytes * currentPartRatio
                     options.onProgress({
                         partIndex: fileIndex + 1,
                         partCount: options.fileArray.length,
                         written,
                         total,
-                        percent: total > 0 ? Math.max(0, Math.min(100, Math.round((written / total) * 100))) : 0
+                        percent: total > 0 ? Math.max(0, Math.min(100, Math.round((written / total) * 100))) : 0,
+                        overallWritten,
+                        overallTotal: totalPartBytes,
+                        overallPercent:
+                            totalPartBytes > 0 ? Math.max(0, Math.min(100, Math.round((overallWritten / totalPartBytes) * 100))) : 0
                     })
                 }
             })
