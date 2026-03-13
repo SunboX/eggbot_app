@@ -549,13 +549,27 @@ export class AppControllerCoreControls {
     }
 
     /**
+     * Returns true when one serial connection error indicates a bootloader/runtime-not-ready board.
+     * @param {unknown} error
+     * @returns {boolean}
+     */
+    _isRuntimeNotReadyConnectionError(error) {
+        const reason = String(error?.message || error || '').trim()
+        return /failed to detect eggbot runtime on the selected serial port|still be rebooting|stuck in bootloader mode/i.test(
+            reason
+        )
+    }
+
+    /**
      * Builds one connection-failed status message.
      * @param {unknown} error
      * @returns {string}
      */
     _formatConnectionFailedStatusMessage(error) {
         const reason = String(error?.message || error || '')
-        const baseMessage = this._t('messages.serialConnectFailed', { message: reason })
+        const baseMessage = this._isRuntimeNotReadyConnectionError(error)
+            ? this._t('messages.serialRuntimeNotReadyConnectFailed', { message: reason })
+            : this._t('messages.serialConnectFailed', { message: reason })
         return this._appendBleTroubleshootingHint(baseMessage)
     }
 

@@ -75,7 +75,7 @@ function installBrowserMocks(overrides = {}) {
  * Builds one serial port mock that emits predefined read chunks.
  * @param {{ usbVendorId?: number, usbProductId?: number }} [info]
  * @param {Uint8Array[]} [chunks]
- * @returns {SerialPort & { openCalls: number, closeCalls: number, openOptions: Record<string, any>[] }}
+ * @returns {SerialPort & { openCalls: number, closeCalls: number, openOptions: Record<string, any>[], setSignalsCalls: Array<{ dataTerminalReady: boolean, requestToSend: boolean }> }}
  */
 function createMockPortFromChunks(info = {}, chunks = []) {
     let chunkIndex = 0
@@ -108,6 +108,7 @@ function createMockPortFromChunks(info = {}, chunks = []) {
         openCalls: 0,
         closeCalls: 0,
         openOptions: [],
+        setSignalsCalls: [],
         getInfo() {
             return {
                 usbVendorId: info.usbVendorId,
@@ -127,6 +128,12 @@ function createMockPortFromChunks(info = {}, chunks = []) {
         async open(options) {
             this.openCalls += 1
             this.openOptions.push(options)
+        },
+        async setSignals(signals) {
+            this.setSignalsCalls.push({
+                dataTerminalReady: Boolean(signals?.dataTerminalReady),
+                requestToSend: Boolean(signals?.requestToSend)
+            })
         },
         async close() {
             this.closeCalls += 1
@@ -267,6 +274,31 @@ test('EggBotSerial.connectForDraw should strip leading ASCII noise before firmwa
     }
 })
 
+test('EggBotSerial.connectForDraw should ignore boot-log lines before firmware version replies', async () => {
+    const encoder = new TextEncoder()
+    const requestedPort = createMockPortFromChunks(
+        { usbVendorId: 0xbead, usbProductId: 0xfeed },
+        [
+            encoder.encode('rst:0x1 (POWERON_RESET),boot:0x13\r\n'),
+            encoder.encode('EBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a\r\n')
+        ]
+    )
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [],
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        const version = await serial.connectForDraw()
+
+        assert.equal(version, 'EBBv13_and_above Protocol emulated by Eggduino-Firmware V1.6a')
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
 test('EggBotSerial.sendCommand should ignore OK and echoed lines before returning query data', async () => {
     const restoreTimers = installFastWindowTimers()
     const serial = new EggBotSerial()
@@ -333,6 +365,55 @@ test('EggBotSerial.connectForDraw should request port when remembered match is a
         assert.equal(requestedPort.openCalls, 1)
     } finally {
         await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.connectForDraw should release runtime serial control signals before probing version', async () => {
+    const requestedPort = createMockPort({ usbVendorId: 0xabcd, usbProductId: 0x1001 })
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [],
+        requestPort: async () => requestedPort
+    })
+
+    const serial = new EggBotSerial()
+    try {
+        await serial.connectForDraw()
+
+        assert.deepEqual(requestedPort.setSignalsCalls, [
+            {
+                dataTerminalReady: false,
+                requestToSend: false
+            }
+        ])
+    } finally {
+        await serial.disconnect()
+        mockedBrowser.restore()
+    }
+})
+
+test('EggBotSerial.connectForDraw should reject serial ports that never answer runtime version probes', async () => {
+    const requestedPort = createMockPortFromChunks({ usbVendorId: 0xabce, usbProductId: 0x1002 }, [])
+    const mockedBrowser = installBrowserMocks({
+        getPorts: async () => [],
+        requestPort: async () => requestedPort
+    })
+    globalThis.window.setTimeout = (callback) => {
+        queueMicrotask(callback)
+        return 1
+    }
+    globalThis.window.clearTimeout = () => {}
+
+    const serial = new EggBotSerial()
+    try {
+        await assert.rejects(
+            serial.connectForDraw(),
+            /Failed to detect EggBot runtime on the selected serial port\. The ESP32 may still be rebooting or stuck in bootloader mode\./
+        )
+
+        assert.equal(requestedPort.closeCalls, 1)
+        assert.equal(serial.isConnected, false)
+    } finally {
         mockedBrowser.restore()
     }
 })
@@ -800,6 +881,124 @@ test('EggBotSerial.drawStrokes should ignore noisy QB lines that are not plain n
         assert.equal(statuses.includes('Draw finished.'), true)
         assert.equal(statuses.includes('Draw aborted by user.'), false)
     } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should allow QB replies to wait for long move completion', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const serial = new EggBotSerial()
+    const qbTimeouts = []
+
+    serial.port = /** @type {SerialPort} */ ({})
+    serial.writer = /** @type {WritableStreamDefaultWriter<Uint8Array>} */ ({
+        async write(_bytes) {},
+        releaseLock() {}
+    })
+    serial.sendCommand = async (command, options = {}) => {
+        if (command === 'QB') {
+            qbTimeouts.push(Math.round(Number(options.timeoutMs) || 0))
+            return '0'
+        }
+        return ''
+    }
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 1600, y: 0 },
+                        { x: 1610, y: 0 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0.5, v: 0.5 },
+                        { u: 0.503125, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 300,
+                penUpSpeed: 300
+            }
+        )
+
+        assert.equal(qbTimeouts.length >= 2, true)
+        assert.equal(qbTimeouts[0], Math.max(5000, Math.ceil((1600 / 300) * 1000) + 1500))
+        assert.equal(qbTimeouts[1], 5000)
+    } finally {
+        restoreTimers()
+    }
+})
+
+test('EggBotSerial.drawStrokes should continue when QB polling is unavailable', async () => {
+    const restoreTimers = installFastWindowTimers()
+    const { serial, commands } = createConnectedQueuedDrawSerial([])
+    const statuses = []
+    const originalWarn = console.warn
+    const warnings = []
+    console.warn = (...args) => warnings.push(args)
+
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 10, y: 0 },
+                        { x: 20, y: 0 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0.1, v: 0.5 },
+                        { u: 0.2, v: 0.5 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 300,
+                penUpSpeed: 400
+            },
+            {
+                onStatus: (text) => statuses.push(text)
+            }
+        )
+
+        assert.equal(commands.filter((command) => command === 'QB').length, 1)
+        assert.equal(statuses.includes('Pause-button checks unavailable; continuing draw.'), true)
+        assert.equal(statuses.includes('Draw finished.'), true)
+        assert.equal(warnings.length, 1)
+    } finally {
+        console.warn = originalWarn
         restoreTimers()
     }
 })

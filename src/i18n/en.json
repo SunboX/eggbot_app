@@ -244,6 +244,7 @@
         "transportSwitchFailed": "Transport switch failed: {{message}}",
         "transportUnsupported": "{{transport}} is not supported in this browser.",
         "serialConnectFailed": "Connection failed: {{message}}",
+        "serialRuntimeNotReadyConnectFailed": "Connection failed: The ESP32 serial port opened, but the EggBot runtime did not answer. The board may still be rebooting or stuck in bootloader mode. Press RESET/EN once or reconnect the board, wait a few seconds, and try again. Details: {{message}}",
         "bleLinuxChromiumTroubleshooting": "Hint for Linux/Chromium:\nWeb Bluetooth can be experimental in Chromium on Linux.\n- Enable chrome://flags/#enable-experimental-web-platform-features\n- BlueZ/Bluetooth service must be running",
         "eggbotDisconnected": "EggBot disconnected.",
         "disconnectFailed": "Disconnect failed: {{message}}",

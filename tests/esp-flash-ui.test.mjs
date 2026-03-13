@@ -27,6 +27,75 @@ function installNavigatorOverride(navigatorValue) {
     }
 }
 
+test('AppControllerCoreControls should explain runtime-not-ready serial connection failures clearly', () => {
+    const controller = {
+        serial: {
+            connectionTransportKind: 'serial'
+        },
+        _t(key, replacements = {}) {
+            if (key === 'messages.serialRuntimeNotReadyConnectFailed') {
+                return `runtime:${replacements.message || ''}`
+            }
+            if (key === 'messages.serialConnectFailed') {
+                return `generic:${replacements.message || ''}`
+            }
+            if (key === 'messages.bleLinuxChromiumTroubleshooting') {
+                return 'ble-hint'
+            }
+            return key
+        },
+        _shouldShowBleTroubleshootingHint() {
+            return false
+        },
+        _appendBleTroubleshootingHint: AppControllerCoreControls.prototype._appendBleTroubleshootingHint,
+        _isRuntimeNotReadyConnectionError: AppControllerCoreControls.prototype._isRuntimeNotReadyConnectionError
+    }
+
+    const message = AppControllerCoreControls.prototype._formatConnectionFailedStatusMessage.call(
+        controller,
+        new Error(
+            'Failed to detect EggBot runtime on the selected serial port. The ESP32 may still be rebooting or stuck in bootloader mode. Timed out waiting for EBB response.'
+        )
+    )
+
+    assert.equal(
+        message,
+        'runtime:Failed to detect EggBot runtime on the selected serial port. The ESP32 may still be rebooting or stuck in bootloader mode. Timed out waiting for EBB response.'
+    )
+})
+
+test('AppControllerCoreControls should keep generic connection failures on the standard message path', () => {
+    const controller = {
+        serial: {
+            connectionTransportKind: 'serial'
+        },
+        _t(key, replacements = {}) {
+            if (key === 'messages.serialRuntimeNotReadyConnectFailed') {
+                return `runtime:${replacements.message || ''}`
+            }
+            if (key === 'messages.serialConnectFailed') {
+                return `generic:${replacements.message || ''}`
+            }
+            if (key === 'messages.bleLinuxChromiumTroubleshooting') {
+                return 'ble-hint'
+            }
+            return key
+        },
+        _shouldShowBleTroubleshootingHint() {
+            return false
+        },
+        _appendBleTroubleshootingHint: AppControllerCoreControls.prototype._appendBleTroubleshootingHint,
+        _isRuntimeNotReadyConnectionError: AppControllerCoreControls.prototype._isRuntimeNotReadyConnectionError
+    }
+
+    const message = AppControllerCoreControls.prototype._formatConnectionFailedStatusMessage.call(
+        controller,
+        new Error('Failed to open serial port.')
+    )
+
+    assert.equal(message, 'generic:Failed to open serial port.')
+})
+
 test('AppControllerCoreControls should only show the flash browser note when Web Serial is unavailable', () => {
     const controller = {
         isEspFlashing: false,
