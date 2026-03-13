@@ -418,6 +418,9 @@ export class AppControllerCoreControls {
      */
     _formatEspFlashFailedStatusMessage(error) {
         const reason = String(error?.message || error || 'Unknown error').trim()
+        if (/wrong boot mode detected|download mode successfully detected|download mode/i.test(reason)) {
+            return this._t('messages.espFlashConnectFailed', { message: reason })
+        }
         if (/failed to connect with the device/i.test(reason)) {
             return this._t('messages.espFlashConnectFailed', { message: reason })
         }
@@ -678,6 +681,13 @@ export class AppControllerCoreControls {
         try {
             await this.espFirmwareInstaller.install({
                 manifestUrl,
+                promptManualBootRetry: async (error) => {
+                    return window.confirm(
+                        this._t('messages.espFlashManualBootRetryConfirm', {
+                            message: String(error?.message || error || '')
+                        })
+                    )
+                },
                 onProgress: ({ partIndex, partCount, percent }) => {
                     this._setStatus(
                         this._t('messages.espFlashProgress', {

@@ -4,6 +4,7 @@ const ESP_FLASH_BAUD_RATE = 115200
 const ESP_ROM_BAUD_RATE = 115200
 const ESP32_CHIP_FAMILY = 'ESP32'
 const CLASSIC_RESET_INITIAL_DELAY_MS = 100
+const MANUAL_BOOT_RETRY_PATTERN = /wrong boot mode detected|download mode successfully detected|download mode/i
 const DEFAULT_FLASH_OPTIONS = Object.freeze({
     compress: true,
     eraseAll: false,
@@ -262,11 +263,24 @@ class EspLoaderTerminalBridge {
  */
 export class EspFirmwareInstaller {
     /**
-     * @param {{ fetchImpl?: typeof fetch, portRequester?: () => Promise<SerialPort>, userAgent?: string }} [options]
+     * @param {{
+     *   fetchImpl?: typeof fetch,
+     *   portRequester?: () => Promise<SerialPort>,
+     *   promptManualBootRetry?: (error: Error) => Promise<boolean> | boolean,
+     *   transportFactory?: (port: SerialPort) => { disconnect?: () => Promise<void> },
+     *   loaderFactory?: (options: Record<string, unknown>) => { main: (mode: string) => Promise<void>, writeFlash: (options: Record<string, unknown>) => Promise<void>, after: (mode: string) => Promise<void>, _connectAttempt?: (...args: Array<unknown>) => Promise<string> },
+     *   userAgent?: string
+     * }} [options]
      */
     constructor(options = {}) {
         this.fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : globalThis.fetch?.bind(globalThis)
         this.portRequester = typeof options.portRequester === 'function' ? options.portRequester : null
+        this.promptManualBootRetry =
+            typeof options.promptManualBootRetry === 'function' ? options.promptManualBootRetry : null
+        this.transportFactory =
+            typeof options.transportFactory === 'function' ? options.transportFactory : (port) => new EspInstallerTransport(port)
+        this.loaderFactory =
+            typeof options.loaderFactory === 'function' ? options.loaderFactory : (loaderOptions) => new ESPLoader(loaderOptions)
         this.userAgent = normalizeString(options.userAgent) || EspFirmwareInstaller.#resolveUserAgent()
     }
 
@@ -298,8 +312,51 @@ export class EspFirmwareInstaller {
         const port = await requestPort()
         const build = await this.#loadManifestBuild(manifestUrl)
         const fileArray = await this.#loadFirmwareFiles(build.parts, manifestUrl)
-        const transport = new EspInstallerTransport(port)
-        const loader = new ESPLoader({
+        const promptManualBootRetry =
+            typeof options?.promptManualBootRetry === 'function' ? options.promptManualBootRetry : this.promptManualBootRetry
+
+        try {
+            await this.#runInstallAttempt({
+                fileArray,
+                mode: 'default_reset',
+                onLog: options?.onLog,
+                onProgress: options?.onProgress,
+                port
+            })
+        } catch (error) {
+            if (!this.#shouldOfferManualBootRetry(error) || typeof promptManualBootRetry !== 'function') {
+                throw error
+            }
+
+            const shouldRetry = await promptManualBootRetry(error)
+            if (!shouldRetry) {
+                throw error
+            }
+
+            await this.#runInstallAttempt({
+                fileArray,
+                mode: 'no_reset',
+                onLog: options?.onLog,
+                onProgress: options?.onProgress,
+                port
+            })
+        }
+    }
+
+    /**
+     * Executes one flashing attempt against one selected port.
+     * @param {{
+     *   fileArray: Array<{ address: number, data: string }>,
+     *   mode: string,
+     *   onLog?: (message: string) => void,
+     *   onProgress?: (update: { partIndex: number, partCount: number, written: number, total: number, percent: number }) => void,
+     *   port: SerialPort
+     * }} options
+     * @returns {Promise<void>}
+     */
+    async #runInstallAttempt(options) {
+        const transport = this.transportFactory(options.port)
+        const loader = this.loaderFactory({
             transport,
             baudrate: ESP_FLASH_BAUD_RATE,
             romBaudrate: ESP_ROM_BAUD_RATE,
@@ -307,19 +364,31 @@ export class EspFirmwareInstaller {
             enableTracing: false,
             resetConstructors: this.#resolveResetConstructors()
         })
+        let connectFailureMessage = ''
+        const originalConnectAttempt =
+            loader && typeof loader._connectAttempt === 'function' ? loader._connectAttempt.bind(loader) : null
+        if (originalConnectAttempt) {
+            loader._connectAttempt = async (...args) => {
+                const response = await originalConnectAttempt(...args)
+                if (response !== 'success') {
+                    connectFailureMessage = normalizeString(response) || connectFailureMessage
+                }
+                return response
+            }
+        }
 
         try {
-            await loader.main('default_reset')
+            await loader.main(options.mode)
             await loader.writeFlash({
                 ...DEFAULT_FLASH_OPTIONS,
-                fileArray,
+                fileArray: options.fileArray,
                 reportProgress: (fileIndex, written, total) => {
                     if (typeof options?.onProgress !== 'function') {
                         return
                     }
                     options.onProgress({
                         partIndex: fileIndex + 1,
-                        partCount: fileArray.length,
+                        partCount: options.fileArray.length,
                         written,
                         total,
                         percent: total > 0 ? Math.max(0, Math.min(100, Math.round((written / total) * 100))) : 0
@@ -327,8 +396,12 @@ export class EspFirmwareInstaller {
                 }
             })
             await loader.after('hard_reset')
+        } catch (error) {
+            throw this.#normalizeInstallError(error, connectFailureMessage)
         } finally {
-            await transport.disconnect().catch(() => {})
+            if (typeof transport?.disconnect === 'function') {
+                await transport.disconnect().catch(() => {})
+            }
         }
     }
 
@@ -411,6 +484,33 @@ export class EspFirmwareInstaller {
             return createWindowsResetConstructors()
         }
         return undefined
+    }
+
+    /**
+     * Normalizes one low-level install error into the most useful user-facing message.
+     * @param {unknown} error
+     * @param {string} connectFailureMessage
+     * @returns {Error}
+     */
+    #normalizeInstallError(error, connectFailureMessage) {
+        const normalizedConnectFailure = normalizeString(connectFailureMessage)
+        const normalizedErrorMessage = normalizeString(error?.message || error)
+        if (normalizedConnectFailure && /failed to connect with the device/i.test(normalizedErrorMessage)) {
+            return new Error(normalizedConnectFailure)
+        }
+        if (error instanceof Error) {
+            return error
+        }
+        return new Error(normalizedErrorMessage || 'ESP firmware flashing failed.')
+    }
+
+    /**
+     * Returns true when manual download-mode retry should be offered.
+     * @param {unknown} error
+     * @returns {boolean}
+     */
+    #shouldOfferManualBootRetry(error) {
+        return MANUAL_BOOT_RETRY_PATTERN.test(normalizeString(error?.message || error))
     }
 
     /**

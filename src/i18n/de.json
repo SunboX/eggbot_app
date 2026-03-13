@@ -254,6 +254,7 @@
         "espFlashUnsupported": "Für das ESP32-Flashen wird ein Chromium-basierter Browser mit Web-Serial-Unterstützung benötigt.",
         "espFlashFailed": "ESP32-Flash fehlgeschlagen: {{message}}",
         "espFlashConnectFailed": "ESP32-Flash fehlgeschlagen: {{message}} Wenn das Board weiterhin normal startet, halte BOOT gedrückt und klicke dann auf Flash.",
+        "espFlashManualBootRetryConfirm": "Der automatische Bootloader-Start ist fehlgeschlagen.\n\nFehler: {{message}}\n\nFür einen manuellen Retry:\n1. BOOT gedrückt halten.\n2. RESET oder EN einmal tippen, falls vorhanden.\n3. BOOT gedrückt halten, bis du auf OK klickst.\n\nMit OK ohne Auto-Reset erneut versuchen, oder mit Abbrechen stoppen.",
         "drawingProgress": "Zeichnung läuft: Linienzug {{done}}/{{total}}",
         "drawingRemainingPercent": "Verbleibend: {{percent}}%",
         "drawingRemainingTime": "Restzeit: {{time}}",
