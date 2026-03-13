@@ -74,6 +74,67 @@ test('EspInstallerTransport should ignore boot log noise before the first SLIP p
     assert.deepEqual(Array.from(firstPacket.value), [0x01, 0x02])
 })
 
+test('EspInstallerTransport should ignore duplicate SLIP delimiters after boot noise', async () => {
+    const { EspInstallerTransport } = await importIsolatedInstallerModule()
+    const transport = new EspInstallerTransport({
+        getInfo() {
+            return {}
+        }
+    })
+    const packets = [
+        new Uint8Array([
+            0x77,
+            0x61,
+            0x69,
+            0x74,
+            0x69,
+            0x6e,
+            0x67,
+            0x20,
+            0x66,
+            0x6f,
+            0x72,
+            0x20,
+            0x64,
+            0x6f,
+            0x77,
+            0x6e,
+            0x6c,
+            0x6f,
+            0x61,
+            0x64,
+            0x0d,
+            0x0a,
+            0xc0,
+            0xc0,
+            0x01,
+            0x08,
+            0x04,
+            0x00,
+            0x12,
+            0x20,
+            0x55,
+            0x55,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0xc0
+        ])
+    ]
+
+    transport.trace = () => {}
+    transport.detectPanicHandler = () => {}
+    transport.inWaiting = () => 0
+    transport.newRead = async () => packets.shift() || new Uint8Array(0)
+
+    const packetIterator = transport.read(100)
+    const firstPacket = await packetIterator.next()
+
+    assert.equal(firstPacket.done, false)
+    assert.deepEqual(Array.from(firstPacket.value), [0x01, 0x08, 0x04, 0x00, 0x12, 0x20, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00])
+})
+
 test('EspFirmwareInstaller should retry without reset after wrong boot mode when manual boot is confirmed', async () => {
     const { EspFirmwareInstaller } = await importIsolatedInstallerModule()
     const requestedPorts = []

@@ -177,6 +177,11 @@ export class EspInstallerTransport extends Transport {
                 }
 
                 if (byte === this.SLIP_END) {
+                    // Consecutive SLIP_END bytes can appear while resynchronizing after boot noise.
+                    // Treat zero-length frames as delimiters only so the next real packet stays aligned.
+                    if (partialPacket.length === 0) {
+                        continue
+                    }
                     this.trace(`Received full packet: ${this.hexConvert(partialPacket)}`)
                     this.buffer = this.appendArray(this.buffer, readBytes.slice(byteIndex))
                     yield partialPacket
