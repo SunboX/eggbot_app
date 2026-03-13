@@ -186,6 +186,59 @@ test('AppControllerCoreControls should tolerate older element maps without flash
     }
 })
 
+test('AppControllerCoreControls should tolerate older element maps without flash status and progress fields', () => {
+    const controller = {
+        espFlashProgressStartedAtMs: 123,
+        espFlashProgressSmoother: {
+            resetCalls: 0,
+            updateCalls: [],
+            reset() {
+                this.resetCalls += 1
+            },
+            update(value) {
+                this.updateCalls.push(value)
+                return null
+            }
+        },
+        _estimateEspFlashRemainingMsFromRatio() {
+            return null
+        },
+        _formatDurationLabel() {
+            return '--:--'
+        },
+        _t(key, replacements = {}) {
+            if (key === 'machine.flashDialog.progressPercent') {
+                return `percent:${replacements.percent}`
+            }
+            if (key === 'machine.flashDialog.progressTime') {
+                return `time:${replacements.time}`
+            }
+            if (key === 'messages.drawingRemainingTimeUnknown') {
+                return 'unknown'
+            }
+            return key
+        },
+        els: {}
+    }
+    controller._updateEspFlashProgressUi = AppControllerCoreControls.prototype._updateEspFlashProgressUi
+
+    assert.doesNotThrow(() => {
+        AppControllerCoreControls.prototype._setEspFlashDialogStatus.call(controller, 'ready')
+    })
+    assert.doesNotThrow(() => {
+        AppControllerCoreControls.prototype._resetEspFlashProgressUi.call(controller)
+    })
+    assert.doesNotThrow(() => {
+        AppControllerCoreControls.prototype._startEspFlashProgressUi.call(controller)
+    })
+    assert.doesNotThrow(() => {
+        AppControllerCoreControls.prototype._updateEspFlashProgressUi.call(controller, 0.5, 5000)
+    })
+    assert.equal(controller.espFlashProgressStartedAtMs > 0, true)
+    assert.equal(controller.espFlashProgressSmoother.resetCalls, 2)
+    assert.deepEqual(controller.espFlashProgressSmoother.updateCalls, [null, 5000])
+})
+
 test('AppControllerCoreControls should only show the BOOT hint for connect-like flash failures', () => {
     assert.equal(
         AppControllerCoreControls.prototype._shouldShowEspFlashBootHint.call({}, new Error('Wrong boot mode detected (0x13).')),
