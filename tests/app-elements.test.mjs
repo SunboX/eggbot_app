@@ -46,3 +46,20 @@ test('AppElements should expose EggBot manual result element from index markup',
     assert.ok(elements.espFlashProgressPercent)
     assert.ok(elements.espFlashProgressTime)
 })
+
+test('AppElements should tolerate older flash markup without the browser note and boot hint', async () => {
+    const htmlUrl = new URL('../src/index.html', import.meta.url)
+    const html = await readFile(htmlUrl, 'utf8')
+    const { document } = parseHTML(html)
+    const flashBrowserNote = document.querySelector('[data-esp-flash-browser-note]')
+    const flashBootHint = document.querySelector('[data-esp-flash-boot-hint]')
+    flashBrowserNote?.remove()
+    flashBootHint?.remove()
+
+    const elements = AppElements.query(document)
+
+    assert.equal(elements.espFlashBrowserNote, null)
+    assert.equal(elements.espFlashBootHint, null)
+    assert.ok(elements.espFlashInstall)
+    assert.ok(elements.espFlashStatus)
+})

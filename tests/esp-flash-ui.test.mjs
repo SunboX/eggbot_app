@@ -141,6 +141,51 @@ test('AppControllerCoreControls should keep the in-app flash button available on
     }
 })
 
+test('AppControllerCoreControls should tolerate older element maps without flash-note fields', () => {
+    const controller = {
+        isEspFlashing: false,
+        espFlashBootHintVisible: false,
+        _t(key) {
+            return key
+        },
+        els: {
+            espFlashInstall: {
+                disabled: false,
+                textContent: '',
+                attributes: new Map(),
+                setAttribute(name, value) {
+                    this.attributes.set(name, value)
+                }
+            },
+            espFlashDialogClose: {
+                disabled: false
+            },
+            espFlashDialogCloseIcon: {
+                disabled: false
+            }
+        }
+    }
+
+    const restoreSupportedNavigator = installNavigatorOverride({
+        serial: {
+            async requestPort() {
+                return {}
+            }
+        }
+    })
+
+    try {
+        assert.doesNotThrow(() => {
+            AppControllerCoreControls.prototype._syncEspFlashInstallUi.call(controller)
+        })
+        assert.equal(controller.els.espFlashInstall.disabled, false)
+        assert.equal(controller.els.espFlashDialogClose.disabled, false)
+        assert.equal(controller.els.espFlashDialogCloseIcon.disabled, false)
+    } finally {
+        restoreSupportedNavigator()
+    }
+})
+
 test('AppControllerCoreControls should only show the BOOT hint for connect-like flash failures', () => {
     assert.equal(
         AppControllerCoreControls.prototype._shouldShowEspFlashBootHint.call({}, new Error('Wrong boot mode detected (0x13).')),

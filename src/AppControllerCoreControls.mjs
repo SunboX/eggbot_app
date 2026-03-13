@@ -233,8 +233,12 @@ export class AppControllerCoreControls {
             : this._t('machine.flashDialog.flashButton')
         this.els.espFlashDialogClose.disabled = this.isEspFlashing
         this.els.espFlashDialogCloseIcon.disabled = this.isEspFlashing
-        this.els.espFlashBrowserNote.hidden = flashSupported
-        this.els.espFlashBootHint.hidden = !this.espFlashBootHintVisible
+        if (this.els.espFlashBrowserNote) {
+            this.els.espFlashBrowserNote.hidden = flashSupported
+        }
+        if (this.els.espFlashBootHint) {
+            this.els.espFlashBootHint.hidden = !this.espFlashBootHintVisible
+        }
     }
 
     /**
