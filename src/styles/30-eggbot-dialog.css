@@ -459,6 +459,86 @@
     transform: none;
 }
 
+.eggbot-flash-status {
+    min-height: 0;
+    margin: 0.15rem 0 0;
+    padding: 0.58rem 0.72rem;
+    border-radius: 8px;
+    border: 1px solid rgba(112, 133, 167, 0.26);
+    background: linear-gradient(180deg, rgba(31, 36, 46, 0.96), rgba(24, 28, 36, 0.96));
+    color: #dbe5f3;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.eggbot-flash-progress {
+    gap: 0.42rem;
+    margin-top: -0.08rem;
+    padding: 0.58rem 0.72rem 0.62rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(27, 31, 40, 0.95), rgba(21, 24, 32, 0.95));
+}
+
+.eggbot-flash-status[data-type='loading'] {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-color: rgba(69, 171, 255, 0.34);
+    background: linear-gradient(180deg, rgba(20, 50, 78, 0.9), rgba(16, 39, 63, 0.9));
+    color: #eff8ff;
+}
+
+.eggbot-flash-status[data-type='loading']::before {
+    content: '';
+    width: 0.82rem;
+    height: 0.82rem;
+    border: 2px solid rgba(132, 203, 255, 0.28);
+    border-top-color: #78d1ff;
+    border-radius: 50%;
+    animation: statusSpin 760ms linear infinite;
+    flex: 0 0 auto;
+}
+
+.eggbot-flash-status[data-type='success'] {
+    border-color: rgba(74, 222, 128, 0.34);
+    background: linear-gradient(180deg, rgba(18, 73, 47, 0.9), rgba(16, 57, 38, 0.92));
+    color: #e6fff0;
+}
+
+.eggbot-flash-status[data-type='error'] {
+    border-color: rgba(248, 113, 113, 0.36);
+    background: linear-gradient(180deg, rgba(88, 28, 28, 0.92), rgba(66, 22, 22, 0.94));
+    color: #ffe5e5;
+}
+
+.eggbot-flash-progress .draw-progress-track {
+    height: 0.52rem;
+    border-color: rgba(92, 171, 255, 0.24);
+    background: linear-gradient(180deg, rgba(12, 16, 24, 0.9), rgba(16, 22, 32, 0.92));
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.42);
+}
+
+.eggbot-flash-progress .draw-progress-fill {
+    background: linear-gradient(90deg, #2dc1c9, #2a8dff 55%, #6dc8ff);
+    transition: width 220ms ease-out;
+}
+
+.eggbot-flash-progress .draw-progress-meta {
+    color: #8fa4c2;
+    font-size: 0.79rem;
+}
+
+.eggbot-flash-progress .draw-progress-remaining {
+    color: #d4e3ff;
+    font-weight: 600;
+}
+
+.eggbot-flash-progress .draw-progress-time {
+    color: #9fb3d1;
+}
+
 .eggbot-flash-dialog-panel > .eggbot-note {
     margin-top: -0.2rem;
 }
@@ -502,5 +582,11 @@
 
     .eggbot-spinbox {
         width: min(100%, 190px);
+    }
+
+    .eggbot-flash-progress .draw-progress-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.28rem;
     }
 }
