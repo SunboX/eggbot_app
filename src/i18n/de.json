@@ -222,6 +222,7 @@
     },
     "status": {
         "title": "Status",
+        "drawTimeEstimate": "Gesamt-Zeichenzeit",
         "ready": "Bereit. Generiere ein Muster und verbinde den EggBot, wenn du zeichnen willst."
     },
     "footer": {

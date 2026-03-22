@@ -819,6 +819,13 @@ export class AppControllerDraw extends AppControllerRender {
                                 nextStrokeIndex: batchStartOffset + normalizedDone
                             })
                         }
+                    },
+                    onStrokeMeasured: (detail) => {
+                        this._updateDrawTimeProfileFromStrokeMeasurement({
+                            actualDurationMs: detail?.actualDurationMs,
+                            estimatedDurationMs: detail?.estimatedDurationMs,
+                            updatedAt: new Date().toISOString()
+                        })
                     }
                 })
 
