@@ -1153,6 +1153,83 @@ test('EggBotSerial.drawStrokes should apply draw output scaling around prepared 
     }
 })
 
+test('EggBotSerial.drawStrokes should report measured stroke durations after each completed stroke', async () => {
+    const originalDateNow = Date.now
+    let fakeNowMs = 10_000
+    Date.now = () => fakeNowMs
+
+    const serial = new EggBotSerial()
+    serial.port = /** @type {SerialPort} */ ({})
+    serial.writer = /** @type {WritableStreamDefaultWriter<Uint8Array>} */ ({})
+    serial.sendCommand = async (command) => {
+        const parts = String(command || '').split(',')
+        if (parts[0] === 'SP') {
+            fakeNowMs += Math.max(0, Number(parts[2]) || 0) + 20
+            return ''
+        }
+        if (parts[0] === 'SM') {
+            fakeNowMs += Math.max(0, Number(parts[1]) || 0) + 50
+            return ''
+        }
+        if (command === 'QB') {
+            fakeNowMs += 5
+            return '0'
+        }
+        return ''
+    }
+    serial.pathWorker = {
+        warmup() {},
+        dispose() {},
+        async prepareDrawStrokes() {
+            return {
+                strokes: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 0, y: 100 }
+                    ]
+                ]
+            }
+        }
+    }
+
+    const measurements = []
+
+    try {
+        await serial.drawStrokes(
+            [
+                {
+                    points: [
+                        { u: 0, v: 0.5 },
+                        { u: 0, v: 0.6 }
+                    ]
+                }
+            ],
+            {
+                stepsPerTurn: 3200,
+                penRangeSteps: 1500,
+                servoUp: 12000,
+                servoDown: 17000,
+                invertPen: false,
+                penDownSpeed: 50,
+                penUpSpeed: 100,
+                penRaiseDelayMs: 200,
+                penLowerDelayMs: 400,
+                returnHome: false
+            },
+            {
+                onStrokeMeasured: (detail) => measurements.push(detail)
+            }
+        )
+
+        assert.equal(measurements.length, 1)
+        assert.equal(measurements[0]?.strokeIndex, 0)
+        assert.equal(measurements[0]?.estimatedDurationMs, 2600)
+        assert.equal(measurements[0]?.actualDurationMs > 0, true)
+    } finally {
+        Date.now = originalDateNow
+    }
+})
+
 test('EggBotSerial should emit v281-like SP/SM/QB sequence for mm-based rectangle SVG', async () => {
     const restoreTimers = installFastWindowTimers()
     const { serial, commands } = createConnectedDrawSerial()

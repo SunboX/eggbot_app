@@ -47,6 +47,9 @@ import {
     SERVO_VALUE_MAX
 } from './AppControllerShared.mjs'
 import { AppControllerCoreControls } from './AppControllerCoreControls.mjs'
+import { DrawTimeProfileUtils } from './DrawTimeProfileUtils.mjs'
+
+const DRAW_TIME_PROFILE_STORAGE_KEY = 'eggbot.drawTimeProfile.v1'
 
 /**
  * AppControllerRuntime segment of the application controller.
@@ -590,6 +593,7 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         this.projectArtifactsDirty = true
         this._scheduleProjectArtifactsRefreshIdle()
         this._scheduleSettingsPersistIdle()
+        this._scheduleDrawTimeEstimateRefresh()
     }
 
     /**
@@ -621,6 +625,47 @@ export class AppControllerRuntime extends AppControllerCoreControls {
         } catch (error) {
             console.warn('Failed to save settings to localStorage.', error)
         }
+    }
+
+    /**
+     * Loads the persisted draw-time profile from localStorage.
+     */
+    _loadDrawTimeProfileFromLocalStorage() {
+        try {
+            if (!window?.localStorage) return
+            const raw = window.localStorage.getItem(DRAW_TIME_PROFILE_STORAGE_KEY)
+            if (!raw) {
+                this.drawTimeProfile = DrawTimeProfileUtils.createDefaultProfile()
+                return
+            }
+            this.drawTimeProfile = DrawTimeProfileUtils.normalizeProfile(JSON.parse(raw))
+        } catch (error) {
+            this.drawTimeProfile = DrawTimeProfileUtils.createDefaultProfile()
+            console.warn('Failed to load draw-time profile from localStorage.', error)
+        }
+    }
+
+    /**
+     * Persists the current draw-time profile into localStorage.
+     */
+    _persistDrawTimeProfileToLocalStorage() {
+        try {
+            if (!window?.localStorage) return
+            const payload = DrawTimeProfileUtils.normalizeProfile(this.drawTimeProfile)
+            window.localStorage.setItem(DRAW_TIME_PROFILE_STORAGE_KEY, JSON.stringify(payload))
+        } catch (error) {
+            console.warn('Failed to save draw-time profile to localStorage.', error)
+        }
+    }
+
+    /**
+     * Updates the persisted draw-time profile from one measured stroke.
+     * @param {{ actualDurationMs?: number, estimatedDurationMs?: number, updatedAt?: string }} measurement
+     */
+    _updateDrawTimeProfileFromStrokeMeasurement(measurement) {
+        this.drawTimeProfile = DrawTimeProfileUtils.updateWithStrokeMeasurement(this.drawTimeProfile, measurement)
+        this._persistDrawTimeProfileToLocalStorage()
+        this._scheduleDrawTimeEstimateRefresh()
     }
 
     /**

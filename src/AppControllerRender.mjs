@@ -47,6 +47,7 @@ import {
     SERVO_VALUE_MAX
 } from './AppControllerShared.mjs'
 import { AppControllerRuntime } from './AppControllerRuntime.mjs'
+import { DrawTimeEstimator } from './DrawTimeEstimator.mjs'
 
 /**
  * AppControllerRender segment of the application controller.
@@ -593,6 +594,56 @@ export class AppControllerRender extends AppControllerRuntime {
         }
         const selectedLocalProjectId = this.els.localPatterns ? this.els.localPatterns.value : ''
         this._refreshSavedProjectsSelect(selectedLocalProjectId, { preferIdle: false })
+        this._setDrawTimeEstimateUi(this.currentDrawTimeEstimateMs)
+    }
+
+    /**
+     * Debounces one refresh of the visible total draw-time estimate.
+     */
+    _scheduleDrawTimeEstimateRefresh() {
+        const timerApi = typeof window !== 'undefined' ? window : globalThis
+        timerApi.clearTimeout(this.drawTimeEstimateRefreshTimer)
+        this.drawTimeEstimateRefreshTimer = timerApi.setTimeout(() => {
+            this.drawTimeEstimateRefreshTimer = 0
+            void this._refreshCurrentDrawTimeEstimate()
+        }, 90)
+    }
+
+    /**
+     * Recomputes the visible total draw-time estimate for the current motif.
+     * @returns {Promise<void>}
+     */
+    async _refreshCurrentDrawTimeEstimate() {
+        if (this.pendingGeneratedRenderPromise) {
+            try {
+                await this.pendingGeneratedRenderPromise
+            } catch (error) {
+                console.warn('Draw-time estimate waited on a failed render task.', error)
+            }
+        }
+
+        const strokes = Array.isArray(this.state?.strokes) ? this.state.strokes : []
+        if (!strokes.length) {
+            this._resetDrawTimeEstimateUi()
+            return
+        }
+
+        try {
+            const estimate = DrawTimeEstimator.estimatePatternDuration({
+                strokes,
+                drawConfig: {
+                    ...this.state.drawConfig,
+                    ...this._resolveDrawCoordinateConfig()
+                },
+                profile: this.drawTimeProfile
+            })
+            const nextDurationMs = estimate.strokeCount > 0 ? estimate.estimatedCalibratedMs : null
+            this.currentDrawTimeEstimateMs = Number.isFinite(nextDurationMs) ? nextDurationMs : null
+            this._setDrawTimeEstimateUi(this.currentDrawTimeEstimateMs)
+        } catch (error) {
+            this._resetDrawTimeEstimateUi()
+            console.warn('Failed to estimate current motif draw time.', error)
+        }
     }
 
     /**

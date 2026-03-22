@@ -146,6 +146,8 @@ export class AppElements {
             drawProgressFill: query('[data-draw-progress-fill]'),
             drawProgressPercent: query('[data-draw-progress-percent]'),
             drawProgressTime: query('[data-draw-progress-time]'),
+            drawTimeEstimate: query('[data-draw-time-estimate]'),
+            drawTimeEstimateValue: query('[data-draw-time-estimate-value]'),
             eggCanvas: query('[data-egg-canvas]'),
             textureCanvas: query('[data-texture-canvas]')
         }

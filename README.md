@@ -104,4 +104,12 @@ Deploy note:
 ```bash
 npm test
 ```
+
+## License
+
+The source code in this repository is licensed under the
+PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE)
+for the full license text and [NOTICE](NOTICE) for the
+required notices that must travel with the software.
+
 # eggbot_app

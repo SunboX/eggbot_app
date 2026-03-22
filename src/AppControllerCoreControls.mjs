@@ -47,6 +47,7 @@ import {
     SERVO_VALUE_MAX
 } from './AppControllerShared.mjs'
 import { EspFirmwareInstaller } from './EspFirmwareInstaller.mjs'
+import { DrawTimeProfileUtils } from './DrawTimeProfileUtils.mjs'
 
 /**
  * AppControllerCoreControls segment of the application controller.
@@ -88,6 +89,9 @@ export class AppControllerCoreControls {
         this.setupActionTogglePenDown = false
         this.drawProgressStartedAtMs = 0
         this.drawProgressSmoother = new DrawProgressSmoother()
+        this.drawTimeEstimateRefreshTimer = 0
+        this.currentDrawTimeEstimateMs = null
+        this.drawTimeProfile = DrawTimeProfileUtils.createDefaultProfile()
         this.espFlashProgressStartedAtMs = 0
         this.espFlashProgressSmoother = new DrawProgressSmoother()
         this.drawTraceOverlayCanvas = null
@@ -136,6 +140,7 @@ export class AppControllerCoreControls {
         this._syncEspFlashManifestVersionUi()
         this._syncEspFlashInstallUi()
         this._ensureEspFlashManifestMetaLoaded()
+        this._loadDrawTimeProfileFromLocalStorage()
         this._loadSettingsFromLocalStorage()
         this._syncControlsFromState()
         this._applyProjectFromUrl()
@@ -146,6 +151,7 @@ export class AppControllerCoreControls {
             'beforeunload',
             () => {
                 this._persistSettingsToLocalStorage()
+                this._persistDrawTimeProfileToLocalStorage()
                 this._disposeBackgroundWorkers()
             },
             { once: true }
@@ -158,9 +164,11 @@ export class AppControllerCoreControls {
         this._syncResumeUi()
         this._syncAutoGenerateOrnamentControlsUi()
         this._resetDrawProgressUi()
+        this._resetDrawTimeEstimateUi()
         this._resetEspFlashProgressUi()
         this._setEspFlashDialogStatus(this._t('machine.flashDialog.statusReady'))
         this._scheduleProjectArtifactsRefreshIdle()
+        this._scheduleDrawTimeEstimateRefresh()
     }
 
     /**
@@ -193,6 +201,7 @@ export class AppControllerCoreControls {
         if (this.els.localeSelect) {
             this.els.localeSelect.value = this.i18n.locale
         }
+        this._setDrawTimeEstimateUi(this.currentDrawTimeEstimateMs)
     }
 
     /**
@@ -777,6 +786,26 @@ export class AppControllerCoreControls {
             return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
         }
         return `${minutes}:${String(seconds).padStart(2, '0')}`
+    }
+
+    /**
+     * Updates the persistent total draw-time label for the current motif.
+     * @param {number | null | undefined} durationMs
+     */
+    _setDrawTimeEstimateUi(durationMs) {
+        const normalizedDurationMs = Number(durationMs)
+        this.els.drawTimeEstimateValue.textContent =
+            Number.isFinite(normalizedDurationMs) && normalizedDurationMs >= 0
+                ? this._formatDurationLabel(normalizedDurationMs)
+                : this._t('messages.drawingRemainingTimeUnknown')
+    }
+
+    /**
+     * Resets the persistent total draw-time label to the default unknown state.
+     */
+    _resetDrawTimeEstimateUi() {
+        this.currentDrawTimeEstimateMs = null
+        this._setDrawTimeEstimateUi(null)
     }
 
     /**

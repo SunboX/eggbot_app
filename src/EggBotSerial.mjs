@@ -1,5 +1,6 @@
 import { EggBotPathComputeTasks } from './EggBotPathComputeTasks.mjs'
 import { EggBotPathWorkerClient } from './EggBotPathWorkerClient.mjs'
+import { DrawTimeEstimator } from './DrawTimeEstimator.mjs'
 
 const LAST_PORT_STORAGE_KEY = 'eggbot.serial.lastPort.v1'
 const RECONNECT_ON_LOAD_STORAGE_KEY = 'eggbot.serial.reconnectOnLoad.v1'
@@ -596,7 +597,7 @@ export class EggBotSerial {
      * Draws generated strokes on the connected EggBot.
      * @param {Array<{ points: Array<{u:number,v:number}> }>} strokes
      * @param {{ stepsPerTurn: number, penRangeSteps: number, msPerStep?: number, servoUp: number, servoDown: number, invertPen: boolean, penDownSpeed?: number, penUpSpeed?: number, penMotorSpeed?: number, eggMotorSpeed?: number, penRaiseRate?: number, penRaiseDelayMs?: number, penLowerRate?: number, penLowerDelayMs?: number, reversePenMotor?: boolean, reverseEggMotor?: boolean, wrapAround?: boolean, returnHome?: boolean, coordinateMode?: 'normalized-uv' | 'document-px-centered', documentWidthPx?: number, documentHeightPx?: number, stepScalingFactor?: number, drawOutputScale?: number }} drawConfig
-     * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number, detail?: { completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }) => void }} [callbacks]
+     * @param {{ onStatus?: (text: string) => void, onProgress?: (done: number, total: number, detail?: { completedRatio: number, remainingRatio: number, estimatedTotalMs: number, completedMs: number, remainingMs: number, elapsedMs: number }) => void, onStrokeMeasured?: (detail: { strokeIndex: number, total: number, actualDurationMs: number, estimatedDurationMs: number }) => void }} [callbacks]
      * @returns {Promise<void>}
      */
     async drawStrokes(strokes, drawConfig, callbacks = {}) {
@@ -609,6 +610,7 @@ export class EggBotSerial {
 
         const onStatus = callbacks.onStatus || (() => {})
         const onProgress = callbacks.onProgress || (() => {})
+        const onStrokeMeasured = typeof callbacks.onStrokeMeasured === 'function' ? callbacks.onStrokeMeasured : null
         const cfg = {
             stepsPerTurn: Math.max(100, Math.round(Number(drawConfig.stepsPerTurn) || 3200)),
             penRangeSteps: Math.max(100, Math.round(Number(drawConfig.penRangeSteps) || 1500)),
@@ -663,6 +665,10 @@ export class EggBotSerial {
                 return
             }
             const outputStrokes = this.#buildDrawOutputStrokes(drawableStrokes, cfg.drawOutputScale)
+            const estimatedRun = DrawTimeEstimator.describePreparedStrokeRun({
+                drawableStrokes: outputStrokes,
+                drawConfig: cfg
+            })
 
             onStatus('Configuring EBB...')
             await this.sendCommand(`SC,4,${cfg.servoUp}`)
@@ -686,7 +692,7 @@ export class EggBotSerial {
             await setPenState(false)
 
             const total = outputStrokes.length
-            const estimatedTotalMs = this.#estimateDrawDurationMs(outputStrokes, cfg, current)
+            const estimatedTotalMs = estimatedRun.estimatedTotalMs
             const progressStartedAtMs = Date.now()
             let completedMs = cfg.penRaiseDelayMs
             onProgress(0, total, this.#buildProgressDetail(0, total, completedMs, estimatedTotalMs, progressStartedAtMs))
@@ -697,6 +703,7 @@ export class EggBotSerial {
                 const preparedStroke = outputStrokes[strokeIndex]
                 if (!Array.isArray(preparedStroke) || preparedStroke.length < 2) continue
 
+                const strokeStartedAtMs = Date.now()
                 onStatus(`Stroke ${strokeIndex + 1}/${total}: moving to start`)
                 await this.#moveTo(preparedStroke[0], current, cfg.penUpSpeed, cfg, (durationMs) => {
                     completedMs += durationMs
@@ -738,6 +745,17 @@ export class EggBotSerial {
                     total,
                     this.#buildProgressDetail(strokeIndex + 1, total, completedMs, estimatedTotalMs, progressStartedAtMs)
                 )
+                if (!this.abortDrawing && onStrokeMeasured) {
+                    onStrokeMeasured({
+                        strokeIndex,
+                        total,
+                        actualDurationMs: Math.max(0, Math.round(Date.now() - strokeStartedAtMs)),
+                        estimatedDurationMs: Math.max(
+                            0,
+                            Math.round(Number(estimatedRun.estimatedStrokeDurationsMs[strokeIndex]) || 0)
+                        )
+                    })
+                }
             }
 
             if (!this.abortDrawing && cfg.returnHome) {

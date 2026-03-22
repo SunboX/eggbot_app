@@ -222,6 +222,7 @@
     },
     "status": {
         "title": "Status",
+        "drawTimeEstimate": "Total draw time",
         "ready": "Ready. Generate a pattern and connect EggBot when you are ready to draw."
     },
     "footer": {
