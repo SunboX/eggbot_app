@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { AppController } from './AppController.mjs'
 import { AppVersion } from './AppVersion.mjs'
 import { I18n } from './I18n.mjs'

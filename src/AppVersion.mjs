@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 const APP_VERSION_FALLBACK = '0.0.0'
 const PACKAGE_JSON_DEFAULT_URL = '/package.json'
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 const DEFAULT_WIFI_PORT = 1337
 const DEFAULT_WIFI_PATH = '/'
 

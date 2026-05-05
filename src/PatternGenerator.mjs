@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * @typedef {{ u: number, v: number }} UvPoint
  * @typedef {{ colorIndex: number, points: UvPoint[], closed?: boolean, transformGroupId?: number, horizontalRingGroup?: string, motifGroup?: string }} Stroke

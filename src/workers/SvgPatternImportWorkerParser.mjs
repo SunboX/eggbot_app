@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { SvgPatternImportWorkerGeometry } from './SvgPatternImportWorkerGeometry.mjs'
 import { DOMParser as LinkedomDOMParser } from '../../node_modules/linkedom/worker.js'
 

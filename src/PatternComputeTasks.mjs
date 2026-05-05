@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { PatternGenerator } from './PatternGenerator.mjs'
 import { PatternStrokeScaleUtils } from './PatternStrokeScaleUtils.mjs'
 import { PatternSvgExportUtils } from './PatternSvgExportUtils.mjs'

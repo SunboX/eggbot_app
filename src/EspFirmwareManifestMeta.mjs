@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 const ESP_FIRMWARE_NAME_FALLBACK = 'EggDuino ESP32 Firmware'
 
 /**

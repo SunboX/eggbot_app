@@ -1,11 +1,15 @@
+# SPDX-FileCopyrightText: 2026 André Fiedler
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 node_modules/
 .env
 .DS_Store
 npm-debug.log*
 coverage/
 
-sorbische_muster/
-
+.worktrees/
 eggbot_patterns/
+sorbische_muster/
 
 firmware/boot_app0.bin

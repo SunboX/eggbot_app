@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { ClassicReset, ESPLoader, Transport } from './vendor/esptool-js.bundle.mjs'
 
 const ESP_FLASH_BAUD_RATE = 115200

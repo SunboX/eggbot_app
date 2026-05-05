@@ -1,0 +1,27 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: eggbot_app
+Source: https://github.com/SunboX/eggbot_app
+
+Files: package.json package-lock.json .prettierrc.json src/i18n/*.json firmware/manifest.json
+Copyright: 2026 André Fiedler
+License: AGPL-3.0-or-later
+
+Files: src/index.html api/chat.php api/.htaccess .env.example .gitignore .github/workflows/deploy-ftp.yml
+Copyright: 2026 André Fiedler
+License: AGPL-3.0-or-later
+
+Files: src/assets/eggbot-icon.svg
+Copyright: 2026 André Fiedler
+License: CC-BY-SA-4.0
+
+Files: src/assets/fonts/*.woff2
+Copyright: Google Fonts authors
+License: OFL-1.1
+
+Files: src/vendor/esptool-js.bundle.mjs
+Copyright: Espressif Systems and pako contributors
+License: Apache-2.0 AND MIT AND Zlib
+
+Files: firmware/.keep firmware/*.bin
+Copyright: 2026 André Fiedler
+License: AGPL-3.0-or-later

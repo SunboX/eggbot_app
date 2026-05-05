@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { SvgPatternImportWorkerParser } from './SvgPatternImportWorkerParser.mjs'
 
 const IMPORT_WORKER_SCHEMA_VERSION = 4

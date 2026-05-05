@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 André Fiedler
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Patterns And Techniques
 
 This app uses motif families visible in the provided `sorbische_muster` material and common Sorbian egg decoration naming.

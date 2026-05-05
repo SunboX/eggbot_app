@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 const WEBMCP_QUERY_PARAM = 'webmcp'
 const WEBMCP_POLYFILL_SCRIPT_PATH = '/node_modules/@mcp-b/global/dist/index.iife.js'
 

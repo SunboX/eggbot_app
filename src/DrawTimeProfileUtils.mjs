@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 André Fiedler
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 const DEFAULT_UPDATED_AT = new Date(0).toISOString()
 const MIN_DURATION_SCALE = 0.25
 const MAX_DURATION_SCALE = 4
