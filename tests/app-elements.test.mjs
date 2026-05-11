@@ -8,6 +8,17 @@ import test from 'node:test'
 import { parseHTML } from 'linkedom'
 import { AppElements } from '../src/AppElements.mjs'
 
+test('index footer should render the Germany hosting slogan', async () => {
+    const htmlUrl = new URL('../src/index.html', import.meta.url)
+    const html = await readFile(htmlUrl, 'utf8')
+    const { document } = parseHTML(html)
+    const footerSlogan = document.querySelector('.footer-slogan')
+
+    assert.ok(footerSlogan)
+    assert.equal(footerSlogan.textContent.trim(), 'Build and hostet in Germany')
+    assert.equal(footerSlogan.getAttribute('data-i18n'), 'footer.slogan')
+})
+
 test('AppElements should expose EggBot manual result element from index markup', async () => {
     const htmlUrl = new URL('../src/index.html', import.meta.url)
     const html = await readFile(htmlUrl, 'utf8')
