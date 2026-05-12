@@ -10,14 +10,47 @@ import { readFile } from 'fs/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
+const indexHtmlPath = join(__dirname, 'index.html')
 const packageJsonPath = join(projectRoot, 'package.json')
 loadDotEnv({ path: resolve(projectRoot, '.env') })
 
 const app = express()
 const port = Number(process.env.PORT) || 3000
 const rateBuckets = new Map()
+const siteOrigin = normalizeSiteOrigin(process.env.PUBLIC_SITE_ORIGIN || 'https://eggbot.app')
+const seoRoutes = new Map([
+    [
+        '/',
+        {
+            title: 'EggBot App - Sorbian Egg Pattern Generator',
+            description: 'Design Sorbian-style egg decorations, preview them in 3D, export SVG files, and draw them with an EggBot.'
+        }
+    ],
+    [
+        '/patterns',
+        {
+            title: 'Sorbian Egg Pattern Generator - EggBot App',
+            description: 'Create deterministic Sorbian-style egg motifs with presets, symmetry, density, bands, and color controls.'
+        }
+    ],
+    [
+        '/draw',
+        {
+            title: 'EggBot Drawing and SVG Export - EggBot App',
+            description: 'Preview generated egg patterns in 3D, export SVG artwork, and draw safely with USB serial or Bluetooth EggBot connections.'
+        }
+    ],
+    [
+        '/connection',
+        {
+            title: 'EggBot Connection Setup - EggBot App',
+            description: 'Use the EggBot App connection tools for USB serial, Bluetooth LE, firmware flashing, calibration, and test strokes.'
+        }
+    ]
+])
 
 app.use(express.json({ limit: '8mb' }))
+app.get(Array.from(seoRoutes.keys()), sendSeoIndexRoute)
 app.use('/node_modules', express.static(join(projectRoot, 'node_modules')))
 app.use('/docs', express.static(join(projectRoot, 'docs')))
 app.use('/firmware', express.static(join(projectRoot, 'firmware')))
@@ -27,6 +60,81 @@ app.get('/package.json', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.sendFile(packageJsonPath)
 })
+
+/**
+ * Normalizes a public site origin for SEO metadata.
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeSiteOrigin(value) {
+    const normalized = String(value || '')
+        .trim()
+        .replace(/\/+$/g, '')
+    if (/^https?:\/\/[^/]+$/i.test(normalized)) return normalized
+    return 'https://eggbot.app'
+}
+
+/**
+ * Escapes text for HTML element content and attributes.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+}
+
+/**
+ * Builds the canonical URL for one public route.
+ * @param {string} routePath
+ * @returns {string}
+ */
+function buildCanonicalUrl(routePath) {
+    return `${siteOrigin}${routePath === '/' ? '/' : routePath}`
+}
+
+/**
+ * Replaces route-specific SEO tags in the shared app shell.
+ * @param {string} html
+ * @param {string} routePath
+ * @returns {string}
+ */
+function renderSeoIndexHtml(html, routePath) {
+    const metadata = seoRoutes.get(routePath) || seoRoutes.get('/')
+    const title = escapeHtml(metadata.title)
+    const description = escapeHtml(metadata.description)
+    const canonicalUrl = escapeHtml(buildCanonicalUrl(routePath))
+
+    return html
+        .replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>`)
+        .replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/>/, `<meta name="description" content="${description}" />`)
+        .replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/, `<link rel="canonical" href="${canonicalUrl}" />`)
+        .replace(/<meta\s+property="og:title"\s+content="[^"]*"\s*\/>/, `<meta property="og:title" content="${title}" />`)
+        .replace(/<meta\s+property="og:description"\s+content="[^"]*"\s*\/>/, `<meta property="og:description" content="${description}" />`)
+        .replace(/<meta\s+property="og:url"\s+content="[^"]*"\s*\/>/, `<meta property="og:url" content="${canonicalUrl}" />`)
+        .replace(/<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/>/, `<meta name="twitter:title" content="${title}" />`)
+        .replace(/<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/>/, `<meta name="twitter:description" content="${description}" />`)
+}
+
+/**
+ * Sends the shared app shell with route-specific SEO metadata.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
+async function sendSeoIndexRoute(req, res) {
+    try {
+        const html = await readFile(indexHtmlPath, 'utf8')
+        const routePath = seoRoutes.has(req.path) ? req.path : '/'
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.send(renderSeoIndexHtml(html, routePath))
+    } catch (_error) {
+        res.status(500).send('Failed to load app shell')
+    }
+}
 
 /**
  * Parses boolean environment values.

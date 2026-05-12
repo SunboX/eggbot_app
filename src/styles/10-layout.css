@@ -317,7 +317,7 @@
 
 .footer-grid {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto auto auto 1fr;
     gap: 0.95rem;
     align-items: start;
 }
@@ -349,6 +349,24 @@
 }
 
 .footer-text a:hover {
+    color: #2d1d12;
+    border-bottom-color: rgba(45, 29, 18, 0.6);
+}
+
+.footer-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.92rem;
+}
+
+.footer-nav a {
+    color: #3f2b1a;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+}
+
+.footer-nav a:hover {
     color: #2d1d12;
     border-bottom-color: rgba(45, 29, 18, 0.6);
 }

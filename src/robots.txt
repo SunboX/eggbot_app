@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /assets/
+Allow: /i18n/
+Allow: /style.css
+Allow: /main.mjs
+
+Sitemap: https://eggbot.app/sitemap.xml

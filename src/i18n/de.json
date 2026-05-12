@@ -230,6 +230,14 @@
         "slogan": "Build and hostet in Germany",
         "responsible": "Verantwortlich für diese Website",
         "contact": "Kontakt",
+        "navigation": "Entdecken",
+        "navigationAria": "Seitennavigation",
+        "nav": {
+            "home": "App",
+            "patterns": "Muster",
+            "draw": "Zeichnen",
+            "connection": "Verbindung"
+        },
         "versionLabel": "Version",
         "githubAria": "GitHub-Repository",
         "githubTitle": "GitHub",
